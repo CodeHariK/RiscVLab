@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 REGISTER_COUNT :: 32
 
@@ -28,6 +28,9 @@ Cpu :: struct {
 	instret:    u64,
 	// Last register write, for tracing. Cleared at the start of each step.
 	last_write: Register_Write,
+	// What the current instruction overwrote, so it can be undone.
+	// Filled in during the step; `machine_step` saves it to the history.
+	undo:       Undo_Record,
 }
 
 reg_read :: #force_inline proc(cpu: ^Cpu, index: u32) -> u64 {
@@ -35,11 +38,15 @@ reg_read :: #force_inline proc(cpu: ^Cpu, index: u32) -> u64 {
 }
 
 // Writes a register. Writes to x0 are discarded, which is how the
-// hardware keeps it hard-wired to zero.
+// hardware keeps it hard-wired to zero. The old value goes into the undo
+// record. This is the only place registers change, so undo can't miss one.
 reg_write :: #force_inline proc(cpu: ^Cpu, index: u32, value: u64) {
 	if index == 0 {
 		return
 	}
+	cpu.undo.register_changed = true
+	cpu.undo.register_index = index
+	cpu.undo.register_old = cpu.regs[index]
 	cpu.regs[index] = value
 	cpu.last_write = Register_Write{valid = true, index = index, value = value}
 }

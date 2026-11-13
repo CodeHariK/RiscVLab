@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // LUI and AUIPC: build large constants and PC-relative addresses.
 // Together with a following ADDI / JALR they reach any 32-bit offset.

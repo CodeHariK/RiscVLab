@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Major opcodes (instruction bits 6..0), from the "RV32/64G Instruction Set
 // Listings" chapter of the unprivileged spec.

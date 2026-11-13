@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Field extractors for the 32-bit instruction formats.
 //

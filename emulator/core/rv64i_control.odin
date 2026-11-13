@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Control transfer: JAL, JALR and the conditional branches.
 

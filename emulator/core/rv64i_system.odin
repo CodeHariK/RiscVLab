@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // FENCE and the SYSTEM opcode (ECALL, EBREAK; CSR instructions come in
 // the Zicsr milestone).

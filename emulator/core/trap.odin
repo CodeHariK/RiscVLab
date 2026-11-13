@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Synchronous exception causes, numbered as in the privileged spec's
 // `mcause` table. Interrupt causes come later with the CLINT and PLIC.

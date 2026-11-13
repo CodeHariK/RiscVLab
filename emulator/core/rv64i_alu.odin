@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Integer arithmetic on full 64-bit registers: OP-IMM (register and
 // immediate) and OP (register and register).

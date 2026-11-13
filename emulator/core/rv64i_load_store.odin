@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // Loads and stores. The address is always rs1 + a 12-bit signed offset.
 //
@@ -43,8 +43,16 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 
 	address := reg_read(cpu, rs1(instruction)) + imm_s(instruction)
 	size := u64(1) << kind
-	if !bus_store(bus, address, size, reg_read(cpu, rs2(instruction))) {
+
+	// Save the bytes about to be overwritten, for undo. (Reading first is
+	// safe for RAM; devices with read side effects will need care later.)
+	old_value, readable := bus_load(bus, address, size)
+	if !readable || !bus_store(bus, address, size, reg_read(cpu, rs2(instruction))) {
 		return trap_make(.Store_Access_Fault, address)
 	}
+	cpu.undo.memory_changed = true
+	cpu.undo.memory_address = address
+	cpu.undo.memory_size = size
+	cpu.undo.memory_old = old_value
 	return nil
 }

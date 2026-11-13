@@ -1,4 +1,4 @@
-package emulator
+package rv
 
 // RV64-only "word" instructions (the W suffix): compute on the low 32 bits
 // and sign-extend the 32-bit result to 64 bits. Compilers use them for C

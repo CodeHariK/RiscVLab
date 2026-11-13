@@ -4,12 +4,12 @@ What RiscVOdin executes today, with the encoding fields it decodes. Anything not
 
 **Current status: RV64I base (all 52 instructions) + Zifencei. 53 in total.**
 
-Formats: see the diagram at the top of `emulator/src/decode.odin`.
+Formats: see the diagram at the top of `emulator/core/decode.odin`.
 `imm` is always sign-extended to 64 bits. Arithmetic wraps modulo 2^64.
 
 ## By encoding format
 
-The same instructions, grouped by bit layout instead of by job. The layouts are drawn at the top of `emulator/src/decode.odin`, and each one with an immediate has a decoder there (`imm_i`, `imm_s`, `imm_b`, `imm_u`, `imm_j`). R-type has no immediate.
+The same instructions, grouped by bit layout instead of by job. The layouts are drawn at the top of `emulator/core/decode.odin`, and each one with an immediate has a decoder there (`imm_i`, `imm_s`, `imm_b`, `imm_u`, `imm_j`). R-type has no immediate.
 
 | Format | Fields | Immediate | Instructions |
 |---|---|---|---|

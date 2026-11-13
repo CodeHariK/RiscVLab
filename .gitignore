@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Build outputs
+build/
+bin/
+*.o
+*.bin
+*.elf
+*.img
+*.dSYM/
+
+# Odin
+*.exe
+*.pdb
+
+# Emulator traces / logs
+*.trace
+*.log

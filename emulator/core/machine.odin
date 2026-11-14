@@ -76,6 +76,11 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	if record.register_changed {
 		machine.cpu.regs[record.register_index] = record.register_old
 	}
+	if record.csr_changed {
+		// The old value was read from the CSR, so it is already legal and
+		// writing it back restores it exactly.
+		csr_write(&machine.cpu, record.csr_address, record.csr_old)
+	}
 	machine.cpu.pc = record.pc
 	machine.cpu.instret = record.instret
 	machine.cpu.last_write = {}

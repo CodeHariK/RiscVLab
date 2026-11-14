@@ -62,6 +62,7 @@ LIGHT_PALETTE :: Palette {
 		.Rs2       = {170, 50, 120, 255}, // magenta
 		.Funct     = {200, 100, 20, 255}, // orange
 		.Immediate = {150, 110, 0, 255}, // gold
+		.Csr       = {0, 128, 128, 255}, // teal
 		.Unknown   = {140, 105, 85, 255},
 	},
 }
@@ -89,6 +90,7 @@ DARK_PALETTE :: Palette {
 		.Rs2       = {255, 140, 200, 255},
 		.Funct     = {255, 170, 90, 255},
 		.Immediate = {240, 210, 100, 255},
+		.Csr       = {100, 220, 210, 255},
 		.Unknown   = {130, 136, 148, 255},
 	},
 }

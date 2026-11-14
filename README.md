@@ -27,8 +27,9 @@ A learning project: a RISC-V emulator and an xv6 port, both written in [Odin](ht
 
 ## References
 
-- [RISC-V Unprivileged ISA](https://docs.riscv.org/reference/isa/unpriv/intro.html)
-- [RISC-V Privileged ISA](https://docs.riscv.org/reference/isa/priv/priv-intro.html)
-- [xv6-riscv](https://github.com/mit-pdos/xv6-riscv) and the [xv6 book](https://pdos.csail.mit.edu/6.1810/2024/xv6/book-riscv-rev4.pdf)
+- [RISC-V Unprivileged ISA (PDF)](https://docs.riscv.org/reference/isa/_attachments/riscv-unprivileged.pdf): RV64I, M, A, Zicsr
+- [RISC-V Privileged ISA (PDF)](https://docs.riscv.org/reference/isa/_attachments/riscv-privileged.pdf): machine/supervisor mode, CSRs, traps, Sv39
+- [xv6 RISC-V book (online)](https://mit-pdos.github.io/xv6-riscv-book/): traps, page tables, processes, as xv6 uses them
+- [xv6-riscv source](https://github.com/mit-pdos/xv6-riscv)
 - [riscv-tests](https://github.com/riscv-software-src/riscv-tests)
-- [Spike](https://github.com/riscv-software-src/riscv-isa-sim) (reference simulator for trace diffing)
+- [Spike](https://github.com/riscv-software-src/riscv-isa-sim): reference simulator for trace diffing

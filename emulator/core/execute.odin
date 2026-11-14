@@ -72,7 +72,7 @@ execute :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	case OPCODE_MISC_MEM:
 		return exec_misc_mem(instruction)
 	case OPCODE_SYSTEM:
-		return exec_system(instruction)
+		return exec_system(cpu, instruction)
 	}
 	return illegal_instruction(instruction)
 }

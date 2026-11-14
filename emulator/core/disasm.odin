@@ -11,6 +11,7 @@ import "core:fmt"
 //   - ordinary immediates and offsets: signed decimal     addi a0,zero,-1
 //   - shift amounts and LUI/AUIPC fields: hex             slli t0,t0,0x1f
 //   - branch and jump targets: absolute address in hex    bne t2,t3,80000154
+//   - CSRs by name, or in hex if unnamed here             csrrs t0,mhartid,zero
 //
 // The text is written into `buffer`; the returned string points into it.
 // 64 bytes is always enough.
@@ -80,6 +81,14 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "fence.i")
 		}
 	case OPCODE_SYSTEM:
+		if name := zicsr_mnemonic(instruction); name != "" {
+			csr_buffer: [8]u8
+			csr := csr_text(csr_address(instruction), csr_buffer[:])
+			if funct3(instruction) & 0b100 != 0 {
+				return fmt.bprintf(buffer, "%s %s,%s,%d", name, d, csr, rs1(instruction))
+			}
+			return fmt.bprintf(buffer, "%s %s,%s,%s", name, d, csr, s1)
+		}
 		switch instruction {
 		case ENCODING_ECALL:
 			return fmt.bprintf(buffer, "ecall")
@@ -196,6 +205,28 @@ op_32_mnemonic :: proc(instruction: u32) -> string {
 	case (FUNCT7_ALT << 3) | 0b101: return "sraw"
 	}
 	return ""
+}
+
+@(private = "file")
+zicsr_mnemonic :: proc(instruction: u32) -> string {
+	switch funct3(instruction) {
+	case ZICSR_CSRRW: return "csrrw"
+	case ZICSR_CSRRS: return "csrrs"
+	case ZICSR_CSRRC: return "csrrc"
+	case ZICSR_CSRRWI: return "csrrwi"
+	case ZICSR_CSRRSI: return "csrrsi"
+	case ZICSR_CSRRCI: return "csrrci"
+	}
+	return ""
+}
+
+// A CSR's name, or its address in hex (e.g. "0x7c0") if it has none here.
+@(private = "file")
+csr_text :: proc(address: u32, storage: []u8) -> string {
+	if name := csr_name(address); name != "" {
+		return name
+	}
+	return fmt.bprintf(storage, "0x%x", address)
 }
 
 // FENCE ordering sets: 4 bits = device Input, device Output, memory Read,

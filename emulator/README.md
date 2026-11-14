@@ -50,6 +50,8 @@ No file access and no printing, so it compiles for any target.
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
 | `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the current undo record |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
+| `csr_names.odin` | CSR names for the disassembler and debugger |
+| `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing (RAM for now) |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
 | `program.odin` | Loads a program (ELF or raw) and sets the PC: `machine_load_program` |
@@ -88,7 +90,7 @@ No file access and no printing, so it compiles for any target.
 
 ### `unit_tests/` (package `rv_unit_tests`)
 
-Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR read / write rules). Run with `make unit`.
+Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR read / write rules; `zicsr_test.odin`: CSR instructions that trap, and undo). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 

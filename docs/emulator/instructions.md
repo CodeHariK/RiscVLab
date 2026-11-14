@@ -2,7 +2,7 @@
 
 What RiscVOdin executes today, with the encoding fields it decodes. Anything not listed raises `Illegal_Instruction`.
 
-**Current status: RV64I base (all 52 instructions) + Zifencei. 53 in total.**
+**Current status: RV64I base (all 52 instructions) + Zifencei + Zicsr. 59 in total.**
 
 Formats: see the diagram at the top of `emulator/core/decode.odin`.
 `imm` is always sign-extended to 64 bits. Arithmetic wraps modulo 2^64.
@@ -14,7 +14,7 @@ The same instructions, grouped by bit layout instead of by job. The layouts are 
 | Format | Fields | Immediate | Instructions |
 |---|---|---|---|
 | **R** | funct7, rs2, rs1, funct3, rd | none | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND, ADDW, SUBW, SLLW, SRLW, SRAW |
-| **I** | imm[11:0], rs1, funct3, rd | 12 bits, `imm_i` | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, JALR, FENCE, FENCE.I, ECALL, EBREAK |
+| **I** | imm[11:0], rs1, funct3, rd | 12 bits, `imm_i` | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, JALR, FENCE, FENCE.I, ECALL, EBREAK, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI |
 | **S** | imm[11:5], rs2, rs1, funct3, imm[4:0] | 12 bits, `imm_s` | SB, SH, SW, SD |
 | **B** | imm[12\|10:5], rs2, rs1, funct3, imm[4:1\|11] | 13 bits (bit 0 always 0), `imm_b` | BEQ, BNE, BLT, BGE, BLTU, BGEU |
 | **U** | imm[31:12], rd | upper 20 bits, `imm_u` | LUI, AUIPC |
@@ -23,9 +23,10 @@ The same instructions, grouped by bit layout instead of by job. The layouts are 
 Notes:
 
 - **Shift-immediates** (SLLI, SRAI, ...) are I-type, but the low 6 bits of the immediate (5 for the *W forms) are the shift amount, and the upper bits act like a funct7 that picks logical or arithmetic.
+- **CSR instructions** are I-type whose 12-bit immediate is the CSR address (not sign-extended); the immediate forms put a 5-bit value in the rs1 field.
 - **ECALL and EBREAK** are I-type with every field fixed except imm (0 for ECALL, 1 for EBREAK), so the emulator matches the whole 32-bit word.
 - **S and B** have the same register positions; B scrambles the immediate bits so that the sign bit is always bit 31 and most bits stay in the same place as S. **U and J** share the same relationship.
-- **Unprivileged vs privileged:** everything here is from the unprivileged spec. Privileged instructions (MRET, SRET, WFI, SFENCE.VMA) arrive with the Zicsr milestone, in `priv_*` files.
+- **Unprivileged vs privileged:** everything here is from the unprivileged spec. Privileged instructions (MRET, SRET, WFI, SFENCE.VMA) arrive with the trap milestone, in `priv_*` files.
 
 ## Upper immediates (`rv64i_upper.odin`)
 
@@ -121,11 +122,28 @@ Compute on the low 32 bits, then sign-extend the 32-bit result to 64 bits. Shift
 | ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (stops the machine until trap handling exists) |
 | EBREAK | 0x00100073 | trap `Breakpoint`: the normal way for test programs to stop |
 
+## CSR instructions, Zicsr (`zicsr.odin`)
+
+Opcode 1110011 (SYSTEM), I-type with the CSR address in bits 31:20. Each puts the CSR's old value in rd. The CSRs themselves and their write rules are in `csr.odin`.
+
+| Instruction | funct3 | Effect |
+|---|---|---|
+| CSRRW rd, csr, rs1 | 001 | rd = csr; csr = rs1 (no read if rd = x0) |
+| CSRRS rd, csr, rs1 | 010 | rd = csr; csr \|= rs1 (no write if rs1 = x0) |
+| CSRRC rd, csr, rs1 | 011 | rd = csr; csr &= ~rs1 (no write if rs1 = x0) |
+| CSRRWI rd, csr, uimm | 101 | as CSRRW with the 5-bit value uimm |
+| CSRRSI rd, csr, uimm | 110 | as CSRRS (no write if uimm = 0) |
+| CSRRCI rd, csr, uimm | 111 | as CSRRC (no write if uimm = 0) |
+
+Assembler shorthands: `csrr rd, csr` = CSRRS rd, csr, x0; `csrw csr, rs1` = CSRRW x0, csr, rs1. A CSR that isn't implemented, or a write to a read-only one, raises `Illegal_Instruction`.
+
+Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64I, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle, minstret (= instructions retired); cycle, instret (read-only copies).
+
 ## Not supported yet
 
 | Extension | Needed for | Milestone |
 |---|---|---|
-| Zicsr (CSRRW, CSRRS, CSRRC + immediate forms), MRET, SRET, WFI, SFENCE.VMA | Traps, privilege modes, paging | Zicsr + privilege |
+| MRET, SRET, WFI, SFENCE.VMA | Returning from traps, privilege modes, paging | Traps + privilege |
 | M (MUL, MULH*, DIV*, REM*, and *W forms) | Compiled C/Odin arithmetic | M extension |
 | A (LR, SC, AMO*) | xv6 spinlocks | A extension |
 | C (compressed 16-bit instructions) | Optional: smaller code | Maybe later |

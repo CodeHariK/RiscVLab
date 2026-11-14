@@ -127,6 +127,9 @@ explain_next :: proc(session: ^Session) -> string {
 	case rv.OPCODE_MISC_MEM:
 		return "memory-ordering fence: nothing to do on one in-order hart"
 	case rv.OPCODE_SYSTEM:
+		if rv.funct3(instruction) != 0 {
+			return explain_csr_instruction(cpu, mnemonic, instruction, d, s1, v1)
+		}
 		switch instruction {
 		case rv.ENCODING_ECALL:
 			return "system call: raises an environment-call trap (stops the machine until trap handling exists)"
@@ -135,6 +138,53 @@ explain_next :: proc(session: ^Session) -> string {
 		}
 	}
 	return fmt.tprintf("unknown instruction 0x%08x: will raise Illegal_Instruction", instruction)
+}
+
+// CSRRW / CSRRS / CSRRC and their immediate forms, with the CSR's
+// current value.
+@(private = "file")
+explain_csr_instruction :: proc(
+	cpu: ^rv.Cpu,
+	mnemonic: string,
+	instruction: u32,
+	d: string,
+	s1: string,
+	v1: u64,
+) -> string {
+	address := rv.csr_address(instruction)
+	csr := rv.csr_name(address)
+	if csr == "" {
+		return fmt.tprintf("CSR 0x%03x is not implemented: raises Illegal_Instruction", address)
+	}
+	old, _ := rv.csr_read(cpu, address)
+
+	// The value written: rs1's value, or the 5-bit immediate in the rs1 field.
+	immediate_form := strings.has_suffix(mnemonic, "i")
+	source := fmt.tprintf("%s (%s)", s1, value_text(v1))
+	source_is_zero := rv.rs1(instruction) == 0
+	if immediate_form {
+		source = fmt.tprintf("%d", rv.rs1(instruction))
+	}
+
+	read := fmt.tprintf("%s = old %s (%s)", d, csr, value_text(old))
+	switch mnemonic {
+	case "csrrw", "csrrwi":
+		if rv.rd(instruction) == 0 {
+			return fmt.tprintf("%s = %s (rd is zero, so the old value isn't read)", csr, source)
+		}
+		return fmt.tprintf("swap: %s; %s = %s", read, csr, source)
+	case "csrrs", "csrrsi":
+		if source_is_zero {
+			return fmt.tprintf("read: %s (nothing to set, so no write)", read)
+		}
+		return fmt.tprintf("%s; set bits: %s |= %s", read, csr, source)
+	case "csrrc", "csrrci":
+		if source_is_zero {
+			return fmt.tprintf("read: %s (nothing to clear, so no write)", read)
+		}
+		return fmt.tprintf("%s; clear bits: %s &= ~%s", read, csr, source)
+	}
+	return "?"
 }
 
 // What the most recent Next changed, e.g. "t0 <- 0x5 (5)".
@@ -169,7 +219,20 @@ explain_last_step :: proc(session: ^Session) -> string {
 			value_text(record.memory_old),
 		)
 	}
-	if !record.register_changed && !record.memory_changed {
+	if record.csr_changed {
+		new_value, _ := rv.csr_read(&session.machine.cpu, record.csr_address)
+		if record.register_changed || record.memory_changed {
+			strings.write_string(&builder, "; ")
+		}
+		fmt.sbprintf(
+			&builder,
+			"%s <- %s (was %s)",
+			rv.csr_name(record.csr_address),
+			value_text(new_value),
+			value_text(record.csr_old),
+		)
+	}
+	if !record.register_changed && !record.memory_changed && !record.csr_changed {
 		strings.write_string(&builder, "no register or memory changed")
 	}
 	return strings.to_string(builder)

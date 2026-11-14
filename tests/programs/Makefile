@@ -6,7 +6,7 @@
 #   make CROSS=riscv64-unknown-elf-
 
 CROSS     ?= riscv64-elf-
-ARCH      := -march=rv64i -mabi=lp64
+ARCH      := -march=rv64i_zicsr -mabi=lp64
 LINK      := link.ld
 BUILD     := build
 

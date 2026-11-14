@@ -20,6 +20,7 @@ Field_Kind :: enum {
 	Rs2,
 	Funct,
 	Immediate,
+	Csr,
 	Unknown,
 }
 
@@ -55,7 +56,13 @@ encoding_of :: proc(instruction: u32) -> Encoding {
 		} else {
 			i_type(&encoding)
 		}
-	case rv.OPCODE_LOAD, rv.OPCODE_JALR, rv.OPCODE_MISC_MEM, rv.OPCODE_SYSTEM:
+	case rv.OPCODE_SYSTEM:
+		if rv.funct3(instruction) != 0 {
+			csr_type(&encoding, rv.funct3(instruction) & 0b100 != 0)
+		} else {
+			i_type(&encoding)
+		}
+	case rv.OPCODE_LOAD, rv.OPCODE_JALR, rv.OPCODE_MISC_MEM:
 		i_type(&encoding)
 	case rv.OPCODE_STORE:
 		encoding.format = "S-type"
@@ -117,6 +124,11 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 		return opcode_name(value)
 	case .Rd, .Rs1, .Rs2:
 		return fmt.tprintf("%s (%d)", rv.register_name(value), value)
+	case .Csr:
+		if name := rv.csr_name(value); name != "" {
+			return name
+		}
+		return "not implemented"
 	case .Funct, .Immediate, .Unknown:
 	}
 	return fmt.tprintf("%d", value)
@@ -127,6 +139,10 @@ encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> strin
 	switch encoding.format {
 	case "I-type":
 		return fmt.tprintf("I-type: imm = %d (12 bits, sign-extended)", i64(rv.imm_i(instruction)))
+	case "I-type (CSR)":
+		address := rv.csr_address(instruction)
+		name := rv.csr_name(address)
+		return fmt.tprintf("I-type (CSR): csr = 0x%03x (%s)", address, name if name != "" else "not implemented")
 	case "I-type (shift)":
 		return fmt.tprintf("I-type (shift): shift amount = %d", (instruction >> 20) & 0x3F)
 	case "S-type":
@@ -173,6 +189,22 @@ i_type :: proc(encoding: ^Encoding) {
 	encoding.format = "I-type"
 	add_field(encoding, 31, 20, "imm[11:0]", .Immediate)
 	add_field(encoding, 19, 15, "rs1", .Rs1)
+	add_field(encoding, 14, 12, "funct3", .Funct)
+	add_field(encoding, 11, 7, "rd", .Rd)
+	add_field(encoding, 6, 0, "opcode", .Opcode)
+}
+
+// CSR instructions: I-type whose immediate is the CSR address; the
+// immediate forms (CSRRWI, ...) use the rs1 field as a 5-bit value.
+@(private = "file")
+csr_type :: proc(encoding: ^Encoding, immediate_form: bool) {
+	encoding.format = "I-type (CSR)"
+	add_field(encoding, 31, 20, "csr", .Csr)
+	if immediate_form {
+		add_field(encoding, 19, 15, "uimm", .Immediate)
+	} else {
+		add_field(encoding, 19, 15, "rs1", .Rs1)
+	}
 	add_field(encoding, 14, 12, "funct3", .Funct)
 	add_field(encoding, 11, 7, "rd", .Rd)
 	add_field(encoding, 6, 0, "opcode", .Opcode)

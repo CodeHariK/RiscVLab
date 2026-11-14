@@ -2,7 +2,8 @@
 #
 #   make              release build of the command-line runner -> build/rvemu
 #   make debug        debug build                              -> build/rvemu-debug
-#   make test         build the test programs, run them, check undo and the disassembler
+#   make test         unit tests, then build the test programs, run them, check undo and the disassembler
+#   make unit         unit tests only (unit_tests/, `odin test`)
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
 #   make debugger     build the step debugger -> build/rvdbg
 #   make debug-ui PROGRAM=path/to/program.bin   open a program in the debugger
@@ -23,7 +24,7 @@ PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
 PROGRAM      ?= $(PROGRAMS_BIN)/sum.elf
 
-.PHONY: all debug run programs test clean debugger debug-ui
+.PHONY: all debug run programs test unit clean debugger debug-ui
 
 all: $(BINARY)
 
@@ -57,7 +58,12 @@ programs:
 TEST_PROGRAMS := sum rv64i_check
 FORMATS       := elf bin
 
-test: $(BINARY) programs
+# Unit tests for core rules that no test program can reach yet.
+unit:
+	@mkdir -p $(BUILD_DIR)
+	$(ODIN) test unit_tests -out:$(BUILD_DIR)/unit_tests
+
+test: unit $(BINARY) programs
 	@for format in $(FORMATS); do \
 	  ./$(BINARY) $(PROGRAMS_BIN)/sum.$$format; code=$$?; \
 	  if [ $$code -eq 55 ]; then echo "PASS sum.$$format"; else echo "FAIL sum.$$format (exit $$code, expected 55)"; exit 1; fi; \

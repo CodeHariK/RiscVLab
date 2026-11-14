@@ -11,7 +11,8 @@ Docs: [architecture](../docs/emulator/architecture.md) and [supported instructio
 ```
 make                 # release build -> build/rvemu
 make debug           # debug build   -> build/rvemu-debug
-make test            # run the test programs, the undo self-test and the disassembler diff
+make test            # unit tests, test programs, undo self-test, disassembler diff
+make unit            # unit tests only (unit_tests/)
 make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ```
 
@@ -47,7 +48,8 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
-| `cpu.odin` | Hart state: registers, PC, `instret`, the current undo record |
+| `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the current undo record |
+| `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `bus.odin` | Physical address routing (RAM for now) |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
 | `program.odin` | Loads a program (ELF or raw) and sets the PC: `machine_load_program` |
@@ -83,6 +85,10 @@ No file access and no printing, so it compiles for any target.
 | `fonts/` | JetBrains Mono Medium, embedded at compile time; licence in `fonts/README.md` |
 | `program_file.odin` | Reads the program from disk |
 | `clay_renderer_raylib.odin` | Clay's raylib renderer, copied from the Clay examples |
+
+### `unit_tests/` (package `rv_unit_tests`)
+
+Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR read / write rules). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 

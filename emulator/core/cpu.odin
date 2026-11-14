@@ -14,8 +14,8 @@ Register_Write :: struct {
 
 // Architectural state of one RISC-V hart (hardware thread).
 //
-// Privilege mode and CSRs are added in the Zicsr milestone. Until then the
-// hart behaves as if it always runs in machine mode with no trap handler.
+// The hart always runs in machine mode. CSRs exist (csr.odin), but no
+// instruction reads them yet and traps still stop the machine.
 Cpu :: struct {
 	// Integer registers x0..x31. x0 always reads as zero.
 	regs:       [REGISTER_COUNT]u64,
@@ -24,8 +24,10 @@ Cpu :: struct {
 	// Address of the next instruction. `cpu_step` sets it to pc + 4 before
 	// executing; jumps and taken branches overwrite it.
 	next_pc:    u64,
-	// Instructions completed without a trap. Becomes `minstret` later.
+	// Instructions completed without a trap: the `minstret` CSR.
 	instret:    u64,
+	// Control and status registers (csr.odin).
+	csr:        Csr_File,
 	// Last register write, for tracing. Cleared at the start of each step.
 	last_write: Register_Write,
 	// What the current instruction overwrote, so it can be undone.

@@ -18,7 +18,7 @@ exec_misc_mem :: proc(instruction: u32) -> Step_Result {
 
 // ECALL raises an environment-call trap (the system-call mechanism).
 // EBREAK raises a breakpoint trap; test programs use it to stop.
-// The hart always runs in machine mode for now, hence Ecall_From_M_Mode.
+// The ECALL cause says which privilege level made the call.
 // funct3 != 0 selects a CSR instruction.
 exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	if funct3(instruction) != 0 {
@@ -26,7 +26,7 @@ exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	}
 	switch instruction {
 	case ENCODING_ECALL:
-		return trap_make(.Ecall_From_M_Mode, 0)
+		return trap_make(ecall_cause(cpu.privilege), 0)
 	case ENCODING_EBREAK:
 		return trap_make(.Breakpoint, 0)
 	}

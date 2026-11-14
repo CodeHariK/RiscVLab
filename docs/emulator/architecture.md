@@ -42,7 +42,7 @@ Source lives in `emulator/core/` (the emulator, package `rv`) and `emulator/cli/
 5. **Execute**: the handler reads registers, may use the bus, writes `rd` with `reg_write`, and jumps by setting `next_pc`.
 6. **Commit or trap**:
    - No trap: `pc = next_pc`, `instret += 1`.
-   - Trap: the handler returns a `Trap` and the PC stays on the faulting instruction (where `mepc` will point once trap handling exists).
+   - Trap: the handler returns a `Trap` and the PC stays on the faulting instruction. `machine_step` then either enters the trap handler (`priv_trap.odin`: `mepc` = that PC, `mcause`, `mtval`, `mstatus`, jump to `mtvec`) or, if no handler is set up (`mtvec` = 0), stops the machine.
 
 `machine_step` (in `machine.odin`) wraps this: before the step it notes the PC and `instret`; during it, `reg_write` and the store handler note the old value of anything they overwrite; afterwards the record goes into the history. `machine_step_back` pops a record and puts those old values back.
 
@@ -87,7 +87,8 @@ The core never reads files or prints. Front ends read the program (from disk, or
 |---|---|
 | ELF loading (done) | `elf.odin` / `program.odin` load ELF segments and set the PC to the entry point |
 | riscv-tests | The machine watches the `tohost` address for the pass/fail result |
-| Zicsr + privilege | `Cpu` gains CSRs and the current mode; traps jump to `mtvec`/`stvec` instead of stopping the machine |
+| Zicsr + machine traps (done) | `Cpu` has CSRs and a privilege level; traps jump to `mtvec`; undo records trap entry |
+| Supervisor / user mode | `stvec` / `sepc` / ..., delegation (`medeleg`), `sret` |
 | M, A extensions | New `rv64m_*.odin` / `rv64a_*.odin` handlers under existing opcodes (OP, OP-32, AMO) |
 | Sv39 | A new MMU between the CPU and the bus translates virtual to physical addresses |
 | Devices | UART, CLINT, PLIC, virtio-blk each claim an address range in the bus |

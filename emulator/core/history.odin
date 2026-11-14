@@ -6,10 +6,11 @@ package rv
 // While it runs, `reg_write`, the store handler and the CSR instructions
 // note the old value of whatever they overwrite. An instruction changes at
 // most one register, one memory location (up to 8 bytes) and one CSR, so
-// one fixed-size record per step is enough. Stepping back restores those
-// old values.
+// one fixed-size record per step is enough. A step that traps into a
+// handler instead records the CSRs that trap entry overwrites. Stepping
+// back restores those old values.
 //
-// Traps, CSRs and privilege modes will add fields when they arrive.
+// Interrupts and supervisor mode will add fields when they arrive.
 
 Undo_Record :: struct {
 	// Where the step started (restored on undo).
@@ -28,10 +29,18 @@ Undo_Record :: struct {
 	csr_changed:      bool,
 	csr_address:      u32,
 	csr_old:          u64,
+	// If the step trapped into a handler: the state trap entry overwrote.
+	// (The PC is restored from `pc` above.)
+	trap_taken:       bool,
+	trap_privilege:   Privilege,
+	trap_mstatus:     u64,
+	trap_mepc:        u64,
+	trap_mcause:      u64,
+	trap_mtval:       u64,
 }
 
-// Default number of steps that can be undone. Each record is 72 bytes,
-// so this is 18 MiB. When full, the oldest steps are forgotten.
+// Default number of steps that can be undone. Each record is 112 bytes,
+// so this is 28 MiB. When full, the oldest steps are forgotten.
 HISTORY_CAPACITY_DEFAULT :: 256 * 1024
 
 // Fixed-size ring buffer of undo records, newest last.

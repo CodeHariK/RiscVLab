@@ -2,7 +2,7 @@
 
 RISC-V (RV64) emulator in Odin, modelled on QEMU's `virt` machine so it can eventually boot xv6.
 
-**Current milestone: 1, RV64I core.** One hart, always in machine mode, RAM only, no CSRs yet. Every trap stops the machine; `ebreak` is the normal way for a program to finish.
+**Current state:** RV64I + Zicsr, one hart in machine mode, RAM only. Traps enter the handler at `mtvec`; while no handler is set up (`mtvec` = 0) a trap stops the machine, so simple programs end with `ebreak`.
 
 Docs: [architecture](../docs/emulator/architecture.md) and [supported instructions](../docs/emulator/instructions.md).
 
@@ -59,6 +59,7 @@ No file access and no printing, so it compiles for any target.
 | `image.odin` | Copies a raw binary into RAM |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
+| `priv_trap.odin` | Trap entry: save `mepc` / `mcause` / `mtval`, update `mstatus`, jump to `mtvec`; privilege levels |
 | `decode.odin` | Instruction field and immediate extraction |
 | `execute.odin` | Fetch, then dispatch by major opcode |
 | `rv64i_upper.odin` | LUI, AUIPC |

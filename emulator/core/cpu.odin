@@ -14,8 +14,8 @@ Register_Write :: struct {
 
 // Architectural state of one RISC-V hart (hardware thread).
 //
-// The hart always runs in machine mode. CSRs exist (csr.odin), but no
-// instruction reads them yet and traps still stop the machine.
+// The hart starts in machine mode, which is the only mode so far; traps
+// enter machine mode too (priv_trap.odin).
 Cpu :: struct {
 	// Integer registers x0..x31. x0 always reads as zero.
 	regs:       [REGISTER_COUNT]u64,
@@ -28,6 +28,8 @@ Cpu :: struct {
 	instret:    u64,
 	// Control and status registers (csr.odin).
 	csr:        Csr_File,
+	// Current privilege level.
+	privilege:  Privilege,
 	// Last register write, for tracing. Cleared at the start of each step.
 	last_write: Register_Write,
 	// What the current instruction overwrote, so it can be undone.

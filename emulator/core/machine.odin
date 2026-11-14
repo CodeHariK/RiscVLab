@@ -7,17 +7,19 @@ package rv
 // runner, the debugger UI). Nothing in the core reads files or prints,
 // so the same core can later be compiled to WebAssembly.
 Machine :: struct {
-	cpu:     Cpu,
-	bus:     Bus,
-	history: History,
+	cpu:       Cpu,
+	bus:       Bus,
+	history:   History,
+	// The trap the last step took into a handler, if any (for traces and
+	// the debugger; the step itself reports success).
+	last_trap: Maybe(Trap),
 }
 
 // Why `machine_run` returned.
 Stop_Reason :: enum {
 	// EBREAK: the normal way for a test program to finish.
 	Breakpoint,
-	// Any other trap. There is no trap handler until the Zicsr milestone,
-	// so every trap stops the machine for now.
+	// Any other trap while no handler is set up (mtvec = 0).
 	Trap,
 	// The step limit was reached (guards against endless loops).
 	Step_Limit,
@@ -41,6 +43,7 @@ machine_create :: proc(ram_size: u64, history_capacity: int) -> Machine {
 		history = history_create(history_capacity),
 	}
 	machine.cpu.pc = RAM_BASE
+	machine.cpu.privilege = .Machine
 	return machine
 }
 
@@ -49,18 +52,39 @@ machine_destroy :: proc(machine: ^Machine) {
 	bus_destroy(&machine.bus)
 }
 
-// Runs one instruction and, if it completed, records how to undo it.
-// A trapping instruction changes nothing yet, so it isn't recorded.
+// Runs one instruction and records how to undo it.
+//
+// If the instruction traps and a handler is set up (mtvec != 0), the trap
+// is taken: the hart jumps to the handler, `last_trap` is set and the
+// step counts as done (nil). If there is no handler, nothing changed, so
+// nothing is recorded and the trap is returned: the machine stops.
 machine_step :: proc(machine: ^Machine) -> Step_Result {
-	machine.cpu.undo = Undo_Record {
-		pc      = machine.cpu.pc,
-		instret = machine.cpu.instret,
+	cpu := &machine.cpu
+	cpu.undo = Undo_Record {
+		pc      = cpu.pc,
+		instret = cpu.instret,
 	}
-	result := cpu_step(&machine.cpu, &machine.bus)
-	if result == nil && history_is_enabled(&machine.history) {
-		history_push(&machine.history, machine.cpu.undo)
+	machine.last_trap = nil
+
+	result := cpu_step(cpu, &machine.bus)
+	if trap, has_trap := result.?; has_trap {
+		if !trap_has_handler(cpu) {
+			return result
+		}
+		cpu.undo.trap_taken = true
+		cpu.undo.trap_privilege = cpu.privilege
+		cpu.undo.trap_mstatus = cpu.csr.mstatus
+		cpu.undo.trap_mepc = cpu.csr.mepc
+		cpu.undo.trap_mcause = cpu.csr.mcause
+		cpu.undo.trap_mtval = cpu.csr.mtval
+		trap_enter(cpu, trap)
+		machine.last_trap = trap
 	}
-	return result
+
+	if history_is_enabled(&machine.history) {
+		history_push(&machine.history, cpu.undo)
+	}
+	return nil
 }
 
 // Undoes the most recent recorded step. Returns false when there is
@@ -81,9 +105,17 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		// writing it back restores it exactly.
 		csr_write(&machine.cpu, record.csr_address, record.csr_old)
 	}
+	if record.trap_taken {
+		machine.cpu.privilege = record.trap_privilege
+		machine.cpu.csr.mstatus = record.trap_mstatus
+		machine.cpu.csr.mepc = record.trap_mepc
+		machine.cpu.csr.mcause = record.trap_mcause
+		machine.cpu.csr.mtval = record.trap_mtval
+	}
 	machine.cpu.pc = record.pc
 	machine.cpu.instret = record.instret
 	machine.cpu.last_write = {}
+	machine.last_trap = nil
 	return true
 }
 

@@ -195,6 +195,19 @@ explain_last_step :: proc(session: ^Session) -> string {
 	}
 
 	builder := strings.builder_make(context.temp_allocator)
+	if record.trap_taken {
+		csr := &session.machine.cpu.csr
+		fmt.sbprintf(
+			&builder,
+			"trap %v: mepc <- 0x%x, mcause <- %d, mtval <- %s; jumped to the handler at 0x%x",
+			rv.Trap_Cause(csr.mcause),
+			csr.mepc,
+			csr.mcause,
+			value_text(csr.mtval),
+			session.machine.cpu.pc,
+		)
+		return strings.to_string(builder)
+	}
 	if record.register_changed {
 		new_value := session.machine.cpu.regs[record.register_index]
 		fmt.sbprintf(

@@ -12,6 +12,7 @@ import "core:fmt"
 //   - shift amounts and LUI/AUIPC fields: hex             slli t0,t0,0x1f
 //   - branch and jump targets: absolute address in hex    bne t2,t3,80000154
 //   - CSRs by name, or in hex if unnamed here             csrrs t0,mhartid,zero
+//   - anything that isn't a valid instruction: raw data   .word 0xffffffff
 //
 // The text is written into `buffer`; the returned string points into it.
 // 64 bytes is always enough.
@@ -96,7 +97,7 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "ebreak")
 		}
 	}
-	return fmt.bprintf(buffer, "unknown 0x%08x", instruction)
+	return fmt.bprintf(buffer, ".word 0x%08x", instruction)
 }
 
 // The mnemonic helpers below return "" for encodings that don't exist;

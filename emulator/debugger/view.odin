@@ -11,13 +11,21 @@ Side_Tab :: enum {
 	Elf,       // what the loader found in the program file
 }
 
+// What the code panel shows.
+Code_Tab :: enum {
+	Source,      // the .s file with its comments (when the build made a line map)
+	Disassembly, // the instructions decoded from memory
+}
+
 View_State :: struct {
+	code_tab:         Code_Tab,
 	side_tab:         Side_Tab,
 	// The catalog entry currently open, or -1 (a file not in the list).
 	selected_program: int,
 }
 
 view := View_State {
+	code_tab         = .Source,
 	side_tab         = .Registers,
 	selected_program = -1,
 }

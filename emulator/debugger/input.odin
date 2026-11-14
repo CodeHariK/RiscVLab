@@ -25,6 +25,8 @@ TAB_ID_REGISTERS :: "RegistersTab"
 TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_ELF :: "ElfTab"
 PROGRAM_ROW_ID :: "ProgramRow" // + catalog index
+TAB_ID_SOURCE :: "SourceTab"
+TAB_ID_DISASSEMBLY :: "DisassemblyTab"
 
 handle_input :: proc(session: ^Session) {
 	if button_clicked(BUTTON_ID_START) {
@@ -38,6 +40,12 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(BUTTON_ID_THEME) {
 		settings_next_theme()
+	}
+	if button_clicked(TAB_ID_SOURCE) {
+		view.code_tab = .Source
+	}
+	if button_clicked(TAB_ID_DISASSEMBLY) {
+		view.code_tab = .Disassembly
 	}
 	if button_clicked(TAB_ID_PROGRAMS) {
 		view.side_tab = .Programs

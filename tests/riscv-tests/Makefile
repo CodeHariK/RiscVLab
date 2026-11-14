@@ -24,10 +24,11 @@ LINK    := $(SRC)/env/p/link.ld
 # The suite's own list of rv64ui tests (rv64ui_sc_tests).
 -include $(SRC)/isa/rv64ui/Makefrag
 TESTS := $(addprefix $(BUILD)/rv64ui-p-,$(rv64ui_sc_tests))
+LINES := $(addsuffix .lines,$(TESTS))
 
 .PHONY: all clean check-source
 
-all: check-source $(TESTS)
+all: check-source $(TESTS) $(LINES)
 
 check-source:
 	@test -d $(SRC)/env/p || { echo "riscv-tests source missing: run ./fetch.sh first"; exit 1; }
@@ -37,9 +38,17 @@ check-source:
 $(BUILD)/rv64ui-p-%: $(SRC)/isa/rv64ui/%.S
 	@mkdir -p $(BUILD)
 	$(PREPROCESS) $(DEFINES) $(INCLUDE) $< -o $(BUILD)/$*.s
-	$(CROSS)as $(ARCH) $(BUILD)/$*.s -o $(BUILD)/$*.o
+	$(CROSS)as $(ARCH) -g $(BUILD)/$*.s -o $(BUILD)/$*.o
 	$(CROSS)ld -T $(LINK) $(BUILD)/$*.o -o $@
 	$(CROSS)objdump -d -M no-aliases $@ > $@.dis
+
+# Address -> source line map for the debugger's Source view (see
+# tests/programs/Makefile). The source is the preprocessed test, with the
+# macros expanded.
+$(BUILD)/rv64ui-p-%.lines: $(BUILD)/rv64ui-p-%
+	@echo "source $(abspath $(BUILD)/$*.s)" > $@
+	@$(CROSS)objdump --dwarf=decodedline $< | \
+	  awk '$$2 ~ /^[0-9]+$$/ && $$3 ~ /^0x/ { sub(/^0x/, "", $$3); print $$3, $$2 }' >> $@
 
 clean:
 	rm -rf $(BUILD)

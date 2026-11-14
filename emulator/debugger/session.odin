@@ -13,6 +13,9 @@ Session :: struct {
 	image:        []u8,
 	// Where the program starts and where its code is (from the loader).
 	program:      rv.Program,
+	// The program's source and line table, if the build made one.
+	source:       Source_Map,
+	has_source:   bool,
 	program_name: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
 	// program). Next does nothing while stopped; Prev clears it.
@@ -45,6 +48,8 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 	delete(session.image)
 	session.image = image
 	session.program_name = filepath.base(path)
+	source_destroy(&session.source)
+	session.source, session.has_source = source_load(path)
 	session_start(session)
 	return true
 }
@@ -52,6 +57,7 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 session_destroy :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	delete(session.image)
+	source_destroy(&session.source)
 }
 
 // Start: a fresh machine with the program loaded, PC at the first

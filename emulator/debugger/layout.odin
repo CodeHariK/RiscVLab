@@ -1,6 +1,7 @@
 package rvdbg
 
 import "core:fmt"
+import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
 
@@ -9,7 +10,7 @@ import rv "../core"
 //   +------------------------------------------------------------+
 //   | [Start] [Prev] [Next]   program   step   pc                |  toolbar
 //   +-----------------------------------+------------------------+
-//   | Code: disassembly around the PC   | [Programs][Regs][CSRs].|
+//   | [Source][Disassembly] around PC   | [Programs][Regs][CSRs].|
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
 //   | Encoding: the current instruction |                        |
@@ -21,10 +22,11 @@ import rv "../core"
 // Built from scratch every frame from the session state; strings use the
 // temp allocator, freed once the frame is drawn.
 
-// The code panel shows as many instructions as fit, a third of them
-// before the PC. Heights in pixels, matching the styles used below.
+// The code panel shows as many lines as fit, a third of them before the
+// current one. Heights in pixels, matching the styles used below.
 CODE_LINE_HEIGHT :: 24 // Code font (18) + line padding (4) + gap (2)
-CODE_PANEL_OVERHEAD :: 60 // title, panel padding and border
+SOURCE_LINE_HEIGHT :: 22 // Code_Small font (16) + line padding (4) + gap (2)
+CODE_PANEL_OVERHEAD :: 72 // tabs, panel padding and border
 CODE_LINES_DEFAULT :: 20 // first frame, before the panel has a size
 
 build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.RenderCommand) {
@@ -142,46 +144,110 @@ panel_title :: proc(title: string) {
 	}
 }
 
-// Disassembly of the instructions around the PC, current one highlighted.
+// The code panel: the program's source (with its comments) or its
+// disassembly, whichever tab is selected, scrolled so the current
+// instruction is a third of the way down.
 @(private = "file")
 code_panel :: proc(session: ^Session) {
-	colors := palette()
 	if clay.UI(clay.ID("CodePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
-		panel_title("Code")
-
-		lines := visible_code_lines()
-		lines_before_pc := u64(lines / 3)
-
-		pc := session.machine.cpu.pc
-		code_start, end := session_code_range(session)
-		first := pc - lines_before_pc * rv.INSTRUCTION_SIZE
-		if pc < code_start + lines_before_pc * rv.INSTRUCTION_SIZE {
-			first = code_start
+		show_source := session.has_source && view.code_tab == .Source
+		if clay.UI(clay.ID("CodeTabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
+			if session.has_source {
+				tab(TAB_ID_SOURCE, "Source", show_source)
+			}
+			tab(TAB_ID_DISASSEMBLY, "Disassembly", !show_source)
 		}
+		if show_source {
+			source_view(session)
+		} else {
+			disassembly_view(session)
+		}
+	}
+}
 
-		buffer: [rv.DISASM_BUFFER_SIZE]u8
-		for line in 0 ..< lines {
-			address := first + u64(line) * rv.INSTRUCTION_SIZE
-			if address + rv.INSTRUCTION_SIZE > end {
-				break
+// The source file around the current instruction's line: line numbers,
+// code, and comments in a dimmer colour.
+@(private = "file")
+source_view :: proc(session: ^Session) {
+	colors := palette()
+	source := &session.source
+	current, known := source_line_at(source, session.machine.cpu.pc)
+	if !known {
+		clay.TextDynamic(
+			fmt.tprintf("pc 0x%x has no source line (see the Disassembly tab)", session.machine.cpu.pc),
+			text_config(.Text, colors.text_dim),
+		)
+		return
+	}
+
+	lines := visible_lines(SOURCE_LINE_HEIGHT)
+	first := max(1, current - lines / 3)
+	for number in first ..< min(first + lines, len(source.lines) + 1) {
+		text := source.lines[number - 1]
+		code, comment := split_comment(text)
+		is_current := number == current
+		if clay.UI(clay.ID("SourceLine", u32(number - first)))({
+			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
+			backgroundColor = colors.current_line if is_current else COLOR_NONE,
+			cornerRadius = clay.CornerRadiusAll(3),
+		}) {
+			marker := ">" if is_current else " "
+			clay.TextDynamic(fmt.tprintf("%s%4d  ", marker, number), text_config(.Code_Small, colors.text_dim))
+			if code != "" {
+				clay.TextDynamic(code, text_config(.Code_Small, colors.text))
 			}
-			raw, _ := rv.bus_load(&session.machine.bus, address, 4)
-			instruction := u32(raw)
-			text := fmt.tprintf(
-				"%s %08x  %08x  %s",
-				">" if address == pc else " ",
-				address,
-				instruction,
-				rv.disassemble(buffer[:], address, instruction),
-			)
-			highlight := colors.current_line if address == pc else COLOR_NONE
-			if clay.UI(clay.ID("CodeLine", u32(line)))({
-				layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
-				backgroundColor = highlight,
-				cornerRadius = clay.CornerRadiusAll(3),
-			}) {
-				clay.TextDynamic(text, text_config(.Code, colors.text))
+			if comment != "" {
+				clay.TextDynamic(comment, text_config(.Code_Small, colors.accent))
 			}
+		}
+	}
+}
+
+// Splits an assembly line at its "#" comment: ("addi t0, zero, 5   ", "# t0 = 5").
+@(private = "file")
+split_comment :: proc(line: string) -> (code: string, comment: string) {
+	if hash := strings.index_byte(line, '#'); hash >= 0 {
+		return line[:hash], line[hash:]
+	}
+	return line, ""
+}
+
+// Disassembly of the instructions around the PC, current one highlighted.
+@(private = "file")
+disassembly_view :: proc(session: ^Session) {
+	colors := palette()
+	lines := visible_lines(CODE_LINE_HEIGHT)
+	lines_before_pc := u64(lines / 3)
+
+	pc := session.machine.cpu.pc
+	code_start, end := session_code_range(session)
+	first := pc - lines_before_pc * rv.INSTRUCTION_SIZE
+	if pc < code_start + lines_before_pc * rv.INSTRUCTION_SIZE {
+		first = code_start
+	}
+
+	buffer: [rv.DISASM_BUFFER_SIZE]u8
+	for line in 0 ..< lines {
+		address := first + u64(line) * rv.INSTRUCTION_SIZE
+		if address + rv.INSTRUCTION_SIZE > end {
+			break
+		}
+		raw, _ := rv.bus_load(&session.machine.bus, address, 4)
+		instruction := u32(raw)
+		text := fmt.tprintf(
+			"%s %08x  %08x  %s",
+			">" if address == pc else " ",
+			address,
+			instruction,
+			rv.disassemble(buffer[:], address, instruction),
+		)
+		highlight := colors.current_line if address == pc else COLOR_NONE
+		if clay.UI(clay.ID("CodeLine", u32(line)))({
+			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
+			backgroundColor = highlight,
+			cornerRadius = clay.CornerRadiusAll(3),
+		}) {
+			clay.TextDynamic(text, text_config(.Code, colors.text))
 		}
 	}
 }
@@ -223,14 +289,15 @@ encoding_field :: proc(instruction: u32, field: Encoding_Field, index: u32) {
 	}
 }
 
-// How many code lines fit, from the code panel's height last frame.
+// How many lines of `line_height` pixels fit in the code panel, from its
+// height last frame.
 @(private = "file")
-visible_code_lines :: proc() -> int {
+visible_lines :: proc(line_height: int) -> int {
 	panel := clay.GetElementData(clay.ID("CodePanel"))
 	if !panel.found {
 		return CODE_LINES_DEFAULT
 	}
-	return max(3, int(panel.boundingBox.height - CODE_PANEL_OVERHEAD) / CODE_LINE_HEIGHT)
+	return max(3, int(panel.boundingBox.height - CODE_PANEL_OVERHEAD) / line_height)
 }
 
 // Tabs on top, the selected tab's content below. The content scrolls with

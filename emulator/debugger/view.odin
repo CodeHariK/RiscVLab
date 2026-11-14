@@ -5,6 +5,7 @@ package rvdbg
 
 Side_Tab :: enum {
 	Registers, // x0..x31
+	Csrs,      // control and status registers, privilege level
 	Program,   // what the loader found
 }
 

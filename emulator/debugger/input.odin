@@ -20,6 +20,7 @@ BUTTON_ID_PREV :: "PrevButton"
 BUTTON_ID_NEXT :: "NextButton"
 BUTTON_ID_THEME :: "ThemeButton"
 TAB_ID_REGISTERS :: "RegistersTab"
+TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_PROGRAM :: "ProgramTab"
 
 handle_input :: proc(session: ^Session) {
@@ -37,6 +38,9 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_REGISTERS) {
 		view.side_tab = .Registers
+	}
+	if button_clicked(TAB_ID_CSRS) {
+		view.side_tab = .Csrs
 	}
 	if button_clicked(TAB_ID_PROGRAM) {
 		view.side_tab = .Program

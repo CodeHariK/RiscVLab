@@ -9,7 +9,7 @@ import rv "../core"
 //   +------------------------------------------------------------+
 //   | [Start] [Prev] [Next]   program   step   pc                |  toolbar
 //   +-----------------------------------+------------------------+
-//   | Code: disassembly around the PC   | [Registers] [Program]  |
+//   | Code: disassembly around the PC   | [Registers][CSRs][Prog]|
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
 //   | Encoding: the current instruction |                        |
@@ -241,6 +241,7 @@ side_panel :: proc(session: ^Session) {
 	if clay.UI(clay.ID("SidePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
 		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
 			tab(TAB_ID_REGISTERS, "Registers", view.side_tab == .Registers)
+			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_PROGRAM, "Program", view.side_tab == .Program)
 		}
 		if clay.UI(clay.ID("SideContent"))({
@@ -250,6 +251,8 @@ side_panel :: proc(session: ^Session) {
 			switch view.side_tab {
 			case .Registers:
 				register_list(session)
+			case .Csrs:
+				csr_list(session)
 			case .Program:
 				program_info(session)
 			}
@@ -308,6 +311,37 @@ program_line :: proc(label: string, value: string) {
 			clay.TextDynamic(label, text_config(.Code_Small, colors.text_dim))
 		}
 		clay.TextDynamic(value, text_config(.Code_Small, colors.text))
+	}
+}
+
+// The privilege level and every implemented CSR (see csr_view.odin),
+// with whatever the last step changed highlighted.
+@(private = "file")
+csr_list :: proc(session: ^Session) {
+	colors := palette()
+	cpu := &session.machine.cpu
+
+	privilege_text := fmt.tprintf("%-9s %v", "privilege", cpu.privilege)
+	if clay.UI(clay.ID("PrivilegeLine"))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 6}}}) {
+		clay.TextDynamic(privilege_text, text_config(.Code_Small, colors.text))
+	}
+
+	for address, index in csr_view_order {
+		value, _ := rv.csr_read(cpu, address)
+		// Two lines per CSR, so the panel doesn't need to be wide:
+		//   mstatus   0x300 0x0000000000001880
+		//             MIE=0 MPIE=1 MPP=Machine
+		text := fmt.tprintf("%-9s 0x%03x 0x%016x", rv.csr_name(address), address, value)
+		meaning := fmt.tprintf("%-9s %s", "", csr_meaning(cpu, address, value))
+		highlight := colors.changed if csr_changed_by_last_step(session, address) else COLOR_NONE
+		if clay.UI(clay.ID("CsrLine", u32(index)))({
+			layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {6, 6, 2, 2}},
+			backgroundColor = highlight,
+			cornerRadius = clay.CornerRadiusAll(3),
+		}) {
+			clay.TextDynamic(text, text_config(.Code_Small, colors.text))
+			clay.TextDynamic(meaning, text_config(.Code_Small, colors.text_dim))
+		}
 	}
 }
 

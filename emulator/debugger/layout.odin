@@ -9,7 +9,7 @@ import rv "../core"
 //   +------------------------------------------------------------+
 //   | [Start] [Prev] [Next]   program   step   pc                |  toolbar
 //   +-----------------------------------+------------------------+
-//   | Code: disassembly around the PC   | [Registers][CSRs][Prog]|
+//   | Code: disassembly around the PC   | [Programs][Regs][CSRs].|
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
 //   | Encoding: the current instruction |                        |
@@ -240,9 +240,10 @@ side_panel :: proc(session: ^Session) {
 	// No clip on the panel itself: SideContent is the scrolling area.
 	if clay.UI(clay.ID("SidePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
 		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
+			tab(TAB_ID_PROGRAMS, "Programs", view.side_tab == .Programs)
 			tab(TAB_ID_REGISTERS, "Registers", view.side_tab == .Registers)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
-			tab(TAB_ID_PROGRAM, "Program", view.side_tab == .Program)
+			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
 		}
 		if clay.UI(clay.ID("SideContent"))({
 			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
@@ -253,8 +254,10 @@ side_panel :: proc(session: ^Session) {
 				register_list(session)
 			case .Csrs:
 				csr_list(session)
-			case .Program:
+			case .Elf:
 				program_info(session)
+			case .Programs:
+				program_list()
 			}
 		}
 	}
@@ -277,6 +280,45 @@ tab :: proc(id: string, label: string, selected: bool) {
 		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
 	}) {
 		clay.TextDynamic(label, text_config(.Text, colors.button_text if selected else colors.text_dim))
+	}
+}
+
+// The program selector: every program in the catalog, grouped, with its
+// title and one-line description. Clicking one opens it (input.odin).
+@(private = "file")
+program_list :: proc() {
+	colors := palette()
+	if len(catalog.entries) == 0 {
+		clay.TextDynamic("No program list: start rvdbg with --tests <tests folder>.", text_config(.Text, colors.text_dim))
+		return
+	}
+
+	previous_group := -1
+	for entry, index in catalog.entries {
+		if int(entry.group) != previous_group {
+			previous_group = int(entry.group)
+			if clay.UI(clay.ID("ProgramGroup", u32(entry.group)))({layout = {padding = {4, 4, 10, 4}}}) {
+				clay.TextDynamic(catalog_group_names[entry.group], text_config(.Title, colors.title))
+			}
+		}
+
+		element_id := clay.ID(PROGRAM_ROW_ID, u32(index))
+		background := COLOR_NONE
+		if index == view.selected_program {
+			background = colors.current_line
+		} else if clay.PointerOver(element_id) {
+			background = colors.button_hover
+		}
+		if clay.UI(element_id)({
+			layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {8, 8, 4, 4}, childGap = 2},
+			backgroundColor = background,
+			cornerRadius = clay.CornerRadiusAll(4),
+		}) {
+			clay.TextDynamic(entry.title, text_config(.Text, colors.text))
+			if entry.description != "" {
+				clay.TextDynamic(entry.description, text_config(.Code_Small, colors.text_dim))
+			}
+		}
 	}
 }
 

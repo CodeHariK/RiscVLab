@@ -7,7 +7,8 @@
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
 #   make riscv-tests  build and run the official rv64ui tests (run ../tests/riscv-tests/fetch.sh once first)
 #   make debugger     build the step debugger -> build/rvdbg
-#   make debug-ui PROGRAM=path/to/program.bin   open a program in the debugger
+#   make debug-ui     open the debugger with the lessons and tests listed
+#                     (UI_PROGRAM=path/to/program to open a specific one)
 #
 # Source: core/ is the emulator itself (package rv, no file or console I/O);
 # cli/ is the command-line front end; debugger/ is the step debugger
@@ -47,7 +48,7 @@ $(DEBUGGER): $(DEBUGGER_SOURCES)
 	$(ODIN) build debugger -out:$(DEBUGGER)
 
 debug-ui: $(DEBUGGER) programs
-	./$(DEBUGGER) $(PROGRAM)
+	./$(DEBUGGER) --tests ../tests $(UI_PROGRAM)
 
 programs:
 	$(MAKE) -C $(PROGRAMS_DIR)
@@ -73,6 +74,7 @@ test: unit $(BINARY) programs
 	    if [ $$code -eq 0 ]; then echo "PASS $$program.$$format"; else echo "FAIL $$program.$$format (check $$code failed)"; exit 1; fi; \
 	  done; \
 	done
+	@sh ../tests/run_lessons.sh ./$(BINARY) $(PROGRAMS_DIR)/lessons $(PROGRAMS_BIN)/lessons
 	@for program in $(TEST_PROGRAMS); do \
 	  ./$(BINARY) $(PROGRAMS_BIN)/$$program.elf --check-undo || exit 1; \
 	done

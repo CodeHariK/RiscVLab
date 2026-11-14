@@ -20,11 +20,11 @@ make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ### Step debugger
 
 ```
-make debug-ui                                              # opens sum.elf
-make debug-ui PROGRAM=../tests/programs/build/rv64i_check.elf
+make debug-ui                                              # opens the first lesson; pick others in the Programs tab
+make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
-Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The window shows the disassembly around the PC, the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), a side panel with **Registers** (the last one written is highlighted), **CSRs** (privilege level and CSRs, with what the last step changed highlighted) and **Program** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
+The **Programs** tab lists the lessons (`tests/programs/lessons/`), the test programs and, if built, the official riscv-tests; click one to open it. Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The window shows the disassembly around the PC, the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), a side panel with **Registers** (the last one written is highlighted), **CSRs** (privilege level and CSRs, with what the last step changed highlighted) and **Program** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
 
 Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-objdump`; on macOS: `brew install riscv64-elf-binutils`).
 
@@ -78,7 +78,8 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `main.odin` | Window, Clay setup, frame loop |
-| `session.odin` | The machine being debugged and the Start / Prev / Next actions |
+| `session.odin` | The machine being debugged, opening a program, and the Start / Prev / Next actions |
+| `catalog.odin` | The Programs list: finds lessons, test programs and riscv-tests and reads their titles |
 | `input.odin` | Buttons and arrow keys -> session actions |
 | `layout.odin` | The Clay layout: toolbar, code, encoding strip, side panel (Registers / Program tabs), explanation |
 | `csr_view.odin` | What the CSRs tab lists and how it reads each value |

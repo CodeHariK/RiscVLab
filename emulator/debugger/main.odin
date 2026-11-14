@@ -4,13 +4,15 @@ import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
+import "core:strings"
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
 
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
-//   rvdbg <program>      (ELF executable or raw binary)
+//   rvdbg [program] [--tests <tests folder>]
+//
+// With --tests, the Programs tab lists the lessons and tests found there.
 //
 // Controls: Start, Prev / Next (buttons, or the left / right arrow keys).
 main :: proc() {
@@ -18,24 +20,32 @@ main :: proc() {
 }
 
 run :: proc() -> int {
-	if len(os.args) != 2 {
-		fmt.eprintln("usage: rvdbg <program>")
+	program_path, tests_root, ok := parse_arguments(os.args)
+	if !ok {
+		fmt.eprintln("usage: rvdbg [program] [--tests <tests folder>]")
+		fmt.eprintln("  program            ELF or raw binary to open (default: the first listed program)")
+		fmt.eprintln("  --tests <folder>   list the lessons and tests found in that folder")
 		return 2
 	}
-	program_path := os.args[1]
 
-	image, image_ok := read_program(program_path)
-	if !image_ok {
+	if tests_root != "" {
+		catalog_load(tests_root)
+	}
+	if program_path == "" && len(catalog.entries) > 0 {
+		program_path = catalog.entries[0].path
+		view.side_tab = .Programs
+	}
+	if program_path == "" {
+		fmt.eprintln("error: no program given and none found (build the tests first)")
 		return 1
 	}
-	defer delete(image)
 
-	session, load_error := session_create(image, filepath.base(program_path))
-	if load_error != nil {
-		fmt.eprintfln("error: cannot load %s: %v", program_path, load_error)
+	session: Session
+	if !session_open(&session, program_path) {
 		return 1
 	}
 	defer session_destroy(&session)
+	view.selected_program = catalog_find(program_path)
 
 	clay_memory := init_clay()
 	defer free(clay_memory)
@@ -79,4 +89,19 @@ init_clay :: proc() -> rawptr {
 clay_error :: proc "c" (error: clay.ErrorData) {
 	context = runtime.default_context()
 	fmt.eprintfln("clay error: %s", string(error.errorText.chars[:error.errorText.length]))
+}
+
+@(private = "file")
+parse_arguments :: proc(args: []string) -> (program_path: string, tests_root: string, ok: bool) {
+	for i := 1; i < len(args); i += 1 {
+		if args[i] == "--tests" && i + 1 < len(args) {
+			i += 1
+			tests_root = args[i]
+		} else if program_path == "" && !strings.has_prefix(args[i], "--") {
+			program_path = args[i]
+		} else {
+			return "", "", false
+		}
+	}
+	return program_path, tests_root, true
 }

@@ -1,5 +1,7 @@
 package rvdbg
 
+import "core:fmt"
+import "core:path/filepath"
 import rv "../core"
 
 // One debugging session: the machine plus what the UI needs to know
@@ -22,24 +24,34 @@ Session :: struct {
 	last_step:    Maybe(rv.Undo_Record),
 }
 
-// Fails (with the loader's error) if the file isn't a loadable program.
-session_create :: proc(image: []u8, program_name: string) -> (session: Session, error: rv.Load_Error) {
-	session = Session {
-		image        = image,
-		program_name = program_name,
+// Opens the program file at `path` (the session then owns its bytes).
+// Fails, leaving `session` untouched, if the file can't be read or isn't
+// a loadable program.
+session_open :: proc(session: ^Session, path: string) -> bool {
+	image, read_ok := read_program(path)
+	if !read_ok {
+		return false
 	}
-	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, 0)
-	_, error = rv.machine_load_program(&session.machine, image)
+	// Check it loads before replacing the current program.
+	probe := rv.machine_create(rv.RAM_SIZE_DEFAULT, 0)
+	_, error := rv.machine_load_program(&probe, image)
+	rv.machine_destroy(&probe)
 	if error != nil {
-		rv.machine_destroy(&session.machine)
-		return session, error
+		fmt.eprintfln("error: cannot load %s: %v", path, error)
+		delete(image)
+		return false
 	}
-	session_start(&session)
-	return session, nil
+
+	delete(session.image)
+	session.image = image
+	session.program_name = filepath.base(path)
+	session_start(session)
+	return true
 }
 
 session_destroy :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
+	delete(session.image)
 }
 
 // Start: a fresh machine with the program loaded, PC at the first
@@ -47,8 +59,7 @@ session_destroy :: proc(session: ^Session) {
 session_start :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
-	// The file loaded once at start-up (session_create checks it), so it
-	// loads again here.
+	// session_open checked that the program loads, so it loads again here.
 	session.program, _ = rv.machine_load_program(&session.machine, session.image)
 	session.stopped = nil
 	session.exited = nil

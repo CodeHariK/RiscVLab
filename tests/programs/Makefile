@@ -10,7 +10,8 @@ ARCH      := -march=rv64i_zicsr -mabi=lp64
 LINK      := link.ld
 BUILD     := build
 
-SOURCES := $(wildcard *.s)
+# Test programs (*.s) and lessons for the debugger (lessons/*.s).
+SOURCES := $(wildcard *.s) $(wildcard lessons/*.s)
 BINARIES := $(patsubst %.s,$(BUILD)/%.bin,$(SOURCES))
 
 .PHONY: all clean
@@ -22,7 +23,7 @@ BINARIES := $(patsubst %.s,$(BUILD)/%.bin,$(SOURCES))
 all: $(BINARIES)
 
 $(BUILD)/%.o: %.s
-	@mkdir -p $(BUILD)
+	@mkdir -p $(dir $@)
 	$(CROSS)as $(ARCH) $< -o $@
 
 # ELF executable: the emulator loads these directly.

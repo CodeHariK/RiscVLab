@@ -5,6 +5,7 @@
 #   make test         unit tests, then build the test programs, run them, check undo and the disassembler
 #   make unit         unit tests only (unit_tests/, `odin test`)
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
+#   make riscv-tests  build and run the official rv64ui tests (run ../tests/riscv-tests/fetch.sh once first)
 #   make debugger     build the step debugger -> build/rvdbg
 #   make debug-ui PROGRAM=path/to/program.bin   open a program in the debugger
 #
@@ -24,7 +25,7 @@ PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
 PROGRAM      ?= $(PROGRAMS_BIN)/sum.elf
 
-.PHONY: all debug run programs test unit clean debugger debug-ui
+.PHONY: all debug run programs test unit riscv-tests clean debugger debug-ui
 
 all: $(BINARY)
 
@@ -78,6 +79,12 @@ test: unit $(BINARY) programs
 	@for program in $(TEST_PROGRAMS); do for format in $(FORMATS); do \
 	  sh ../tests/compare_disasm.sh ./$(BINARY) $(PROGRAMS_BIN)/$$program.$$format $(PROGRAMS_BIN)/$$program.dis || exit 1; \
 	done; done
+
+# The official riscv-tests (rv64ui-p): downloaded separately, so not part
+# of `make test`.
+riscv-tests: $(BINARY)
+	$(MAKE) -C ../tests/riscv-tests
+	sh ../tests/riscv-tests/run.sh ./$(BINARY) ../tests/riscv-tests/build
 
 clean:
 	rm -rf $(BUILD_DIR)

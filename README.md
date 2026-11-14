@@ -18,8 +18,8 @@ A learning project: a RISC-V emulator and an xv6 port, both written in [Odin](ht
 
 ## Milestones
 
-1. **Emulator core:** a simple step-by-step interpreter, RV64I first.
-2. **Conformance:** pass `riscv-tests` (unprivileged + privileged).
+1. **Emulator core:** a simple step-by-step interpreter, RV64I first. *Done: RV64I, Zicsr, machine-mode traps, ELF loading, step debugger.*
+2. **Conformance:** pass `riscv-tests` (unprivileged + privileged). *rv64ui-p: all 54 pass.*
 3. **Boot stock xv6-riscv (C)** on RiscVOdin, reaching a shell prompt.
 4. **Odin freestanding test:** "hello" over the UART on QEMU `virt`.
 5. **Port xv6 to Odin, one subsystem at a time:** console/UART → traps → allocator → virtual memory → processes/scheduler → syscalls → file system → virtio disk.

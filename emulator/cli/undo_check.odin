@@ -23,7 +23,7 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 	// with no handler). Steps that trapped into a handler are recorded but
 	// don't retire, so this can be more than instret.
 	recorded := result.steps
-	if result.reason != .Step_Limit {
+	if result.reason == .Breakpoint || result.reason == .Trap {
 		recorded -= 1
 	}
 

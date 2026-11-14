@@ -13,6 +13,9 @@ Machine :: struct {
 	// The trap the last step took into a handler, if any (for traces and
 	// the debugger; the step itself reports success).
 	last_trap: Maybe(Trap),
+	// Address of the program's `tohost` variable, if it has one (set by
+	// machine_load_program). See machine_host_exit.
+	tohost:    Maybe(u64),
 }
 
 // Why `machine_run` returned.
@@ -23,12 +26,16 @@ Stop_Reason :: enum {
 	Trap,
 	// The step limit was reached (guards against endless loops).
 	Step_Limit,
+	// The program wrote an exit request to `tohost` (riscv-tests do this).
+	Host_Exit,
 }
 
 Run_Result :: struct {
-	reason: Stop_Reason,
-	trap:   Trap,
-	steps:  u64,
+	reason:    Stop_Reason,
+	trap:      Trap,
+	steps:     u64,
+	// For Host_Exit: the program's exit code (0 = success).
+	exit_code: u64,
 }
 
 // Called after every step by `machine_run`, e.g. to print a trace line.
@@ -136,6 +143,28 @@ machine_run :: proc(machine: ^Machine, max_steps: u64, observer: Step_Observer =
 			reason := Stop_Reason.Breakpoint if trap.cause == .Breakpoint else Stop_Reason.Trap
 			return Run_Result{reason = reason, trap = trap, steps = steps}
 		}
+		if exit_code, exited := machine_host_exit(machine).?; exited {
+			return Run_Result{reason = .Host_Exit, steps = steps, exit_code = exit_code}
+		}
 	}
 	return Run_Result{reason = .Step_Limit, steps = steps}
+}
+
+// The `tohost` exit convention ("HTIF", from the Spike simulator), used by
+// riscv-tests: the program writes a value to its `tohost` variable to talk
+// to the outside world. A value with bit 0 set means "exit", with the exit
+// code in the remaining bits: 1 = exit code 0 (pass); (n << 1) | 1 = exit
+// code n (riscv-tests: test n failed).
+//
+// Returns the exit code once the program has asked to exit, else nil.
+machine_host_exit :: proc(machine: ^Machine) -> Maybe(u64) {
+	address, has_tohost := machine.tohost.?
+	if !has_tohost {
+		return nil
+	}
+	value, _ := bus_load(&machine.bus, address, 8)
+	if value & 1 == 0 {
+		return nil
+	}
+	return value >> 1
 }

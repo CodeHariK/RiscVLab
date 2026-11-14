@@ -18,7 +18,7 @@ Program :: struct {
 	entry:      u64,
 	code_start: u64,
 	code_end:   u64,
-	tohost:     Maybe(u64), // ELF only; used for riscv-tests results later
+	tohost:     Maybe(u64), // ELF only: where riscv-tests report their result
 }
 
 Load_Error :: union {
@@ -57,5 +57,6 @@ machine_load_program :: proc(machine: ^Machine, image: []u8) -> (program: Progra
 		}
 	}
 	machine.cpu.pc = program.entry
+	machine.tohost = program.tohost
 	return program, nil
 }

@@ -275,6 +275,12 @@ explain_status :: proc(session: ^Session) -> string {
 		}
 		return fmt.tprintf("Stopped: %v (value 0x%x) at pc 0x%x", trap.cause, trap.value, cpu.pc)
 	}
+	if exit_code, exited := session.exited.?; exited {
+		if exit_code == 0 {
+			return fmt.tprintf("Program finished through tohost after %d instructions: exit code 0 (pass)", cpu.instret)
+		}
+		return fmt.tprintf("Program finished through tohost: exit code %d (riscv-tests: test %d failed)", exit_code, exit_code)
+	}
 	if cpu.instret == 0 {
 		return "Ready. Press Next (or the right arrow key) to run the first instruction."
 	}

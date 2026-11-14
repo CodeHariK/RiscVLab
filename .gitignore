@@ -19,3 +19,6 @@ bin/
 # Emulator traces / logs
 *.trace
 *.log
+
+# riscv-tests source (downloaded by tests/riscv-tests/fetch.sh)
+tests/riscv-tests/src/

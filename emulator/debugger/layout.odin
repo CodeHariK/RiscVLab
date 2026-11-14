@@ -382,7 +382,7 @@ register_list :: proc(session: ^Session) {
 explanation_panel :: proc(session: ^Session) {
 	colors := palette()
 	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingFit()})) {
-		status_color := colors.stopped if session.stopped != nil else colors.text
+		status_color := colors.stopped if session.stopped != nil || session.exited != nil else colors.text
 		explanation_line("Status", explain_status(session), status_color)
 		explanation_line("Next", explain_next(session), colors.text)
 		explanation_line("Last", explain_last_step(session), colors.text)

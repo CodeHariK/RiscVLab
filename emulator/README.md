@@ -13,6 +13,7 @@ make                 # release build -> build/rvemu
 make debug           # debug build   -> build/rvemu-debug
 make test            # unit tests, test programs, undo self-test, disassembler diff
 make unit            # unit tests only (unit_tests/)
+make riscv-tests     # the official rv64ui tests (run ../tests/riscv-tests/fetch.sh once first)
 make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ```
 
@@ -32,7 +33,7 @@ rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 ```
 
 - The program is an ELF executable (loaded by its segments, started at its entry point) or a raw binary (loaded and started at `0x80000000`).
-- After `ebreak`, the exit code is the low 8 bits of `a0`, so test programs can report results.
+- After `ebreak`, the exit code is the low 8 bits of `a0`, so test programs can report results. Programs with a `tohost` symbol (riscv-tests) report their exit code by writing to it.
 - `--trace` prints one line per instruction: `pc  bits  disassembly  [reg <- value]`.
 - `--disasm` lists the program's disassembly (objdump format) without running it.
 - `--check-undo` runs the program, steps back to the start, and checks every register and byte of RAM is restored.
@@ -109,7 +110,7 @@ Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR re
 
 ## Next milestones
 
-- Zicsr + machine-mode traps: CSRs, `mtvec` / `mepc` / `mcause`, `mret` (the official `riscv-tests` need these: their startup code configures CSRs and they report results from a trap handler)
-- The official `riscv-tests` (`rv64ui`), using the ELF loader and `tohost`
-- Supervisor / user modes, then M and A extensions, then Sv39, then the devices
-- Debugger: memory view, then CSR / privilege panels
+- Supervisor and user modes: `sstatus` / `stvec` / `sepc` / ..., trap delegation (`medeleg`), `sret`
+- M and A extensions (with their riscv-tests: rv64um, rv64ua)
+- Sv39 virtual memory, then the devices (UART, CLINT, PLIC, virtio)
+- Debugger: memory view, symbols in the code view

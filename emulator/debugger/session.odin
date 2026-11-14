@@ -12,9 +12,12 @@ Session :: struct {
 	// Where the program starts and where its code is (from the loader).
 	program:      rv.Program,
 	program_name: string,
-	// Set when the last Next raised a trap (EBREAK ends a program).
-	// Next does nothing while stopped; Prev clears it.
+	// Set when the last Next raised a trap with no handler (EBREAK ends a
+	// program). Next does nothing while stopped; Prev clears it.
 	stopped:      Maybe(rv.Trap),
+	// Set when the program asked to exit through `tohost` (riscv-tests):
+	// its exit code. Next does nothing after that; Prev clears it.
+	exited:       Maybe(u64),
 	// What the most recent Next changed (nil after Start or Prev).
 	last_step:    Maybe(rv.Undo_Record),
 }
@@ -48,12 +51,13 @@ session_start :: proc(session: ^Session) {
 	// loads again here.
 	session.program, _ = rv.machine_load_program(&session.machine, session.image)
 	session.stopped = nil
+	session.exited = nil
 	session.last_step = nil
 }
 
 // Next: run one instruction.
 session_next :: proc(session: ^Session) {
-	if session.stopped != nil {
+	if session.stopped != nil || session.exited != nil {
 		return
 	}
 	result := rv.machine_step(&session.machine)
@@ -63,6 +67,7 @@ session_next :: proc(session: ^Session) {
 		return
 	}
 	session.last_step = session.machine.cpu.undo
+	session.exited = rv.machine_host_exit(&session.machine)
 }
 
 // Prev: undo one instruction. A trap changes nothing, so if the program
@@ -70,6 +75,7 @@ session_next :: proc(session: ^Session) {
 // instruction before it.
 session_prev :: proc(session: ^Session) {
 	session.stopped = nil
+	session.exited = nil
 	session.last_step = nil
 	rv.machine_step_back(&session.machine)
 }

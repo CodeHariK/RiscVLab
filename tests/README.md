@@ -1,4 +1,5 @@
 # tests
 
-- `riscv-tests` runner for RiscVOdin (ISA conformance)
-- Trace-diff scripts: compare RiscVOdin's per-instruction trace with Spike's
+- `programs/`: our own small bare-metal test programs (assembly, self-checking; see each `.s` file). Built and run by `make test` in `emulator/`.
+- `riscv-tests/`: the official RISC-V test suite (rv64ui-p: every RV64I instruction). `./fetch.sh` downloads it once, then `make riscv-tests` in `emulator/` builds and runs it. Each test reports pass / fail through its `tohost` variable.
+- `compare_disasm.sh`: compares the emulator's disassembler with objdump for one program.

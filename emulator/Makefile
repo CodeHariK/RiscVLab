@@ -4,20 +4,26 @@
 #   make debug        debug build                              -> build/rvemu-debug
 #   make test         build the test programs, run them, check undo and the disassembler
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
+#   make debugger     build the step debugger -> build/rvdbg
+#   make debug-ui PROGRAM=path/to/program.bin   open a program in the debugger
 #
 # Source: core/ is the emulator itself (package rv, no file or console I/O);
-# cli/ is the command-line front end. The debugger UI will be a second front end.
+# cli/ is the command-line front end; debugger/ is the step debugger
+# (raylib + Clay, from vendor/clay-odin).
 
 ODIN      ?= odin
 BUILD_DIR := build
 BINARY    := $(BUILD_DIR)/rvemu
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
 SOURCES   := $(wildcard core/*.odin cli/*.odin)
+DEBUGGER  := $(BUILD_DIR)/rvdbg
+DEBUGGER_SOURCES := $(wildcard core/*.odin debugger/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/fonts/*.ttf)
 
 PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
+PROGRAM      ?= $(PROGRAMS_BIN)/sum.bin
 
-.PHONY: all debug run programs test clean
+.PHONY: all debug run programs test clean debugger debug-ui
 
 all: $(BINARY)
 
@@ -31,6 +37,15 @@ debug: $(SOURCES)
 
 run: $(BINARY)
 	./$(BINARY) $(PROGRAM) $(ARGS)
+
+debugger: $(DEBUGGER)
+
+$(DEBUGGER): $(DEBUGGER_SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(ODIN) build debugger -out:$(DEBUGGER)
+
+debug-ui: $(DEBUGGER) programs
+	./$(DEBUGGER) $(PROGRAM)
 
 programs:
 	$(MAKE) -C $(PROGRAMS_DIR)

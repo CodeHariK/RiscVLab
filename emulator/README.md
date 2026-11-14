@@ -15,6 +15,15 @@ make test            # run the test programs, the undo self-test and the disasse
 make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ```
 
+### Step debugger
+
+```
+make debug-ui                                              # opens sum.bin
+make debug-ui PROGRAM=../tests/programs/build/rv64i_check.bin
+```
+
+Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The window shows the disassembly around the PC, all 32 registers (the last one written is highlighted), and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
+
 Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-objdump`; on macOS: `brew install riscv64-elf-binutils`).
 
 ```
@@ -55,6 +64,22 @@ No file access and no printing, so it compiles for any target.
 | `disasm.odin` | Instruction bits to assembly text (objdump format) |
 | `register_names.odin` | ABI register names (`zero`, `ra`, `sp`, ...) |
 
+### `debugger/` (package `rvdbg`): the step debugger
+
+| File | Responsibility |
+|---|---|
+| `main.odin` | Window, Clay setup, frame loop |
+| `session.odin` | The machine being debugged and the Start / Prev / Next actions |
+| `input.odin` | Buttons and arrow keys -> session actions |
+| `layout.odin` | The Clay layout: toolbar, code, registers, explanation |
+| `explain.odin` | Plain-language text for the next / last instruction and the status |
+| `theme.odin` | Light and dark palettes, text styles (font + size), spacing |
+| `settings.odin` | Theme setting, switched from the toolbar |
+| `fonts.odin` | Loads the embedded font at each text size |
+| `fonts/` | JetBrains Mono Medium, embedded at compile time; licence in `fonts/README.md` |
+| `program_file.odin` | Reads the program from disk |
+| `clay_renderer_raylib.odin` | Clay's raylib renderer, copied from the Clay examples |
+
 ### `cli/` (package `rvemu`): the command-line runner
 
 | File | Responsibility |
@@ -69,7 +94,7 @@ No file access and no printing, so it compiles for any target.
 
 ## Next milestones
 
-- Debugger UI (raylib + Clay): Start, Prev / Next, disassembly, registers, explanation
+- Debugger: memory view, then CSR / privilege panels as those milestones land
 - ELF loading and the official `riscv-tests` (`rv64ui`)
 - Zicsr: CSRs, M/S/U modes, trap entry and `mret` / `sret`
 - M and A extensions, then Sv39, then the devices

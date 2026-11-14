@@ -5,6 +5,8 @@
 build/
 bin/
 *.o
+# ...except prebuilt vendor libraries (Clay's WebAssembly build is a .o)
+!emulator/vendor/**/*.o
 *.bin
 *.elf
 *.img

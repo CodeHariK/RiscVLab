@@ -132,9 +132,20 @@ explain_next :: proc(session: ^Session) -> string {
 		}
 		switch instruction {
 		case rv.ENCODING_ECALL:
-			return "system call: raises an environment-call trap (stops the machine until trap handling exists)"
+			if rv.trap_has_handler(cpu) {
+				return fmt.tprintf("system call: raises an environment-call trap -> handler at 0x%x", cpu.csr.mtvec &~ 0b11)
+			}
+			return "system call: raises an environment-call trap; no handler is set up (mtvec = 0), so the machine stops"
 		case rv.ENCODING_EBREAK:
-			return "breakpoint: raises a breakpoint trap, which ends the program here"
+			if rv.trap_has_handler(cpu) {
+				return fmt.tprintf("breakpoint: raises a breakpoint trap -> handler at 0x%x", cpu.csr.mtvec &~ 0b11)
+			}
+			return "breakpoint: raises a breakpoint trap; no handler is set up (mtvec = 0), so the program ends here"
+		case rv.ENCODING_MRET:
+			return fmt.tprintf(
+				"return from trap: pc = mepc (0x%x); interrupts back to MPIE; privilege = MPP (machine)",
+				cpu.csr.mepc,
+			)
 		}
 	}
 	return fmt.tprintf("unknown instruction 0x%08x: will raise Illegal_Instruction", instruction)

@@ -116,7 +116,10 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	csr := &cpu.csr
 	switch address {
 	case CSR_MSTATUS:
-		csr.mstatus = value & (MSTATUS_MIE | MSTATUS_MPIE | MSTATUS_MPP)
+		// MPP can only hold an implemented mode; machine is the only one so
+		// far, so it always reads as 3.
+		kept := value & (MSTATUS_MIE | MSTATUS_MPIE)
+		csr.mstatus = kept | u64(LEAST_PRIVILEGED_MODE) << MSTATUS_MPP_SHIFT
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:

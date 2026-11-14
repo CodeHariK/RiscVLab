@@ -82,3 +82,13 @@ mip_ignores_software_writes :: proc(t: ^testing.T) {
 	value, _ := rv.csr_read(&cpu, rv.CSR_MIP)
 	testing.expect_value(t, value, 0)
 }
+
+@(test)
+mstatus_mpp_only_holds_machine_mode :: proc(t: ^testing.T) {
+	// Machine is the only implemented mode, so MPP (bits 12:11) stays 3
+	// even when software writes 0 (user mode) there.
+	cpu: rv.Cpu
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, 0))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MSTATUS)
+	testing.expect_value(t, value, rv.MSTATUS_MPP)
+}

@@ -1,7 +1,8 @@
 package rv
 
-// FENCE and the SYSTEM opcode: ECALL and EBREAK here; the CSR
-// instructions (also SYSTEM, with funct3 != 0) are in zicsr.odin.
+// FENCE and the SYSTEM opcode: ECALL and EBREAK here; MRET is in
+// priv_return.odin, and the CSR instructions (also SYSTEM, with
+// funct3 != 0) are in zicsr.odin.
 
 ENCODING_ECALL :: u32(0x0000_0073)
 ENCODING_EBREAK :: u32(0x0010_0073)
@@ -29,6 +30,8 @@ exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 		return trap_make(ecall_cause(cpu.privilege), 0)
 	case ENCODING_EBREAK:
 		return trap_make(.Breakpoint, 0)
+	case ENCODING_MRET:
+		return exec_mret(cpu, instruction)
 	}
 	return illegal_instruction(instruction)
 }

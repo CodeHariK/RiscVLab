@@ -61,8 +61,9 @@ machine_destroy :: proc(machine: ^Machine) {
 machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu := &machine.cpu
 	cpu.undo = Undo_Record {
-		pc      = cpu.pc,
-		instret = cpu.instret,
+		pc        = cpu.pc,
+		instret   = cpu.instret,
+		privilege = cpu.privilege,
 	}
 	machine.last_trap = nil
 
@@ -72,7 +73,6 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 			return result
 		}
 		cpu.undo.trap_taken = true
-		cpu.undo.trap_privilege = cpu.privilege
 		cpu.undo.trap_mstatus = cpu.csr.mstatus
 		cpu.undo.trap_mepc = cpu.csr.mepc
 		cpu.undo.trap_mcause = cpu.csr.mcause
@@ -106,7 +106,6 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		csr_write(&machine.cpu, record.csr_address, record.csr_old)
 	}
 	if record.trap_taken {
-		machine.cpu.privilege = record.trap_privilege
 		machine.cpu.csr.mstatus = record.trap_mstatus
 		machine.cpu.csr.mepc = record.trap_mepc
 		machine.cpu.csr.mcause = record.trap_mcause
@@ -114,6 +113,7 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	}
 	machine.cpu.pc = record.pc
 	machine.cpu.instret = record.instret
+	machine.cpu.privilege = record.privilege
 	machine.cpu.last_write = {}
 	machine.last_trap = nil
 	return true

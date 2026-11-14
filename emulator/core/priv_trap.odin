@@ -28,6 +28,10 @@ Privilege :: enum u8 {
 
 MSTATUS_MPP_SHIFT :: 11
 
+// The only mode implemented so far. mstatus.MPP can only hold modes the
+// hart has (csr.odin), and MRET resets MPP to this one.
+LEAST_PRIVILEGED_MODE :: Privilege.Machine
+
 trap_has_handler :: proc(cpu: ^Cpu) -> bool {
 	return cpu.csr.mtvec != 0
 }

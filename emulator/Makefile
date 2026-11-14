@@ -55,7 +55,7 @@ programs:
 # program is run twice: as an ELF executable and as a raw binary. Then for
 # every program: undo all steps and compare, and diff the disassembler
 # against objdump.
-TEST_PROGRAMS := sum rv64i_check csr_check trap_check
+TEST_PROGRAMS := sum rv64i_check csr_check trap_check mret_check
 FORMATS       := elf bin
 
 # Unit tests for core rules that no test program can reach yet.
@@ -67,7 +67,7 @@ test: unit $(BINARY) programs
 	@for format in $(FORMATS); do \
 	  ./$(BINARY) $(PROGRAMS_BIN)/sum.$$format; code=$$?; \
 	  if [ $$code -eq 55 ]; then echo "PASS sum.$$format"; else echo "FAIL sum.$$format (exit $$code, expected 55)"; exit 1; fi; \
-	  for program in rv64i_check csr_check trap_check; do \
+	  for program in rv64i_check csr_check trap_check mret_check; do \
 	    ./$(BINARY) $(PROGRAMS_BIN)/$$program.$$format; code=$$?; \
 	    if [ $$code -eq 0 ]; then echo "PASS $$program.$$format"; else echo "FAIL $$program.$$format (check $$code failed)"; exit 1; fi; \
 	  done; \

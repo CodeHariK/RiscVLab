@@ -16,6 +16,7 @@ Undo_Record :: struct {
 	// Where the step started (restored on undo).
 	pc:               u64,
 	instret:          u64,
+	privilege:        Privilege,
 	// The register the step overwrote, if any.
 	register_old:     u64,
 	register_index:   u32,
@@ -29,18 +30,17 @@ Undo_Record :: struct {
 	csr_changed:      bool,
 	csr_address:      u32,
 	csr_old:          u64,
-	// If the step trapped into a handler: the state trap entry overwrote.
-	// (The PC is restored from `pc` above.)
+	// If the step trapped into a handler: the CSRs trap entry overwrote.
+	// (PC and privilege are restored from the fields above.)
 	trap_taken:       bool,
-	trap_privilege:   Privilege,
 	trap_mstatus:     u64,
 	trap_mepc:        u64,
 	trap_mcause:      u64,
 	trap_mtval:       u64,
 }
 
-// Default number of steps that can be undone. Each record is 112 bytes,
-// so this is 28 MiB. When full, the oldest steps are forgotten.
+// Default number of steps that can be undone. Each record is 104 bytes,
+// so this is 26 MiB. When full, the oldest steps are forgotten.
 HISTORY_CAPACITY_DEFAULT :: 256 * 1024
 
 // Fixed-size ring buffer of undo records, newest last.

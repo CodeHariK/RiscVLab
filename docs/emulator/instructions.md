@@ -2,7 +2,7 @@
 
 What RiscVOdin executes today, with the encoding fields it decodes. Anything not listed raises `Illegal_Instruction`.
 
-**Current status: RV64I base (all 52 instructions) + Zifencei + Zicsr. 59 in total.**
+**Current status: RV64I base (all 52 instructions) + Zifencei + Zicsr + MRET. 60 in total.**
 
 Formats: see the diagram at the top of `emulator/core/decode.odin`.
 `imm` is always sign-extended to 64 bits. Arithmetic wraps modulo 2^64.
@@ -14,7 +14,7 @@ The same instructions, grouped by bit layout instead of by job. The layouts are 
 | Format | Fields | Immediate | Instructions |
 |---|---|---|---|
 | **R** | funct7, rs2, rs1, funct3, rd | none | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND, ADDW, SUBW, SLLW, SRLW, SRAW |
-| **I** | imm[11:0], rs1, funct3, rd | 12 bits, `imm_i` | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, JALR, FENCE, FENCE.I, ECALL, EBREAK, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI |
+| **I** | imm[11:0], rs1, funct3, rd | 12 bits, `imm_i` | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, JALR, FENCE, FENCE.I, ECALL, EBREAK, MRET, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI |
 | **S** | imm[11:5], rs2, rs1, funct3, imm[4:0] | 12 bits, `imm_s` | SB, SH, SW, SD |
 | **B** | imm[12\|10:5], rs2, rs1, funct3, imm[4:1\|11] | 13 bits (bit 0 always 0), `imm_b` | BEQ, BNE, BLT, BGE, BLTU, BGEU |
 | **U** | imm[31:12], rd | upper 20 bits, `imm_u` | LUI, AUIPC |
@@ -26,7 +26,7 @@ Notes:
 - **CSR instructions** are I-type whose 12-bit immediate is the CSR address (not sign-extended); the immediate forms put a 5-bit value in the rs1 field.
 - **ECALL and EBREAK** are I-type with every field fixed except imm (0 for ECALL, 1 for EBREAK), so the emulator matches the whole 32-bit word.
 - **S and B** have the same register positions; B scrambles the immediate bits so that the sign bit is always bit 31 and most bits stay in the same place as S. **U and J** share the same relationship.
-- **Unprivileged vs privileged:** everything here is from the unprivileged spec. Privileged instructions (MRET, SRET, WFI, SFENCE.VMA) arrive with the trap milestone, in `priv_*` files.
+- **Unprivileged vs privileged:** everything here is from the unprivileged spec. Privileged instructions live in `priv_*` files: MRET so far; SRET, WFI and SFENCE.VMA later.
 
 ## Upper immediates (`rv64i_upper.odin`)
 
@@ -119,8 +119,9 @@ Compute on the low 32 bits, then sign-extend the 32-bit result to 64 bits. Shift
 |---|---|---|
 | FENCE | opcode 0001111, funct3 000 | no-op (one hart, memory accesses happen in order) |
 | FENCE.I (Zifencei) | opcode 0001111, funct3 001 | no-op (no instruction cache to flush) |
-| ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (stops the machine until trap handling exists) |
-| EBREAK | 0x00100073 | trap `Breakpoint`: the normal way for test programs to stop |
+| ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (the cause follows the current privilege level) |
+| EBREAK | 0x00100073 | trap `Breakpoint`; with no handler set up, the normal way for test programs to stop |
+| MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`priv_return.odin`) |
 
 ## CSR instructions, Zicsr (`zicsr.odin`)
 
@@ -143,7 +144,7 @@ Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (M
 
 | Extension | Needed for | Milestone |
 |---|---|---|
-| MRET, SRET, WFI, SFENCE.VMA | Returning from traps, privilege modes, paging | Traps + privilege |
+| SRET, WFI, SFENCE.VMA | Supervisor mode, waiting for interrupts, paging | Supervisor mode / Sv39 |
 | M (MUL, MULH*, DIV*, REM*, and *W forms) | Compiled C/Odin arithmetic | M extension |
 | A (LR, SC, AMO*) | xv6 spinlocks | A extension |
 | C (compressed 16-bit instructions) | Optional: smaller code | Maybe later |

@@ -18,19 +18,19 @@ make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ### Step debugger
 
 ```
-make debug-ui                                              # opens sum.bin
-make debug-ui PROGRAM=../tests/programs/build/rv64i_check.bin
+make debug-ui                                              # opens sum.elf
+make debug-ui PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
-Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The window shows the disassembly around the PC, all 32 registers (the last one written is highlighted), and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
+Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The window shows the disassembly around the PC, the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), a side panel with **Registers** (the last one written is highlighted) and **Program** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
 
 Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-objdump`; on macOS: `brew install riscv64-elf-binutils`).
 
 ```
-rvemu <program.bin> [--trace] [--disasm] [--check-undo] [--max-steps N]
+rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 ```
 
-- The program is a raw binary loaded at `0x80000000`, where execution starts.
+- The program is an ELF executable (loaded by its segments, started at its entry point) or a raw binary (loaded and started at `0x80000000`).
 - After `ebreak`, the exit code is the low 8 bits of `a0`, so test programs can report results.
 - `--trace` prints one line per instruction: `pc  bits  disassembly  [reg <- value]`.
 - `--disasm` lists the program's disassembly (objdump format) without running it.
@@ -50,7 +50,9 @@ No file access and no printing, so it compiles for any target.
 | `cpu.odin` | Hart state: registers, PC, `instret`, the current undo record |
 | `bus.odin` | Physical address routing (RAM for now) |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
-| `image.odin` | Copies a program image (bytes) into RAM |
+| `program.odin` | Loads a program (ELF or raw) and sets the PC: `machine_load_program` |
+| `elf.odin` | ELF64 loader: segments, entry point, symbol lookup (`tohost`) |
+| `image.odin` | Copies a raw binary into RAM |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
 | `decode.odin` | Instruction field and immediate extraction |
@@ -71,10 +73,12 @@ No file access and no printing, so it compiles for any target.
 | `main.odin` | Window, Clay setup, frame loop |
 | `session.odin` | The machine being debugged and the Start / Prev / Next actions |
 | `input.odin` | Buttons and arrow keys -> session actions |
-| `layout.odin` | The Clay layout: toolbar, code, registers, explanation |
+| `layout.odin` | The Clay layout: toolbar, code, encoding strip, side panel (Registers / Program tabs), explanation |
+| `encoding.odin` | Splits an instruction into colour-coded fields for the Encoding strip |
 | `explain.odin` | Plain-language text for the next / last instruction and the status |
 | `theme.odin` | Light and dark palettes, text styles (font + size), spacing |
 | `settings.odin` | Theme setting, switched from the toolbar |
+| `view.odin` | Which side-panel tab is showing |
 | `fonts.odin` | Loads the embedded font at each text size |
 | `fonts/` | JetBrains Mono Medium, embedded at compile time; licence in `fonts/README.md` |
 | `program_file.odin` | Reads the program from disk |
@@ -94,7 +98,7 @@ No file access and no printing, so it compiles for any target.
 
 ## Next milestones
 
-- Debugger: memory view, then CSR / privilege panels as those milestones land
-- ELF loading and the official `riscv-tests` (`rv64ui`)
-- Zicsr: CSRs, M/S/U modes, trap entry and `mret` / `sret`
-- M and A extensions, then Sv39, then the devices
+- Zicsr + machine-mode traps: CSRs, `mtvec` / `mepc` / `mcause`, `mret` (the official `riscv-tests` need these: their startup code configures CSRs and they report results from a trap handler)
+- The official `riscv-tests` (`rv64ui`), using the ELF loader and `tohost`
+- Supervisor / user modes, then M and A extensions, then Sv39, then the devices
+- Debugger: memory view, then CSR / privilege panels

@@ -20,7 +20,7 @@ Options :: struct {
 	max_steps:    u64,
 }
 
-// Parses: rvemu <program.bin> [--trace] [--disasm] [--check-undo] [--max-steps N]
+// Parses: rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 parse_options :: proc(args: []string) -> (options: Options, ok: bool) {
 	options.max_steps = MAX_STEPS_DEFAULT
 
@@ -61,8 +61,8 @@ parse_options :: proc(args: []string) -> (options: Options, ok: bool) {
 }
 
 print_usage :: proc() {
-	fmt.eprintln("usage: rvemu <program.bin> [options]")
-	fmt.eprintln("  program.bin      raw RISC-V binary, loaded and started at 0x80000000")
+	fmt.eprintln("usage: rvemu <program> [options]")
+	fmt.eprintln("  program          RISC-V ELF executable, or raw binary (loaded and started at 0x80000000)")
 	fmt.eprintln("  --trace          print every executed instruction")
 	fmt.eprintln("  --disasm         print the program's disassembly instead of running it")
 	fmt.eprintln("  --check-undo     run, then undo every step and check the state matches the start")

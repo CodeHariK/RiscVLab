@@ -11,7 +11,7 @@
 emulator=$1
 binary=$2
 listing=$3
-name=$(basename "$binary" .bin)
+name=$(basename "$binary")
 
 expected=$(mktemp)
 actual=$(mktemp)

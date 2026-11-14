@@ -35,6 +35,13 @@ ram_offset :: #force_inline proc(bus: ^Bus, addr: u64, size: u64) -> (offset: u6
 	return offset, true
 }
 
+// The RAM bytes for [addr, addr + size), for bulk copies such as loading
+// a program. ok = false if any of the range is outside RAM.
+bus_ram_slice :: proc(bus: ^Bus, addr: u64, size: u64) -> (bytes: []u8, ok: bool) {
+	offset := ram_offset(bus, addr, size) or_return
+	return bus.ram[offset:offset + size], true
+}
+
 // Reads `size` bytes (1, 2, 4 or 8) as a little-endian value,
 // zero-extended to 64 bits. Callers do any sign extension themselves.
 //

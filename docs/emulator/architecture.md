@@ -85,7 +85,8 @@ The core never reads files or prints. Front ends read the program (from disk, or
 
 | Milestone | Change to this design |
 |---|---|
-| ELF + riscv-tests | `loader.odin` reads ELF segments; the bus watches the `tohost` address for pass/fail |
+| ELF loading (done) | `elf.odin` / `program.odin` load ELF segments and set the PC to the entry point |
+| riscv-tests | The machine watches the `tohost` address for the pass/fail result |
 | Zicsr + privilege | `Cpu` gains CSRs and the current mode; traps jump to `mtvec`/`stvec` instead of stopping the machine |
 | M, A extensions | New `rv64m_*.odin` / `rv64a_*.odin` handlers under existing opcodes (OP, OP-32, AMO) |
 | Sv39 | A new MMU between the CPU and the bus translates virtual to physical addresses |

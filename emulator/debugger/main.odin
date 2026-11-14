@@ -10,7 +10,7 @@ import rl "vendor:raylib"
 
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
-//   rvdbg <program.bin>
+//   rvdbg <program>      (ELF executable or raw binary)
 //
 // Controls: Start, Prev / Next (buttons, or the left / right arrow keys).
 main :: proc() {
@@ -19,7 +19,7 @@ main :: proc() {
 
 run :: proc() -> int {
 	if len(os.args) != 2 {
-		fmt.eprintln("usage: rvdbg <program.bin>")
+		fmt.eprintln("usage: rvdbg <program>")
 		return 2
 	}
 	program_path := os.args[1]
@@ -30,7 +30,11 @@ run :: proc() -> int {
 	}
 	defer delete(image)
 
-	session := session_create(image, filepath.base(program_path))
+	session, load_error := session_create(image, filepath.base(program_path))
+	if load_error != nil {
+		fmt.eprintfln("error: cannot load %s: %v", program_path, load_error)
+		return 1
+	}
 	defer session_destroy(&session)
 
 	clay_memory := init_clay()

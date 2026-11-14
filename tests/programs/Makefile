@@ -1,4 +1,5 @@
-# Assembles the bare-metal test programs into raw binaries for the emulator.
+# Assembles the bare-metal test programs into ELF executables and raw
+# binaries for the emulator (it loads either).
 # Uses only binutils (as, ld, objcopy, objdump): no C compiler needed.
 #
 # Homebrew's toolchain uses the riscv64-elf- prefix; override with
@@ -6,7 +7,7 @@
 
 CROSS     ?= riscv64-elf-
 ARCH      := -march=rv64i -mabi=lp64
-LOAD_ADDR := 0x80000000
+LINK      := link.ld
 BUILD     := build
 
 SOURCES := $(wildcard *.s)
@@ -24,10 +25,11 @@ $(BUILD)/%.o: %.s
 	@mkdir -p $(BUILD)
 	$(CROSS)as $(ARCH) $< -o $@
 
-$(BUILD)/%.elf: $(BUILD)/%.o
-	$(CROSS)ld -Ttext=$(LOAD_ADDR) $< -o $@
+# ELF executable: the emulator loads these directly.
+$(BUILD)/%.elf: $(BUILD)/%.o $(LINK)
+	$(CROSS)ld -T $(LINK) $< -o $@
 
-# Raw binary for the emulator, plus a disassembly to read alongside traces.
+# Raw binary (also loadable), plus a disassembly to read alongside traces.
 $(BUILD)/%.bin: $(BUILD)/%.elf
 	$(CROSS)objcopy -O binary $< $@
 	$(CROSS)objdump -d -M no-aliases $< > $(BUILD)/$*.dis

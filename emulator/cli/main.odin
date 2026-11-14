@@ -4,8 +4,9 @@ import "core:os"
 import rv "../core"
 
 // rvemu: command-line front end for the RiscVOdin core.
-// Runs a program and reports how it stopped; can also trace every
-// instruction, list a program's disassembly, or self-test undo.
+// Runs a program (ELF executable or raw binary) and reports how it stopped;
+// can also trace every instruction, list a program's disassembly, or
+// self-test undo.
 main :: proc() {
 	os.exit(run())
 }
@@ -24,18 +25,14 @@ run :: proc() -> int {
 	}
 	defer delete(image)
 
-	if options.mode == .Disassemble {
-		print_disassembly(image)
-		return 0
-	}
-
 	// Only the undo check needs history; normal runs skip recording.
 	history_capacity := rv.HISTORY_CAPACITY_DEFAULT if options.mode == .Check_Undo else 0
 	machine := rv.machine_create(rv.RAM_SIZE_DEFAULT, history_capacity)
 	defer rv.machine_destroy(&machine)
 
-	if !rv.load_image(&machine.bus, image) {
-		print_image_too_large(options.program_path, len(image), len(machine.bus.ram))
+	program, load_error := rv.machine_load_program(&machine, image)
+	if load_error != nil {
+		print_load_error(options.program_path, load_error)
 		return 1
 	}
 
@@ -50,6 +47,7 @@ run :: proc() -> int {
 	case .Check_Undo:
 		return check_undo(&machine, options.max_steps)
 	case .Disassemble:
+		print_disassembly(&machine, program)
 	}
 	return 0
 }

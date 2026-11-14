@@ -21,7 +21,7 @@ DEBUGGER_SOURCES := $(wildcard core/*.odin debugger/*.odin vendor/clay-odin/*.od
 
 PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
-PROGRAM      ?= $(PROGRAMS_BIN)/sum.bin
+PROGRAM      ?= $(PROGRAMS_BIN)/sum.elf
 
 .PHONY: all debug run programs test clean debugger debug-ui
 
@@ -50,22 +50,26 @@ debug-ui: $(DEBUGGER) programs
 programs:
 	$(MAKE) -C $(PROGRAMS_DIR)
 
-# Each program reports through its exit code (see the .s files).
-# Then for every program: undo all steps and compare, and diff the
-# disassembler against objdump.
+# Each program reports through its exit code (see the .s files). Every
+# program is run twice: as an ELF executable and as a raw binary. Then for
+# every program: undo all steps and compare, and diff the disassembler
+# against objdump.
 TEST_PROGRAMS := sum rv64i_check
+FORMATS       := elf bin
 
 test: $(BINARY) programs
-	@./$(BINARY) $(PROGRAMS_BIN)/sum.bin; \
-	  code=$$?; if [ $$code -eq 55 ]; then echo "PASS sum"; else echo "FAIL sum (exit $$code, expected 55)"; exit 1; fi
-	@./$(BINARY) $(PROGRAMS_BIN)/rv64i_check.bin; \
-	  code=$$?; if [ $$code -eq 0 ]; then echo "PASS rv64i_check"; else echo "FAIL rv64i_check (check $$code failed)"; exit 1; fi
-	@for program in $(TEST_PROGRAMS); do \
-	  ./$(BINARY) $(PROGRAMS_BIN)/$$program.bin --check-undo || exit 1; \
+	@for format in $(FORMATS); do \
+	  ./$(BINARY) $(PROGRAMS_BIN)/sum.$$format; code=$$?; \
+	  if [ $$code -eq 55 ]; then echo "PASS sum.$$format"; else echo "FAIL sum.$$format (exit $$code, expected 55)"; exit 1; fi; \
+	  ./$(BINARY) $(PROGRAMS_BIN)/rv64i_check.$$format; code=$$?; \
+	  if [ $$code -eq 0 ]; then echo "PASS rv64i_check.$$format"; else echo "FAIL rv64i_check.$$format (check $$code failed)"; exit 1; fi; \
 	done
 	@for program in $(TEST_PROGRAMS); do \
-	  ../tests/compare_disasm.sh ./$(BINARY) $(PROGRAMS_BIN)/$$program.bin $(PROGRAMS_BIN)/$$program.dis || exit 1; \
+	  ./$(BINARY) $(PROGRAMS_BIN)/$$program.elf --check-undo || exit 1; \
 	done
+	@for program in $(TEST_PROGRAMS); do for format in $(FORMATS); do \
+	  sh ../tests/compare_disasm.sh ./$(BINARY) $(PROGRAMS_BIN)/$$program.$$format $(PROGRAMS_BIN)/$$program.dis || exit 1; \
+	done; done
 
 clean:
 	rm -rf $(BUILD_DIR)

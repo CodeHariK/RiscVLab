@@ -9,6 +9,8 @@ Session :: struct {
 	machine:      rv.Machine,
 	// The program's bytes, kept so Start can reload a fresh copy.
 	image:        []u8,
+	// Where the program starts and where its code is (from the loader).
+	program:      rv.Program,
 	program_name: string,
 	// Set when the last Next raised a trap (EBREAK ends a program).
 	// Next does nothing while stopped; Prev clears it.
@@ -17,13 +19,20 @@ Session :: struct {
 	last_step:    Maybe(rv.Undo_Record),
 }
 
-session_create :: proc(image: []u8, program_name: string) -> Session {
-	session := Session {
+// Fails (with the loader's error) if the file isn't a loadable program.
+session_create :: proc(image: []u8, program_name: string) -> (session: Session, error: rv.Load_Error) {
+	session = Session {
 		image        = image,
 		program_name = program_name,
 	}
+	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, 0)
+	_, error = rv.machine_load_program(&session.machine, image)
+	if error != nil {
+		rv.machine_destroy(&session.machine)
+		return session, error
+	}
 	session_start(&session)
-	return session
+	return session, nil
 }
 
 session_destroy :: proc(session: ^Session) {
@@ -35,7 +44,9 @@ session_destroy :: proc(session: ^Session) {
 session_start :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
-	rv.load_image(&session.machine.bus, session.image)
+	// The file loaded once at start-up (session_create checks it), so it
+	// loads again here.
+	session.program, _ = rv.machine_load_program(&session.machine, session.image)
 	session.stopped = nil
 	session.last_step = nil
 }
@@ -63,7 +74,7 @@ session_prev :: proc(session: ^Session) {
 	rv.machine_step_back(&session.machine)
 }
 
-// Address one past the last loaded instruction.
-session_program_end :: proc(session: ^Session) -> u64 {
-	return rv.RAM_BASE + u64(len(session.image))
+// The program's code: [start, end).
+session_code_range :: proc(session: ^Session) -> (start: u64, end: u64) {
+	return session.program.code_start, session.program.code_end
 }

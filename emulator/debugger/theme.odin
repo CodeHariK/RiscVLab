@@ -7,8 +7,9 @@ import clay "../vendor/clay-odin"
 // `palette()` for colours and `text_config` for text, so it never needs
 // to know which theme or font is active.
 
-WINDOW_WIDTH :: 1440
-WINDOW_HEIGHT :: 920
+// Fits comfortably on a 1920x1080 screen; the window is resizable.
+WINDOW_WIDTH :: 1280
+WINDOW_HEIGHT :: 800
 
 PANEL_PADDING :: 14
 PANEL_GAP :: 14
@@ -32,6 +33,8 @@ Palette :: struct {
 	changed:      clay.Color, // the register the last step wrote
 	stopped:      clay.Color, // status text once the program has stopped
 	stripe:       [5]clay.Color, // bands under the toolbar
+	// Encoding strip: one colour per kind of field.
+	fields:       [Field_Kind]clay.Color,
 }
 
 COLOR_NONE :: clay.Color{0, 0, 0, 0}
@@ -52,6 +55,15 @@ LIGHT_PALETTE :: Palette {
 	changed      = {236, 189, 80, 160},
 	stopped      = {200, 60, 20, 255},
 	stripe       = {{240, 213, 137, 255}, {236, 189, 80, 255}, {225, 138, 50, 255}, {223, 110, 44, 255}, {168, 66, 28, 255}},
+	fields       = {
+		.Opcode    = {40, 130, 60, 255}, // green
+		.Rd        = {30, 90, 190, 255}, // blue
+		.Rs1       = {130, 60, 170, 255}, // purple
+		.Rs2       = {170, 50, 120, 255}, // magenta
+		.Funct     = {200, 100, 20, 255}, // orange
+		.Immediate = {150, 110, 0, 255}, // gold
+		.Unknown   = {140, 105, 85, 255},
+	},
 }
 
 // Dark: cool greys with the same warm accents.
@@ -70,6 +82,15 @@ DARK_PALETTE :: Palette {
 	changed      = {110, 85, 30, 220},
 	stopped      = {255, 140, 90, 255},
 	stripe       = {{30, 40, 60, 255}, {40, 60, 95, 255}, {56, 76, 120, 255}, {80, 110, 170, 255}, {150, 190, 255, 255}},
+	fields       = {
+		.Opcode    = {120, 210, 130, 255},
+		.Rd        = {120, 170, 255, 255},
+		.Rs1       = {200, 150, 255, 255},
+		.Rs2       = {255, 140, 200, 255},
+		.Funct     = {255, 170, 90, 255},
+		.Immediate = {240, 210, 100, 255},
+		.Unknown   = {130, 136, 148, 255},
+	},
 }
 
 palette :: proc() -> Palette {

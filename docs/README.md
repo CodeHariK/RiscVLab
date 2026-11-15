@@ -9,7 +9,9 @@ Notes written per milestone: what was built, what was learned, bugs found.
 
 ## Reference
 
-What things are for, in plain words. The debugger's Docs tab shows these
+What things are for, in plain words. The debugger's Docs window shows these
 files (they are embedded in it), following the instruction about to run.
 
 - [Instructions](reference/instructions.md): what each instruction is for, the pseudo-instructions built from it, common mistakes, and an example.
+- [Pseudo-instructions](reference/pseudo-instructions.md): `li`, `la`, `mv`, `ret`, `csrr` and the rest: what each expands to and why.
+- [Assembler directives](reference/directives.md): sections, `.globl`, data (`.word`, `.space`), alignment, constants, macros, labels.

@@ -47,6 +47,7 @@ build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.
 	if panel, dragging := panel_layout.dragging_panel.?; dragging {
 		drag_label(panel)
 	}
+	docs_modal(session)
 	return clay.EndLayout(frame_time)
 }
 
@@ -208,6 +209,7 @@ toolbar :: proc(session: ^Session) {
 
 		// Settings, pushed to the right edge.
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
+		button(BUTTON_ID_DOCS, "Docs (D)")
 		button(BUTTON_ID_THEME, settings_theme_label())
 	}
 }
@@ -477,7 +479,6 @@ side_panel :: proc(session: ^Session) {
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
-			tab(TAB_ID_DOCS, "Docs", view.side_tab == .Docs)
 		}
 		if clay.UI(clay.ID("SideContent"))({
 			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
@@ -492,8 +493,6 @@ side_panel :: proc(session: ^Session) {
 				program_info(session)
 			case .Programs:
 				program_list()
-			case .Docs:
-				docs_view(session)
 			}
 		}
 	}

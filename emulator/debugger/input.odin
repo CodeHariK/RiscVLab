@@ -22,11 +22,11 @@ BUTTON_ID_RESET :: "ResetButton"
 BUTTON_ID_PREV :: "PrevButton"
 BUTTON_ID_NEXT :: "NextButton"
 BUTTON_ID_THEME :: "ThemeButton"
+BUTTON_ID_DOCS :: "DocsButton"
 TAB_ID_PROGRAMS :: "ProgramsTab"
 TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_MEMORY :: "MemoryTab"
 TAB_ID_ELF :: "ElfTab"
-TAB_ID_DOCS :: "DocsTab"
 TAB_ID_MEMORY_WORDS :: "MemoryWordsTab"
 TAB_ID_MEMORY_BYTES :: "MemoryBytesTab"
 PROGRAM_ROW_ID :: "ProgramRow" // + catalog index
@@ -35,6 +35,19 @@ TAB_ID_DISASSEMBLY :: "DisassemblyTab"
 TAB_ID_STEPS :: "StepsTab"
 
 handle_input :: proc(session: ^Session) {
+	// The Docs window: D or the toolbar button opens and closes it, Esc
+	// closes it. While it is open it takes the mouse; the arrow keys still
+	// step.
+	if rl.IsKeyPressed(.D) || button_clicked(BUTTON_ID_DOCS) {
+		view.docs_open = !view.docs_open
+	} else if view.docs_open && (rl.IsKeyPressed(.ESCAPE) || button_clicked(BUTTON_ID_DOCS_CLOSE)) {
+		view.docs_open = false
+	}
+	if view.docs_open {
+		handle_docs_input(session)
+		return
+	}
+
 	// Dragging a divider or a panel (panel_layout.odin) takes the mouse.
 	if handle_panel_input() {
 		return
@@ -99,15 +112,24 @@ handle_input :: proc(session: ^Session) {
 	if button_clicked(TAB_ID_ELF) {
 		view.side_tab = .Elf
 	}
-	if button_clicked(TAB_ID_DOCS) {
-		view.side_tab = .Docs
-	}
 	if view.side_tab == .Programs {
 		handle_program_selection(session)
 	}
-	if view.side_tab == .Docs {
-		handle_docs_selection()
+}
+
+// While the Docs window is open: stepping with the arrow keys, and clicks
+// in the window.
+@(private = "file")
+handle_docs_input :: proc(session: ^Session) {
+	if key_pressed(.LEFT) {
+		session_prev(session)
+		view.code_scroll = 0
 	}
+	if key_pressed(.RIGHT) {
+		session_next(session)
+		view.code_scroll = 0
+	}
+	handle_docs_selection()
 }
 
 // A click on a program in the Programs tab opens it.

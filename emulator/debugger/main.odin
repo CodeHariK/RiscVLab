@@ -57,6 +57,9 @@ run :: proc() -> int {
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "RiscVOdin debugger")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
+	// Esc closes the Docs window; it should not quit the debugger (raylib's
+	// default).
+	rl.SetExitKey(.KEY_NULL)
 	load_fonts()
 
 	// Redraw only when something happens. With event waiting on, the end of

@@ -2,7 +2,7 @@ package rvdbg
 
 import "core:strings"
 
-// The reference docs shown in the Docs tab (docs_view.odin), read from
+// The reference docs shown in the Docs window (docs_view.odin), read from
 // docs/reference/*.md and embedded in the binary, so the same text reads
 // well on GitHub and in the debugger.
 //
@@ -11,13 +11,31 @@ import "core:strings"
 //
 //   ## lb lh lw ld lbu lhu lwu - Load from memory
 //
-// The names are what the Docs tab looks entries up by: for instructions,
+// The names are what the Docs window looks entries up by: for instructions,
 // the mnemonic exactly as the disassembler prints it.
 
 @(rodata)
 embedded_instruction_docs := #load("../../docs/reference/instructions.md", string)
+@(rodata)
+embedded_pseudo_docs := #load("../../docs/reference/pseudo-instructions.md", string)
+@(rodata)
+embedded_directive_docs := #load("../../docs/reference/directives.md", string)
+
+// Which file an entry comes from; the Docs window's list is grouped by it.
+Doc_Group :: enum {
+	Instructions,
+	Pseudo_Instructions,
+	Directives,
+}
+
+doc_group_names := [Doc_Group]string {
+	.Instructions        = "Instructions",
+	.Pseudo_Instructions = "Pseudo-instructions",
+	.Directives          = "Assembler directives",
+}
 
 Doc_Entry :: struct {
+	group: Doc_Group,
 	names: []string, // e.g. {"lb", "lh", ...}; point into the embedded text
 	title: string, // "Load from memory"
 	lines: []string, // the body, without trailing blank lines
@@ -31,7 +49,9 @@ docs: Docs
 
 // Splits the embedded files into entries. Called once at startup.
 docs_load :: proc() {
-	docs_add_file(embedded_instruction_docs)
+	docs_add_file(embedded_instruction_docs, .Instructions)
+	docs_add_file(embedded_pseudo_docs, .Pseudo_Instructions)
+	docs_add_file(embedded_directive_docs, .Directives)
 }
 
 docs_destroy :: proc() {
@@ -60,7 +80,7 @@ docs_heading :: proc(entry: Doc_Entry) -> string {
 }
 
 @(private = "file")
-docs_add_file :: proc(text: string) {
+docs_add_file :: proc(text: string, group: Doc_Group) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
 
@@ -69,7 +89,7 @@ docs_add_file :: proc(text: string) {
 	for line in lines {
 		if strings.has_prefix(line, "## ") {
 			docs_finish_entry(current, &body)
-			current = docs_start_entry(line[3:])
+			current = docs_start_entry(line[3:], group)
 			continue
 		}
 		if current >= 0 {
@@ -81,12 +101,12 @@ docs_add_file :: proc(text: string) {
 }
 
 @(private = "file")
-docs_start_entry :: proc(heading: string) -> int {
+docs_start_entry :: proc(heading: string, group: Doc_Group) -> int {
 	names_part, title := heading, ""
 	if dash := strings.index(heading, " - "); dash >= 0 {
 		names_part, title = heading[:dash], heading[dash + 3:]
 	}
-	append(&docs.entries, Doc_Entry{names = strings.fields(names_part), title = title})
+	append(&docs.entries, Doc_Entry{group = group, names = strings.fields(names_part), title = title})
 	return len(docs.entries) - 1
 }
 

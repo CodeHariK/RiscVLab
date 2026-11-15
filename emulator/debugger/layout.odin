@@ -477,6 +477,7 @@ side_panel :: proc(session: ^Session) {
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
+			tab(TAB_ID_DOCS, "Docs", view.side_tab == .Docs)
 		}
 		if clay.UI(clay.ID("SideContent"))({
 			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
@@ -491,6 +492,8 @@ side_panel :: proc(session: ^Session) {
 				program_info(session)
 			case .Programs:
 				program_list()
+			case .Docs:
+				docs_view(session)
 			}
 		}
 	}

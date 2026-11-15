@@ -20,7 +20,7 @@ BINARY    := $(BUILD_DIR)/rvemu
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
 SOURCES   := $(wildcard core/*.odin cli/*.odin)
 DEBUGGER  := $(BUILD_DIR)/rvdbg
-DEBUGGER_SOURCES := $(wildcard core/*.odin debugger/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/fonts/*.ttf)
+DEBUGGER_SOURCES := $(wildcard core/*.odin debugger/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/fonts/*.ttf ../docs/reference/*.md)
 
 PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build

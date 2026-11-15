@@ -29,6 +29,8 @@ run :: proc() -> int {
 	}
 
 	reset_panel_layout()
+	docs_load()
+	defer docs_destroy()
 	if tests_root != "" {
 		catalog_load(tests_root)
 	}
@@ -57,15 +59,34 @@ run :: proc() -> int {
 	rl.SetTargetFPS(60)
 	load_fonts()
 
+	// Redraw only when something happens. With event waiting on, the end of
+	// a frame (rl.EndDrawing) sleeps until there is input: a mouse move,
+	// click, wheel, key or window resize. Nothing on screen moves by itself,
+	// so an idle debugger then uses no CPU instead of redrawing 60 times a
+	// second.
+	//
+	// Every frame that follows a wait is followed by one more without
+	// waiting: some things are laid out from the previous frame (hit tests,
+	// the Docs wrap width), and the extra frame lets them settle.
+	wait_after_frame := false
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)
+		if wait_after_frame {
+			rl.EnableEventWaiting()
+		} else {
+			rl.DisableEventWaiting()
+		}
+		wait_after_frame = !wait_after_frame
 
+		// After a long wait the frame time is huge; Clay only uses it for
+		// scroll momentum, so cap it.
+		frame_time := min(rl.GetFrameTime(), MAX_FRAME_TIME)
 		clay.SetLayoutDimensions({f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())})
 		clay.SetPointerState(transmute(clay.Vector2)rl.GetMousePosition(), rl.IsMouseButtonDown(.LEFT))
-		clay.UpdateScrollContainers(false, transmute(clay.Vector2)rl.GetMouseWheelMoveV(), rl.GetFrameTime())
+		clay.UpdateScrollContainers(false, transmute(clay.Vector2)rl.GetMouseWheelMoveV(), frame_time)
 
 		handle_input(&session)
-		render_commands := build_layout(&session, rl.GetFrameTime())
+		render_commands := build_layout(&session, frame_time)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)
@@ -74,6 +95,9 @@ run :: proc() -> int {
 	}
 	return 0
 }
+
+// Longest frame time passed to Clay (seconds).
+MAX_FRAME_TIME :: 1.0 / 30.0
 
 // Gives Clay the memory it asks for and the text-measuring callback.
 @(private = "file")

@@ -26,6 +26,7 @@ TAB_ID_PROGRAMS :: "ProgramsTab"
 TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_MEMORY :: "MemoryTab"
 TAB_ID_ELF :: "ElfTab"
+TAB_ID_DOCS :: "DocsTab"
 TAB_ID_MEMORY_WORDS :: "MemoryWordsTab"
 TAB_ID_MEMORY_BYTES :: "MemoryBytesTab"
 PROGRAM_ROW_ID :: "ProgramRow" // + catalog index
@@ -98,8 +99,14 @@ handle_input :: proc(session: ^Session) {
 	if button_clicked(TAB_ID_ELF) {
 		view.side_tab = .Elf
 	}
+	if button_clicked(TAB_ID_DOCS) {
+		view.side_tab = .Docs
+	}
 	if view.side_tab == .Programs {
 		handle_program_selection(session)
+	}
+	if view.side_tab == .Docs {
+		handle_docs_selection()
 	}
 }
 
@@ -115,6 +122,25 @@ handle_program_selection :: proc(session: ^Session) {
 				view.selected_program = index
 				view.code_scroll = 0
 			}
+			return
+		}
+	}
+}
+
+// A click on an entry in the Docs list pins it; the button goes back to
+// following the next instruction.
+@(private = "file")
+handle_docs_selection :: proc() {
+	if button_clicked(BUTTON_ID_DOCS_FOLLOW) {
+		view.docs_pinned = -1
+		return
+	}
+	if !rl.IsMouseButtonPressed(.LEFT) {
+		return
+	}
+	for _, index in docs.entries {
+		if clay.PointerOver(clay.ID(DOCS_ENTRY_ID, u32(index))) {
+			view.docs_pinned = index
 			return
 		}
 	}

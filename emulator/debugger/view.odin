@@ -9,6 +9,7 @@ Side_Tab :: enum {
 	Csrs,      // control and status registers, privilege level
 	Memory,    // hex dump around the address being used
 	Elf,       // what the loader found in the program file
+	Docs,      // what each instruction is for (docs_view.odin)
 }
 
 // What the code panel shows.
@@ -34,6 +35,9 @@ View_State :: struct {
 	// The Steps tab's mode: false = one line per step, true = every stage.
 	steps_detailed:   bool,
 	side_tab:         Side_Tab,
+	// The Docs entry clicked in the Docs tab, or -1 to follow the next
+	// instruction.
+	docs_pinned:      int,
 	// The catalog entry currently open, or -1 (a file not in the list).
 	selected_program: int,
 }
@@ -43,4 +47,5 @@ view := View_State {
 	code_tab         = .Source,
 	side_tab         = .Csrs, // Registers have their own column
 	selected_program = -1,
+	docs_pinned      = -1,
 }

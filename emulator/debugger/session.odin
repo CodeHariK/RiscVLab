@@ -33,7 +33,8 @@ Session :: struct {
 	// Set when the program asked to exit through `tohost` (riscv-tests):
 	// its exit code. Next does nothing after that; Prev clears it.
 	exited:       Maybe(u64),
-	// What the most recent Next changed (nil after Reset or Prev).
+	// What the step that led to the current state changed: the latest
+	// Next, or after Prev the step before (nil at the start).
 	last_step:    Maybe(rv.Undo_Record),
 	// Exactly what the next Next will do, for the Encoding panel and Steps view (see
 	// session_update_preview). nil when the program has ended.
@@ -105,8 +106,8 @@ session_next :: proc(session: ^Session) {
 	inputs := step_inputs_capture(session, u32(instruction))
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
+		// Nothing changed, so the step before stays the latest change.
 		session.stopped = trap
-		session.last_step = nil
 		session_update_preview(session)
 		return
 	}
@@ -136,6 +137,11 @@ session_prev :: proc(session: ^Session) {
 	}
 	if len(session.timeline) > 0 {
 		pop(&session.timeline)
+	}
+	// The machine is now as the step before left it, so show what that
+	// step changed, exactly as right after it ran.
+	if len(session.timeline) > 0 {
+		session.last_step = session.timeline[len(session.timeline) - 1].record
 	}
 }
 

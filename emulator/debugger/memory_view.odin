@@ -12,7 +12,7 @@ import rv "../core"
 //   3. the last load or store (so the view stays on the data in use)
 //   4. the program's data (.data / .bss), if it has any
 //   5. the stack pointer, if it points into RAM
-//   6. the program's code: instructions live in the same memory as data
+//   6. the instruction at the PC: instructions live in the same memory as data
 //
 // Symbol names (labels and variables from the ELF) are shown on a line
 // above the row they fall in.
@@ -23,8 +23,10 @@ import rv "../core"
 //   Bytes: 8 bytes per row in address order, which shows that RISC-V
 //          stores the lowest byte of a value first (little-endian).
 //
-// What the next instruction will access is coloured (load: rs1 colour,
-// store: rd colour); what the last step changed has the "changed"
+// The word (or bytes) the next instruction will load or store, and the
+// instruction at the PC itself, get the current-line background used in
+// the code views; the accessed bytes are also coloured (load: rs1 colour,
+// store: rd colour). What the last step changed has the "changed"
 // background.
 
 MEMORY_ROWS :: 24
@@ -146,7 +148,7 @@ memory_focus :: proc(session: ^Session, access: Memory_Access, changed: Memory_A
 	if _, in_ram := rv.bus_load(&session.machine.bus, sp, 1); in_ram {
 		return sp, fmt.tprintf("around the stack pointer sp = 0x%x", sp)
 	}
-	return program.code_start, "the program's code: instructions are stored in memory like any data"
+	return session.machine.cpu.pc, "the instruction at pc: instructions are stored in memory like any data"
 }
 
 // One word (size 4) or byte (size 1) in hex, "--" outside memory,
@@ -161,10 +163,15 @@ memory_cell :: proc(session: ^Session, address: u64, size: u64, access: Memory_A
 	}
 
 	color := colors.text
+	background := COLOR_NONE
+	instruction := Memory_Access{.Load, session.machine.cpu.pc, 4}
+	if overlaps(address, size, instruction) {
+		background = colors.current_line
+	}
 	if access.kind != .None && overlaps(address, size, access) {
 		color = colors.fields[.Rs1] if access.kind == .Load else colors.fields[.Rd]
+		background = colors.current_line
 	}
-	background := COLOR_NONE
 	if changed.kind != .None && overlaps(address, size, changed) {
 		background = colors.changed
 	}

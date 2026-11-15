@@ -4,7 +4,7 @@ package rvdbg
 // the toolbar. Lives for the session only (not saved to disk yet).
 
 Theme_Choice :: enum {
-	Light, // the Clay website palette
+	Light, // lilac
 	Dark,
 }
 

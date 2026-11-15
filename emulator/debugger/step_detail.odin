@@ -13,7 +13,6 @@ import rv "../core"
 //   execute  address = t0 0x80001000 + 0x0 = 0x80001000 (numbers)
 //   memory   load 4 bytes @ 0x80001000 (numbers) -> 0xa (10), sign-extended
 //   write    t2: 0x0 -> 0xa (10)
-//   next pc  pc + 4 = 0x80000014
 //
 // The emulator is not pipelined: each instruction finishes all of these
 // before the next one starts. They are the stages every instruction goes
@@ -29,7 +28,6 @@ Stage :: enum {
 	Execute,
 	Memory,
 	Write,
-	Next_Pc,
 }
 
 stage_names := [Stage]string {
@@ -39,7 +37,6 @@ stage_names := [Stage]string {
 	.Execute = "execute",
 	.Memory  = "memory",
 	.Write   = "write",
-	.Next_Pc = "next pc",
 }
 
 // One text per stage; "" for a stage the instruction doesn't use.
@@ -53,7 +50,6 @@ step_detail :: proc(session: ^Session, entry: Timeline_Entry) -> Step_Detail {
 	detail[.Execute] = execute_text(session, entry)
 	detail[.Memory] = memory_text(session, entry)
 	detail[.Write] = write_text(entry)
-	detail[.Next_Pc] = next_pc_text(entry)
 	return detail
 }
 
@@ -266,24 +262,6 @@ writes_rd :: proc(instruction: u32) -> bool {
 		}
 	}
 	return false
-}
-
-// Where execution goes next, and why.
-@(private = "file")
-next_pc_text :: proc(entry: Timeline_Entry) -> string {
-	if entry.stops {
-		return "none: no trap handler is set up (mtvec = 0), so the machine stops here"
-	}
-	if _, took_trap := entry.trap.?; took_trap {
-		return fmt.tprintf("trap: jump to the handler at mtvec = 0x%x", entry.next_pc)
-	}
-	if entry.instruction == rv.ENCODING_MRET {
-		return fmt.tprintf("pc = mepc = 0x%x (back to where the trap happened, or after it)", entry.next_pc)
-	}
-	if entry.next_pc == entry.pc + rv.INSTRUCTION_SIZE {
-		return fmt.tprintf("pc + 4 = 0x%x", entry.next_pc)
-	}
-	return fmt.tprintf("jump to 0x%x", entry.next_pc)
 }
 
 // Joins parts with ", ".

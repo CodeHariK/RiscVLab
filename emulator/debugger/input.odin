@@ -51,8 +51,14 @@ handle_input :: proc(session: ^Session) {
 		view.code_scroll = 0
 	}
 	// The mouse wheel scrolls the code panel through the whole program.
+	// Detailed steps are tall blocks, newest first: one step per notch,
+	// and scrolling down goes back in time.
 	if clay.PointerOver(clay.ID("CodePanel")) {
-		view.code_scroll -= rl.GetMouseWheelMove() * CODE_SCROLL_LINES_PER_NOTCH
+		if view.code_tab == .Steps && view.steps_detailed {
+			view.code_scroll -= rl.GetMouseWheelMove()
+		} else {
+			view.code_scroll -= rl.GetMouseWheelMove() * CODE_SCROLL_LINES_PER_NOTCH
+		}
 	}
 	if button_clicked(BUTTON_ID_THEME) {
 		settings_next_theme()
@@ -65,6 +71,14 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_STEPS) {
 		view.code_tab = .Steps
+	}
+	if button_clicked(TAB_ID_STEPS_COMPACT) {
+		view.steps_detailed = false
+		view.code_scroll = 0
+	}
+	if button_clicked(TAB_ID_STEPS_DETAILED) {
+		view.steps_detailed = true
+		view.code_scroll = 0
 	}
 	if button_clicked(TAB_ID_PROGRAMS) {
 		view.side_tab = .Programs

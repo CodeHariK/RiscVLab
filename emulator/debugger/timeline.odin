@@ -91,14 +91,19 @@ timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs
 }
 
 // The step's line: number, address, disassembly, and what it did.
-timeline_text :: proc(number: int, entry: Timeline_Entry) -> string {
+// `coming` marks the preview of the step Next will run (">" for "#").
+timeline_text :: proc(number: int, entry: Timeline_Entry, coming := false) -> string {
 	buffer: [rv.DISASM_BUFFER_SIZE]u8
 	text := rv.disassemble(buffer[:], entry.pc, entry.instruction)
-	return fmt.tprintf("#%-4d %08x  %-24s %s", number, entry.pc, text, timeline_effect(entry))
+	marker := ">" if coming else "#"
+	return fmt.tprintf("%s%-4d %08x  %-24s %s", marker, number, entry.pc, text, timeline_effect(entry))
 }
 
 @(private = "file")
 timeline_effect :: proc(entry: Timeline_Entry) -> string {
+	if trap, took_trap := entry.trap.?; took_trap && entry.stops {
+		return fmt.tprintf("%v, no trap handler: the machine stops", trap.cause)
+	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf("trap %v -> handler 0x%x", trap.cause, entry.next_pc)
 	}
@@ -115,6 +120,8 @@ timeline_effect :: proc(entry: Timeline_Entry) -> string {
 	}
 	if entry.next_pc != entry.pc + rv.INSTRUCTION_SIZE {
 		append_part(&builder, fmt.tprintf("jumped to 0x%x", entry.next_pc))
+	} else if rv.opcode(entry.instruction) == rv.OPCODE_BRANCH {
+		append_part(&builder, "branch not taken")
 	}
 	return strings.to_string(builder)
 }

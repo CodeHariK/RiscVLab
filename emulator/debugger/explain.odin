@@ -4,8 +4,7 @@ import "core:fmt"
 import "core:strings"
 import rv "../core"
 
-// The Status line of the explanation panel. (The Next and Last lines are
-// the step details: step_detail.odin.) All strings are allocated with the
+// The status shown in the toolbar. All strings are allocated with the
 // temp allocator, which is freed after each frame.
 
 // One-line state of the program for the status row.

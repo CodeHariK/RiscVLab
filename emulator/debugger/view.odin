@@ -31,6 +31,8 @@ View_State :: struct {
 	code_scroll:      f32,
 	memory_layout:    Memory_Layout,
 	code_tab:         Code_Tab,
+	// The Steps tab's mode: false = one line per step, true = every stage.
+	steps_detailed:   bool,
 	side_tab:         Side_Tab,
 	// The catalog entry currently open, or -1 (a file not in the list).
 	selected_program: int,

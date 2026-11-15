@@ -32,38 +32,36 @@ Palette :: struct {
 	current_line: clay.Color, // the instruction at the PC
 	changed:      clay.Color, // the register the last step wrote
 	stopped:      clay.Color, // status text once the program has stopped
-	stripe:       [5]clay.Color, // bands under the toolbar
 	// Encoding strip: one colour per kind of field.
 	fields:       [Field_Kind]clay.Color,
 }
 
 COLOR_NONE :: clay.Color{0, 0, 0, 0}
 
-// Light: the Clay website's palette.
+// Light: pale lilac panels with deeper violet borders and titles.
 LIGHT_PALETTE :: Palette {
-	background   = {244, 235, 230, 255},
-	panel        = {250, 246, 243, 255},
-	border       = {168, 66, 28, 255},
-	text         = {61, 26, 5, 255},
-	text_dim     = {140, 105, 85, 255},
-	title        = {168, 66, 28, 255},
-	accent       = {225, 138, 50, 255},
-	button       = {244, 235, 230, 255},
-	button_hover = {224, 215, 210, 255},
-	button_text  = {168, 66, 28, 255},
-	current_line = {240, 213, 137, 255},
-	changed      = {236, 189, 80, 160},
-	stopped      = {200, 60, 20, 255},
-	stripe       = {{240, 213, 137, 255}, {236, 189, 80, 255}, {225, 138, 50, 255}, {223, 110, 44, 255}, {168, 66, 28, 255}},
+	background   = {238, 233, 247, 255},
+	panel        = {250, 248, 254, 255},
+	border       = {150, 122, 200, 255},
+	text         = {38, 28, 58, 255},
+	text_dim     = {118, 104, 145, 255},
+	title        = {104, 66, 168, 255},
+	accent       = {146, 88, 196, 255},
+	button       = {238, 233, 247, 255},
+	button_hover = {224, 215, 242, 255},
+	button_text  = {104, 66, 168, 255},
+	current_line = {221, 207, 246, 255},
+	changed      = {196, 176, 240, 200},
+	stopped      = {196, 46, 92, 255},
 	fields       = {
 		.Opcode    = {40, 130, 60, 255}, // green
 		.Rd        = {30, 90, 190, 255}, // blue
-		.Rs1       = {130, 60, 170, 255}, // purple
-		.Rs2       = {170, 50, 120, 255}, // magenta
+		.Rs1       = {150, 50, 160, 255}, // purple
+		.Rs2       = {190, 50, 110, 255}, // magenta
 		.Funct     = {200, 100, 20, 255}, // orange
 		.Immediate = {150, 110, 0, 255}, // gold
 		.Csr       = {0, 128, 128, 255}, // teal
-		.Unknown   = {140, 105, 85, 255},
+		.Unknown   = {118, 104, 145, 255},
 	},
 }
 
@@ -82,7 +80,6 @@ DARK_PALETTE :: Palette {
 	current_line = {56, 76, 120, 255},
 	changed      = {110, 85, 30, 220},
 	stopped      = {255, 140, 90, 255},
-	stripe       = {{30, 40, 60, 255}, {40, 60, 95, 255}, {56, 76, 120, 255}, {80, 110, 170, 255}, {150, 190, 255, 255}},
 	fields       = {
 		.Opcode    = {120, 210, 130, 255},
 		.Rd        = {120, 170, 255, 255},

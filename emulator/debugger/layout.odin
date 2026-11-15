@@ -9,15 +9,14 @@ import rl "vendor:raylib"
 // The debugger window, described with Clay:
 //
 //   +------------------------------------------------------------+
-//   | [Reset] [Prev] [Next]   program   step   pc                |  toolbar
+//   | [Reset] [Prev] [Next]   program   step   pc   status       |  toolbar
 //   +-----------------------------------+------------------------+
 //   | [Source][Disassembly][Steps]      | [Programs][Regs][CSRs].|
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
-//   | Encoding: the current instruction |                        |
-//   | as colour-coded bit fields        |                        |
 //   +-----------------------------------+------------------------+
-//   | Status / Next / Last step (small text)                     |  explanation
+//   | Encoding: the next instruction as colour-coded bit fields, |
+//   | then what it reads, computes and writes                    |
 //   +------------------------------------------------------------+
 //
 // Built from scratch every frame from the session state; strings use the
@@ -43,7 +42,6 @@ build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.
 		backgroundColor = colors.background,
 	}) {
 		toolbar(session)
-		toolbar_stripe()
 		panel_area(session)
 	}
 	if panel, dragging := panel_layout.dragging_panel.?; dragging {
@@ -111,8 +109,6 @@ slot :: proc(session: ^Session, slot: Slot, sizing: clay.Sizing) {
 			side_panel(session)
 		case .Registers:
 			registers_panel(session)
-		case .Explanation:
-			explanation_panel(session)
 		}
 	}
 }
@@ -206,24 +202,13 @@ toolbar :: proc(session: ^Session) {
 		cpu := &session.machine.cpu
 		info := fmt.tprintf("%s    step %d    pc 0x%x", session.program_name, cpu.instret, cpu.pc)
 		clay.TextDynamic(info, text_config(.Code, colors.text_dim))
+		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(24)}}}) {}
+		ended := session.stopped != nil || session.exited != nil
+		clay.TextDynamic(explain_status(session), text_config(.Text, colors.stopped if ended else colors.text))
 
 		// Settings, pushed to the right edge.
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
 		button(BUTTON_ID_THEME, settings_theme_label())
-	}
-}
-
-// Thin orange-to-red stripes under the toolbar, as on the Clay website.
-@(private = "file")
-toolbar_stripe :: proc() {
-	colors := palette()
-	if clay.UI(clay.ID("Stripe"))({layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom}}) {
-		for color, index in colors.stripe {
-			if clay.UI(clay.ID("StripeBand", u32(index)))({
-				layout = {sizing = {clay.SizingGrow(), clay.SizingFixed(3)}},
-				backgroundColor = color,
-			}) {}
-		}
 	}
 }
 
@@ -331,51 +316,6 @@ source_view :: proc(session: ^Session) {
 	}
 }
 
-// The steps taken so far (as many as fit, oldest at the top), then the
-// instruction that Next will run, highlighted like the current line in
-// the other views.
-@(private = "file")
-steps_view :: proc(session: ^Session) {
-	colors := palette()
-	count := len(session.timeline)
-	lines := visible_lines(SOURCE_LINE_HEIGHT) - 1 // keep a line for "next"
-	newest_first := max(0, count - lines)
-	wanted := newest_first + int(view.code_scroll)
-	first := max(0, min(wanted, newest_first))
-	if first != wanted {
-		view.code_scroll = f32(first - newest_first)
-	}
-	for index in first ..< count {
-		if clay.UI(clay.ID("StepLine", u32(index - first)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
-			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), text_config(.Code_Small, colors.text))
-		}
-	}
-
-	if clay.UI(clay.ID("StepNext"))({
-		layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
-		backgroundColor = colors.current_line,
-		cornerRadius = clay.CornerRadiusAll(3),
-	}) {
-		clay.TextDynamic(next_step_text(session, count + 1), text_config(.Code_Small, colors.text))
-	}
-}
-
-// The line for the instruction at the PC, not run yet.
-@(private = "file")
-next_step_text :: proc(session: ^Session, number: int) -> string {
-	if session.stopped != nil || session.exited != nil {
-		return "(program finished: press Prev to step back or Reset to run again)"
-	}
-	pc := session.machine.cpu.pc
-	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
-	if !ok {
-		return fmt.tprintf("next: pc 0x%x is outside memory", pc)
-	}
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	text := rv.disassemble(buffer[:], pc, u32(raw))
-	return fmt.tprintf(">%-4d %08x  %-24s (next: press Next to run it)", number, pc, text)
-}
-
 // Splits an assembly line at its "#" comment: ("addi t0, zero, 5   ", "# t0 = 5").
 @(private = "file")
 split_comment :: proc(line: string) -> (code: string, comment: string) {
@@ -458,6 +398,27 @@ encoding_panel :: proc(session: ^Session) {
 			}
 		}
 		clay.TextDynamic(encoding_summary(pc, instruction, encoding), text_config(.Text, colors.text))
+		instruction_effect(session)
+	}
+}
+
+// What the next instruction reads, computes, moves to or from memory and
+// writes, results included: those stages of the preview (step_detail.odin).
+// All its stages, and those of every earlier step, are in Steps -> Detailed.
+@(private = "file")
+instruction_effect :: proc(session: ^Session) {
+	colors := palette()
+	entry, has_preview := session.preview.?
+	if !has_preview {
+		return
+	}
+	if clay.UI(clay.ID("InstructionEffect"))({layout = {layoutDirection = .TopToBottom, padding = {top = 8}}}) {
+		detail := step_detail(session, entry)
+		for stage in ([]Stage{.Read, .Execute, .Memory, .Write}) {
+			if detail[stage] != "" {
+				detail_line(stage_names[stage], detail[stage], colors.text)
+			}
+		}
 	}
 }
 
@@ -496,7 +457,6 @@ first_visible_index :: proc(current: int, lines: int, total: int) -> int {
 
 // How many lines of `line_height` pixels fit in the code panel, from its
 // height last frame.
-@(private = "file")
 visible_lines :: proc(line_height: int) -> int {
 	panel := clay.GetElementData(clay.ID("CodePanel"))
 	if !panel.found {
@@ -725,61 +685,8 @@ register_use_tag :: proc(use: Register_Use) {
 	}
 }
 
-// Status, what the last step did (one line), and every stage of the
-// instruction Next will run, results included (step_detail.odin, from
-// session.preview). Scrolls when it doesn't fit.
 @(private = "file")
-explanation_panel :: proc(session: ^Session) {
-	colors := palette()
-	// No clip on the panel itself: ExplanationContent is the scrolling area.
-	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
-		panel_header(.Explanation, "Explanation")
-		if clay.UI(clay.ID("ExplanationContent"))({
-			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom},
-			clip = {horizontal = true, vertical = true, childOffset = clay.GetScrollOffset()},
-		}) {
-			status_color := colors.stopped if session.stopped != nil || session.exited != nil else colors.text
-			explanation_line("Status", explain_status(session), status_color)
-			last_step_line(session)
-			next_step_details(session)
-		}
-	}
-}
-
-// The newest step in one line, as in the Steps tab.
-@(private = "file")
-last_step_line :: proc(session: ^Session) {
-	colors := palette()
-	if len(session.timeline) == 0 {
-		explanation_line("Last", "-", colors.text)
-		return
-	}
-	number := len(session.timeline)
-	explanation_line("Last", timeline_text(number, session.timeline[number - 1]), colors.text_dim)
-}
-
-// The stages of the instruction Next will run.
-@(private = "file")
-next_step_details :: proc(session: ^Session) {
-	colors := palette()
-	entry, has_preview := session.preview.?
-	if !has_preview {
-		explanation_line("Next", "-", colors.text)
-		return
-	}
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	heading := fmt.tprintf("step #%d: %s", len(session.timeline) + 1, rv.disassemble(buffer[:], entry.pc, entry.instruction))
-	explanation_line("Next", heading, colors.text)
-	detail := step_detail(session, entry)
-	for stage in Stage {
-		if detail[stage] != "" {
-			explanation_line(stage_names[stage], detail[stage], colors.text)
-		}
-	}
-}
-
-@(private = "file")
-explanation_line :: proc(label: string, text: string, color: clay.Color) {
+detail_line :: proc(label: string, text: string, color: clay.Color) {
 	colors := palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = 10, padding = {top = 2, bottom = 2}}}) {
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(80)}}}) {

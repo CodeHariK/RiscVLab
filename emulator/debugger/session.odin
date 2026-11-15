@@ -35,7 +35,7 @@ Session :: struct {
 	exited:       Maybe(u64),
 	// What the most recent Next changed (nil after Reset or Prev).
 	last_step:    Maybe(rv.Undo_Record),
-	// Exactly what the next Next will do, for the explanation panel (see
+	// Exactly what the next Next will do, for the Encoding panel and Steps view (see
 	// session_update_preview). nil when the program has ended.
 	preview:      Maybe(Timeline_Entry),
 }
@@ -139,7 +139,7 @@ session_prev :: proc(session: ^Session) {
 	}
 }
 
-// Works out exactly what Next will do, so the explanation panel can show
+// Works out exactly what Next will do, so the Encoding panel and Steps view can show
 // every stage of the instruction (results included) before it runs: the
 // instruction is run and then undone straight away. Called after every
 // Reset, Next and Prev.

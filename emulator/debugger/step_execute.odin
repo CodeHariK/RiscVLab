@@ -166,7 +166,7 @@ csr_execute_text :: proc(entry: Timeline_Entry, mnemonic: string, s1: string) ->
 system_call_text :: proc(entry: Timeline_Entry) -> string {
 	switch entry.instruction {
 	case rv.ENCODING_MRET:
-		return "return from the trap handler: pc = mepc, MIE = MPIE, privilege = MPP"
+		return fmt.tprintf("return from the trap handler: pc = mepc = 0x%x, MIE = MPIE, privilege = MPP", entry.next_pc)
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		if entry.stops {

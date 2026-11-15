@@ -7,7 +7,8 @@ import clay "../vendor/clay-odin"
 // `palette()` for colours and `text_config` for text, so it never needs
 // to know which theme or font is active.
 
-// Fits comfortably on a 1920x1080 screen; the window is resizable.
+// The window size before it is maximized at startup (main.odin), and
+// after un-maximizing it. The window is resizable.
 WINDOW_WIDTH :: 1280
 WINDOW_HEIGHT :: 800
 

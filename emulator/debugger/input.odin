@@ -28,6 +28,7 @@ BUTTON_ID_PROGRAMS :: "ProgramsButton"
 TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_MEMORY :: "MemoryTab"
 TAB_ID_ELF :: "ElfTab"
+TAB_ID_STACK :: "StackTab"
 TAB_ID_MEMORY_WORDS :: "MemoryWordsTab"
 TAB_ID_MEMORY_BYTES :: "MemoryBytesTab"
 TAB_ID_SOURCE :: "SourceTab"
@@ -98,6 +99,9 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_MEMORY_BYTES) {
 		view.memory_layout = .Bytes
+	}
+	if button_clicked(TAB_ID_STACK) {
+		view.side_tab = .Stack
 	}
 	if button_clicked(TAB_ID_ELF) {
 		view.side_tab = .Elf

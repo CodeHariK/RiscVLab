@@ -479,6 +479,7 @@ side_panel :: proc(session: ^Session) {
 			panel_grip(.Side)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
+			tab(TAB_ID_STACK, "Stack", view.side_tab == .Stack)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
 		}
 		if clay.UI(clay.ID("SideContent"))({
@@ -490,6 +491,8 @@ side_panel :: proc(session: ^Session) {
 				csr_list(session)
 			case .Memory:
 				memory_list(session)
+			case .Stack:
+				stack_view(session)
 			case .Elf:
 				program_info(session)
 			}

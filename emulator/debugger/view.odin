@@ -8,6 +8,7 @@ Side_Tab :: enum {
 	Csrs,      // control and status registers, privilege level
 	Memory,    // hex dump around the address being used
 	Elf,       // what the loader found in the program file
+	Stack,     // the words from sp up to the top of the stack (stack_view.odin)
 }
 
 // What the code panel shows.

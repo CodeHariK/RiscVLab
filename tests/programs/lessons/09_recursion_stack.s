@@ -7,7 +7,7 @@
 # pointer sp points into. It grows down: subtract from sp to make room,
 # add back to free it. Each call level gets its own 16 bytes (a "frame").
 #
-# Open the Memory tab to watch the frames being pushed and popped.
+# Open the Stack tab to watch the frames being pushed and popped.
 
     .section .text
     .globl _start

@@ -56,6 +56,9 @@ run :: proc() -> int {
 	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE, .MSAA_4X_HINT})
 	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "RiscVOdin debugger")
 	defer rl.CloseWindow()
+	// Start filling the screen (the menu bar and dock stay); the window
+	// can still be resized or un-maximized.
+	rl.MaximizeWindow()
 	rl.SetTargetFPS(60)
 	// Esc closes the Docs window; it should not quit the debugger (raylib's
 	// default).

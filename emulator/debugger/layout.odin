@@ -299,25 +299,47 @@ source_view :: proc(session: ^Session) {
 	lines := visible_lines(SOURCE_LINE_HEIGHT)
 	total := len(source.lines)
 	first := 1 + first_visible_index(current - 1, lines, total)
+	// The panel clips, and in Clay a clipping element lets its children be
+	// as wide as they like, so long lines would run off the edge. Giving
+	// each line the panel's inner width (from last frame) makes them wrap:
+	// a long comment continues below itself, lined up with its start.
+	width := clay.SizingGrow()
+	if panel := clay.GetElementData(clay.ID("CodePanel")); panel.found {
+		width = clay.SizingFixed(max(0, panel.boundingBox.width - 2 * PANEL_PADDING - 2 * BORDER_WIDTH))
+	}
 	for number in first ..< min(first + lines, total + 1) {
 		text := source.lines[number - 1]
 		code, comment := split_comment(text)
 		is_current := number == current
 		if clay.UI(clay.ID("SourceLine", u32(number - first)))({
-			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
+			layout = {sizing = {width = width}, padding = {6, 6, 2, 2}},
 			backgroundColor = colors.current_line if is_current else COLOR_NONE,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
+			// The line number and the code keep their width; only the
+			// comment (or a long line without one) wraps.
 			marker := ">" if is_current else " "
-			clay.TextDynamic(fmt.tprintf("%s%4d  ", marker, number), text_config(.Code_Small, colors.text_dim))
+			clay.TextDynamic(fmt.tprintf("%s%4d  ", marker, number), no_wrap(text_config(.Code_Small, colors.text_dim)))
 			if code != "" {
-				clay.TextDynamic(code, text_config(.Code_Small, colors.text))
+				config := text_config(.Code_Small, colors.text)
+				if comment != "" {
+					config = no_wrap(config)
+				}
+				clay.TextDynamic(code, config)
 			}
 			if comment != "" {
 				clay.TextDynamic(comment, text_config(.Code_Small, colors.accent))
 			}
 		}
 	}
+}
+
+// The same text style, never wrapped.
+@(private = "file")
+no_wrap :: proc(config: clay.TextElementConfig) -> clay.TextElementConfig {
+	result := config
+	result.wrapMode = .None
+	return result
 }
 
 // Splits an assembly line at its "#" comment: ("addi t0, zero, 5   ", "# t0 = 5").

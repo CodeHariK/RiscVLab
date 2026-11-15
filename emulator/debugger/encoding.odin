@@ -223,7 +223,6 @@ shift_immediate :: proc(encoding: ^Encoding, split: u32, type_label: string) {
 	add_field(encoding, 6, 0, "opcode", .Opcode)
 }
 
-@(private = "file")
 opcode_name :: proc(opcode: u32) -> string {
 	switch opcode {
 	case rv.OPCODE_LOAD: return "LOAD"

@@ -35,6 +35,9 @@ Session :: struct {
 	exited:       Maybe(u64),
 	// What the most recent Next changed (nil after Reset or Prev).
 	last_step:    Maybe(rv.Undo_Record),
+	// Exactly what the next Next will do, for the explanation panel (see
+	// session_update_preview). nil when the program has ended.
+	preview:      Maybe(Timeline_Entry),
 }
 
 // Opens the program file at `path` (the session then owns its bytes).
@@ -88,6 +91,7 @@ session_reset :: proc(session: ^Session) {
 	session.last_access = {}
 	clear(&session.access_trail)
 	clear(&session.timeline)
+	session_update_preview(session)
 }
 
 // Next: run one instruction.
@@ -98,19 +102,22 @@ session_next :: proc(session: ^Session) {
 	access := next_memory_access(session)
 	pc := session.machine.cpu.pc
 	instruction, _ := rv.bus_load(&session.machine.bus, pc, 4)
+	inputs := step_inputs_capture(session, u32(instruction))
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
 		session.stopped = trap
 		session.last_step = nil
+		session_update_preview(session)
 		return
 	}
 	session.last_step = session.machine.cpu.undo
-	timeline_record(session, pc, u32(instruction))
+	timeline_record(session, pc, u32(instruction), inputs)
 	append(&session.access_trail, session.last_access)
 	if access.kind != .None {
 		session.last_access = access
 	}
 	session.exited = rv.machine_host_exit(&session.machine)
+	session_update_preview(session)
 }
 
 // Prev: undo one instruction. A trap changes nothing, so if the program
@@ -120,6 +127,7 @@ session_prev :: proc(session: ^Session) {
 	session.stopped = nil
 	session.exited = nil
 	session.last_step = nil
+	defer session_update_preview(session)
 	if !rv.machine_step_back(&session.machine) {
 		return
 	}
@@ -129,6 +137,45 @@ session_prev :: proc(session: ^Session) {
 	if len(session.timeline) > 0 {
 		pop(&session.timeline)
 	}
+}
+
+// Works out exactly what Next will do, so the explanation panel can show
+// every stage of the instruction (results included) before it runs: the
+// instruction is run and then undone straight away. Called after every
+// Reset, Next and Prev.
+//
+// Skipped when the program has ended, and when the undo history is full,
+// since running one more step would push its oldest step out for good.
+session_update_preview :: proc(session: ^Session) {
+	session.preview = nil
+	if session.stopped != nil || session.exited != nil {
+		return
+	}
+	machine := &session.machine
+	if machine.history.count >= len(machine.history.records) {
+		return
+	}
+	pc := machine.cpu.pc
+	raw, fetched := rv.bus_load(&machine.bus, pc, 4)
+	if !fetched {
+		return
+	}
+	instruction := u32(raw)
+	inputs := step_inputs_capture(session, instruction)
+	if trap, stops := rv.machine_step(machine).?; stops {
+		// No handler: the step changed nothing, so there is nothing to undo.
+		session.preview = Timeline_Entry {
+			pc          = pc,
+			instruction = instruction,
+			next_pc     = pc,
+			trap        = trap,
+			inputs      = inputs,
+			stops       = true,
+		}
+		return
+	}
+	session.preview = timeline_entry_make(session, pc, instruction, inputs)
+	rv.machine_step_back(machine)
 }
 
 // The program's code: [start, end).

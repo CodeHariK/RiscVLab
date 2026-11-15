@@ -725,16 +725,56 @@ register_use_tag :: proc(use: Register_Use) {
 	}
 }
 
-// Status, what the next instruction will do, and what the last one did.
+// Status, what the last step did (one line), and every stage of the
+// instruction Next will run, results included (step_detail.odin, from
+// session.preview). Scrolls when it doesn't fit.
 @(private = "file")
 explanation_panel :: proc(session: ^Session) {
 	colors := palette()
-	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
+	// No clip on the panel itself: ExplanationContent is the scrolling area.
+	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
 		panel_header(.Explanation, "Explanation")
-		status_color := colors.stopped if session.stopped != nil || session.exited != nil else colors.text
-		explanation_line("Status", explain_status(session), status_color)
-		explanation_line("Next", explain_next(session), colors.text)
-		explanation_line("Last", explain_last_step(session), colors.text)
+		if clay.UI(clay.ID("ExplanationContent"))({
+			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom},
+			clip = {horizontal = true, vertical = true, childOffset = clay.GetScrollOffset()},
+		}) {
+			status_color := colors.stopped if session.stopped != nil || session.exited != nil else colors.text
+			explanation_line("Status", explain_status(session), status_color)
+			last_step_line(session)
+			next_step_details(session)
+		}
+	}
+}
+
+// The newest step in one line, as in the Steps tab.
+@(private = "file")
+last_step_line :: proc(session: ^Session) {
+	colors := palette()
+	if len(session.timeline) == 0 {
+		explanation_line("Last", "-", colors.text)
+		return
+	}
+	number := len(session.timeline)
+	explanation_line("Last", timeline_text(number, session.timeline[number - 1]), colors.text_dim)
+}
+
+// The stages of the instruction Next will run.
+@(private = "file")
+next_step_details :: proc(session: ^Session) {
+	colors := palette()
+	entry, has_preview := session.preview.?
+	if !has_preview {
+		explanation_line("Next", "-", colors.text)
+		return
+	}
+	buffer: [rv.DISASM_BUFFER_SIZE]u8
+	heading := fmt.tprintf("step #%d: %s", len(session.timeline) + 1, rv.disassemble(buffer[:], entry.pc, entry.instruction))
+	explanation_line("Next", heading, colors.text)
+	detail := step_detail(session, entry)
+	for stage in Stage {
+		if detail[stage] != "" {
+			explanation_line(stage_names[stage], detail[stage], colors.text)
+		}
 	}
 }
 

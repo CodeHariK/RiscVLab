@@ -12,6 +12,18 @@ import rv "../core"
 // Each Next adds an entry (unless the program stopped, which changes
 // nothing); Prev removes the last one; Reset clears the list. Entries keep
 // raw values, and the text is only built for the lines on screen.
+//
+// Besides what changed, each entry keeps what the instruction read just
+// before it ran (Step_Inputs), so the detailed view (step_detail.odin) can
+// show how it reached its result.
+
+// What an instruction reads, captured just before it runs.
+Step_Inputs :: struct {
+	rs1_value:  u64,
+	rs2_value:  u64,
+	csr_value:  u64, // a CSR instruction's CSR, before it is written
+	load_value: u64, // the bytes at a load's address, before extension
+}
 
 Timeline_Entry :: struct {
 	pc:           u64,
@@ -22,10 +34,40 @@ Timeline_Entry :: struct {
 	register_new: u64, // new values, read right after the step
 	memory_new:   u64,
 	csr_new:      u64,
+	using inputs: Step_Inputs,
+	// Only in the Next preview: the instruction traps with no handler set
+	// up (mtvec = 0), so running it stops the machine instead.
+	stops:        bool,
+}
+
+// Reads what the instruction at `pc` is about to use.
+step_inputs_capture :: proc(session: ^Session, instruction: u32) -> Step_Inputs {
+	machine := &session.machine
+	inputs := Step_Inputs {
+		rs1_value = rv.reg_read(&machine.cpu, rv.rs1(instruction)),
+		rs2_value = rv.reg_read(&machine.cpu, rv.rs2(instruction)),
+	}
+	switch rv.opcode(instruction) {
+	case rv.OPCODE_SYSTEM:
+		if rv.funct3(instruction) != 0 {
+			inputs.csr_value, _ = rv.csr_read(&machine.cpu, rv.csr_address(instruction))
+		}
+	case rv.OPCODE_LOAD:
+		address := inputs.rs1_value + rv.imm_i(instruction)
+		size := u64(1) << (rv.funct3(instruction) & 0b11)
+		inputs.load_value, _ = rv.bus_load(&machine.bus, address, size)
+	}
+	return inputs
 }
 
 // Adds the step that just ran from `pc`.
-timeline_record :: proc(session: ^Session, pc: u64, instruction: u32) {
+timeline_record :: proc(session: ^Session, pc: u64, instruction: u32, inputs: Step_Inputs) {
+	append(&session.timeline, timeline_entry_make(session, pc, instruction, inputs))
+}
+
+// The entry for the step that just ran from `pc`: what it read (`inputs`,
+// captured before it ran), what it changed and where it went.
+timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs: Step_Inputs) -> Timeline_Entry {
 	machine := &session.machine
 	record := machine.cpu.undo
 	entry := Timeline_Entry {
@@ -34,6 +76,7 @@ timeline_record :: proc(session: ^Session, pc: u64, instruction: u32) {
 		next_pc     = machine.cpu.pc,
 		record      = record,
 		trap        = machine.last_trap,
+		inputs      = inputs,
 	}
 	if record.register_changed {
 		entry.register_new = machine.cpu.regs[record.register_index]
@@ -44,7 +87,7 @@ timeline_record :: proc(session: ^Session, pc: u64, instruction: u32) {
 	if record.csr_changed {
 		entry.csr_new, _ = rv.csr_read(&machine.cpu, record.csr_address)
 	}
-	append(&session.timeline, entry)
+	return entry
 }
 
 // The step's line: number, address, disassembly, and what it did.
@@ -62,24 +105,16 @@ timeline_effect :: proc(entry: Timeline_Entry) -> string {
 	builder := strings.builder_make(context.temp_allocator)
 	record := entry.record
 	if record.register_changed {
-		append_effect(&builder, fmt.tprintf("%s <- %s", rv.register_name(record.register_index), value_text(entry.register_new)))
+		append_part(&builder, fmt.tprintf("%s <- %s", rv.register_name(record.register_index), value_text(entry.register_new)))
 	}
 	if record.memory_changed {
-		append_effect(&builder, fmt.tprintf("mem[0x%x] <- %s", record.memory_address, value_text(entry.memory_new)))
+		append_part(&builder, fmt.tprintf("mem[0x%x] <- %s", record.memory_address, value_text(entry.memory_new)))
 	}
 	if record.csr_changed {
-		append_effect(&builder, fmt.tprintf("%s <- %s", rv.csr_name(record.csr_address), value_text(entry.csr_new)))
+		append_part(&builder, fmt.tprintf("%s <- %s", rv.csr_name(record.csr_address), value_text(entry.csr_new)))
 	}
 	if entry.next_pc != entry.pc + rv.INSTRUCTION_SIZE {
-		append_effect(&builder, fmt.tprintf("jumped to 0x%x", entry.next_pc))
+		append_part(&builder, fmt.tprintf("jumped to 0x%x", entry.next_pc))
 	}
 	return strings.to_string(builder)
-}
-
-@(private = "file")
-append_effect :: proc(builder: ^strings.Builder, text: string) {
-	if strings.builder_len(builder^) > 0 {
-		strings.write_string(builder, ", ")
-	}
-	strings.write_string(builder, text)
 }

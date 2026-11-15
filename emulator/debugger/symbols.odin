@@ -1,5 +1,6 @@
 package rvdbg
 
+import "core:fmt"
 import "core:strings"
 
 // Looking up the program's symbol names (session.symbols, sorted by
@@ -34,3 +35,30 @@ symbol_names_in :: proc(session: ^Session, start: u64, end: u64, show_address: b
 }
 
 
+
+// " (numbers+0x4)": the variable or label an address falls in, for the
+// step details. "" if the address is outside the program's code and data
+// or before its first symbol.
+symbol_label :: proc(session: ^Session, address: u64) -> string {
+	program := session.program
+	in_code := address >= program.code_start && address < program.code_end
+	in_data := address >= program.data_start && address < program.data_end
+	if !in_code && !in_data {
+		return ""
+	}
+	found := -1
+	for symbol, index in session.symbols {
+		if symbol.address > address {
+			break
+		}
+		found = index
+	}
+	if found < 0 {
+		return ""
+	}
+	symbol := session.symbols[found]
+	if symbol.address == address {
+		return fmt.tprintf(" (%s)", symbol.name)
+	}
+	return fmt.tprintf(" (%s+0x%x)", symbol.name, address - symbol.address)
+}

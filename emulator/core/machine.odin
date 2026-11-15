@@ -51,6 +51,7 @@ machine_create :: proc(ram_size: u64, history_capacity: int) -> Machine {
 	}
 	machine.cpu.pc = RAM_BASE
 	machine.cpu.privilege = .Machine
+	machine.cpu.csr.mstatus = MSTATUS_RESET
 	return machine
 }
 
@@ -108,9 +109,8 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		machine.cpu.regs[record.register_index] = record.register_old
 	}
 	if record.csr_changed {
-		// The old value was read from the CSR, so it is already legal and
-		// writing it back restores it exactly.
-		csr_write(&machine.cpu, record.csr_address, record.csr_old)
+		// Restore the exact old value (no WARL fix-ups on the way back).
+		csr_restore(&machine.cpu, record.csr_address, record.csr_old)
 	}
 	if record.trap_taken {
 		machine.cpu.csr.mstatus = record.trap_mstatus

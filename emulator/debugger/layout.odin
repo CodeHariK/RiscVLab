@@ -10,7 +10,7 @@ import rv "../core"
 //   +------------------------------------------------------------+
 //   | [Start] [Prev] [Next]   program   step   pc                |  toolbar
 //   +-----------------------------------+------------------------+
-//   | [Source][Disassembly] around PC   | [Programs][Regs][CSRs].|
+//   | [Source][Disassembly][Steps]      | [Programs][Regs][CSRs].|
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
 //   | Encoding: the current instruction |                        |
@@ -150,17 +150,25 @@ panel_title :: proc(title: string) {
 @(private = "file")
 code_panel :: proc(session: ^Session) {
 	if clay.UI(clay.ID("CodePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
-		show_source := session.has_source && view.code_tab == .Source
+		// Without a source map, the Source tab falls back to Disassembly.
+		shown := view.code_tab
+		if shown == .Source && !session.has_source {
+			shown = .Disassembly
+		}
 		if clay.UI(clay.ID("CodeTabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
 			if session.has_source {
-				tab(TAB_ID_SOURCE, "Source", show_source)
+				tab(TAB_ID_SOURCE, "Source", shown == .Source)
 			}
-			tab(TAB_ID_DISASSEMBLY, "Disassembly", !show_source)
+			tab(TAB_ID_DISASSEMBLY, "Disassembly", shown == .Disassembly)
+			tab(TAB_ID_STEPS, "Steps", shown == .Steps)
 		}
-		if show_source {
+		switch shown {
+		case .Source:
 			source_view(session)
-		} else {
+		case .Disassembly:
 			disassembly_view(session)
+		case .Steps:
+			steps_view(session)
 		}
 	}
 }
@@ -180,9 +188,12 @@ source_view :: proc(session: ^Session) {
 		return
 	}
 
+	// Keep the current line a third of the way down, but don't scroll past
+	// the end: if the whole file fits, it is shown from line 1.
 	lines := visible_lines(SOURCE_LINE_HEIGHT)
-	first := max(1, current - lines / 3)
-	for number in first ..< min(first + lines, len(source.lines) + 1) {
+	total := len(source.lines)
+	first := max(1, min(current - lines / 3, total - lines + 1))
+	for number in first ..< min(first + lines, total + 1) {
 		text := source.lines[number - 1]
 		code, comment := split_comment(text)
 		is_current := number == current
@@ -201,6 +212,46 @@ source_view :: proc(session: ^Session) {
 			}
 		}
 	}
+}
+
+// The steps taken so far (as many as fit, oldest at the top), then the
+// instruction that Next will run, highlighted like the current line in
+// the other views.
+@(private = "file")
+steps_view :: proc(session: ^Session) {
+	colors := palette()
+	count := len(session.timeline)
+	lines := visible_lines(SOURCE_LINE_HEIGHT) - 1 // keep a line for "next"
+	first := max(0, count - lines)
+	for index in first ..< count {
+		if clay.UI(clay.ID("StepLine", u32(index - first)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
+			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), text_config(.Code_Small, colors.text))
+		}
+	}
+
+	if clay.UI(clay.ID("StepNext"))({
+		layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
+		backgroundColor = colors.current_line,
+		cornerRadius = clay.CornerRadiusAll(3),
+	}) {
+		clay.TextDynamic(next_step_text(session, count + 1), text_config(.Code_Small, colors.text))
+	}
+}
+
+// The line for the instruction at the PC, not run yet.
+@(private = "file")
+next_step_text :: proc(session: ^Session, number: int) -> string {
+	if session.stopped != nil || session.exited != nil {
+		return "(program finished: press Prev to step back or Start to run again)"
+	}
+	pc := session.machine.cpu.pc
+	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
+	if !ok {
+		return fmt.tprintf("next: pc 0x%x is outside memory", pc)
+	}
+	buffer: [rv.DISASM_BUFFER_SIZE]u8
+	text := rv.disassemble(buffer[:], pc, u32(raw))
+	return fmt.tprintf(">%-4d %08x  %-24s (next: press Next to run it)", number, pc, text)
 }
 
 // Splits an assembly line at its "#" comment: ("addi t0, zero, 5   ", "# t0 = 5").

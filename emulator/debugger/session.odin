@@ -24,6 +24,8 @@ Session :: struct {
 	// Next, so Prev can put it back.
 	last_access:  Memory_Access,
 	access_trail: [dynamic]Memory_Access,
+	// Every step taken since Start, for the Steps view (timeline.odin).
+	timeline:     [dynamic]Timeline_Entry,
 	program_name: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
 	// program). Next does nothing while stopped; Prev clears it.
@@ -69,6 +71,7 @@ session_destroy :: proc(session: ^Session) {
 	delete(session.symbols)
 	delete(session.image)
 	delete(session.access_trail)
+	delete(session.timeline)
 	source_destroy(&session.source)
 }
 
@@ -84,6 +87,7 @@ session_start :: proc(session: ^Session) {
 	session.last_step = nil
 	session.last_access = {}
 	clear(&session.access_trail)
+	clear(&session.timeline)
 }
 
 // Next: run one instruction.
@@ -92,6 +96,8 @@ session_next :: proc(session: ^Session) {
 		return
 	}
 	access := next_memory_access(session)
+	pc := session.machine.cpu.pc
+	instruction, _ := rv.bus_load(&session.machine.bus, pc, 4)
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
 		session.stopped = trap
@@ -99,6 +105,7 @@ session_next :: proc(session: ^Session) {
 		return
 	}
 	session.last_step = session.machine.cpu.undo
+	timeline_record(session, pc, u32(instruction))
 	append(&session.access_trail, session.last_access)
 	if access.kind != .None {
 		session.last_access = access
@@ -113,8 +120,14 @@ session_prev :: proc(session: ^Session) {
 	session.stopped = nil
 	session.exited = nil
 	session.last_step = nil
-	if rv.machine_step_back(&session.machine) && len(session.access_trail) > 0 {
+	if !rv.machine_step_back(&session.machine) {
+		return
+	}
+	if len(session.access_trail) > 0 {
 		session.last_access = pop(&session.access_trail)
+	}
+	if len(session.timeline) > 0 {
+		pop(&session.timeline)
 	}
 }
 

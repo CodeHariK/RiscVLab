@@ -16,6 +16,7 @@ Side_Tab :: enum {
 Code_Tab :: enum {
 	Source,      // the .s file with its comments (when the build made a line map)
 	Disassembly, // the instructions decoded from memory
+	Steps,       // every step taken so far (timeline.odin)
 }
 
 // How the Memory tab groups bytes.

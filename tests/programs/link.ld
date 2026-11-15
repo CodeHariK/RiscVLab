@@ -13,6 +13,10 @@ SECTIONS
 {
   . = 0x80000000;
   .text : { *(.text.init) *(.text .text.*) }
+  /* Data starts on the next 4 KiB page, so it gets its own read/write
+     segment (code stays read/execute only) and shows up as the program's
+     data in the debugger. */
+  . = ALIGN(0x1000);
   .data : { *(.data .data.*) *(.sdata .sdata.*) }
   .bss  : { *(.bss .bss.*) *(.sbss .sbss.*) }
 }

@@ -147,3 +147,33 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	}
 	return true
 }
+
+// Puts back a value read earlier from this CSR, exactly, with no WARL
+// fix-ups (used by undo). Read-only and unknown CSRs are ignored.
+csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
+	csr := &cpu.csr
+	switch address {
+	case CSR_MSTATUS:
+		csr.mstatus = value
+	case CSR_MIE:
+		csr.mie = value
+	case CSR_MTVEC:
+		csr.mtvec = value
+	case CSR_MSCRATCH:
+		csr.mscratch = value
+	case CSR_MEPC:
+		csr.mepc = value
+	case CSR_MCAUSE:
+		csr.mcause = value
+	case CSR_MTVAL:
+		csr.mtval = value
+	case CSR_MIP:
+		csr.mip = value
+	case CSR_MCYCLE, CSR_MINSTRET:
+		cpu.instret = value
+	}
+}
+
+// The value mstatus has at reset: MPP can only hold machine mode, so it
+// reads as 3 from the start; everything else is 0.
+MSTATUS_RESET :: u64(LEAST_PRIVILEGED_MODE) << MSTATUS_MPP_SHIFT

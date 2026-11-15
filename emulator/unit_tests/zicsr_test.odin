@@ -82,3 +82,18 @@ undo_restores_the_csr :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.regs[5], 0)
 	testing.expect_value(t, machine.cpu.pc, rv.RAM_BASE)
 }
+
+@(test)
+undo_restores_mstatus_exactly :: proc(t: ^testing.T) {
+	// csrrsi zero, mstatus, 8 then undo: mstatus must be back to its reset
+	// value, bit for bit (lesson 13 found this: undo used to re-apply the
+	// write rules on the way back).
+	machine := machine_with(csr_instruction(rv.ZICSR_CSRRSI, 0, 8, rv.CSR_MSTATUS))
+	defer rv.machine_destroy(&machine)
+	before := machine.cpu.csr.mstatus
+
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect(t, machine.cpu.csr.mstatus != before)
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mstatus, before)
+}

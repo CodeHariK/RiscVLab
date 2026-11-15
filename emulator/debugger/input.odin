@@ -30,6 +30,7 @@ TAB_ID_MEMORY_BYTES :: "MemoryBytesTab"
 PROGRAM_ROW_ID :: "ProgramRow" // + catalog index
 TAB_ID_SOURCE :: "SourceTab"
 TAB_ID_DISASSEMBLY :: "DisassemblyTab"
+TAB_ID_STEPS :: "StepsTab"
 
 handle_input :: proc(session: ^Session) {
 	if button_clicked(BUTTON_ID_START) {
@@ -49,6 +50,9 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_DISASSEMBLY) {
 		view.code_tab = .Disassembly
+	}
+	if button_clicked(TAB_ID_STEPS) {
+		view.code_tab = .Steps
 	}
 	if button_clicked(TAB_ID_PROGRAMS) {
 		view.side_tab = .Programs

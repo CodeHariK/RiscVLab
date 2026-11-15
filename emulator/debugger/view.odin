@@ -25,6 +25,10 @@ Memory_Layout :: enum {
 }
 
 View_State :: struct {
+	// Lines the code panel has been scrolled with the mouse wheel, away
+	// from where it would follow the current instruction. Back to 0 on
+	// every step, so stepping always brings the current line into view.
+	code_scroll:      f32,
 	memory_layout:    Memory_Layout,
 	code_tab:         Code_Tab,
 	side_tab:         Side_Tab,

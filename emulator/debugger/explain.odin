@@ -49,10 +49,10 @@ explain_next :: proc(session: ^Session) -> string {
 	case rv.OPCODE_JALR:
 		target := (v1 + rv.imm_i(instruction)) & ~u64(1)
 		return fmt.tprintf(
-			"jump to %s (%s) + %d = 0x%x; %s = 0x%x (the return address)",
+			"jump to %s (%s) + %s = 0x%x; %s = 0x%x (the return address)",
 			s1,
 			value_text(v1),
-			i64(rv.imm_i(instruction)),
+			signed_text(i64(rv.imm_i(instruction))),
 			target,
 			d,
 			pc + rv.INSTRUCTION_SIZE,
@@ -76,34 +76,38 @@ explain_next :: proc(session: ^Session) -> string {
 		if size == 8 {
 			extension = "all 64 bits"
 		}
+		loaded := "outside memory: will raise Load_Access_Fault"
+		if raw_value, in_memory := rv.bus_load(&session.machine.bus, address, size); in_memory {
+			loaded = fmt.tprintf("which holds %s, %s", value_text(raw_value), extension)
+		}
 		return fmt.tprintf(
-			"%s = %d-byte load from %s (0x%x) + %d = address 0x%x, %s",
+			"%s = %d-byte load from %s (0x%x) + %s = address 0x%x, %s",
 			d,
 			size,
 			s1,
 			v1,
-			i64(rv.imm_i(instruction)),
+			signed_text(i64(rv.imm_i(instruction))),
 			address,
-			extension,
+			loaded,
 		)
 	case rv.OPCODE_STORE:
 		address := v1 + rv.imm_s(instruction)
 		size := u64(1) << (rv.funct3(instruction) & 0b11)
 		return fmt.tprintf(
-			"store the low %d bytes of %s (%s) to %s (0x%x) + %d = address 0x%x",
+			"store the low %d bytes of %s (%s) to %s (0x%x) + %s = address 0x%x",
 			size,
 			s2,
 			value_text(v2),
 			s1,
 			v1,
-			i64(rv.imm_s(instruction)),
+			signed_text(i64(rv.imm_s(instruction))),
 			address,
 		)
 	case rv.OPCODE_OP_IMM, rv.OPCODE_OP_IMM_32:
-		operand := fmt.tprintf("%d", i64(rv.imm_i(instruction)))
+		operand := signed_text(i64(rv.imm_i(instruction)))
 		if is_shift(mnemonic) {
 			shift_mask: u32 = 0x3F if rv.opcode(instruction) == rv.OPCODE_OP_IMM else 0x1F
-			operand = fmt.tprintf("%d", (instruction >> 20) & shift_mask)
+			operand = value_text(u64((instruction >> 20) & shift_mask))
 		}
 		if strings.has_prefix(mnemonic, "slt") {
 			return set_less_than_text(mnemonic, d, s1, value_text(v1), operand)
@@ -174,7 +178,7 @@ explain_csr_instruction :: proc(
 	source := fmt.tprintf("%s (%s)", s1, value_text(v1))
 	source_is_zero := rv.rs1(instruction) == 0
 	if immediate_form {
-		source = fmt.tprintf("%d", rv.rs1(instruction))
+		source = value_text(u64(rv.rs1(instruction)))
 	}
 
 	read := fmt.tprintf("%s = old %s (%s)", d, csr, value_text(old))
@@ -210,10 +214,10 @@ explain_last_step :: proc(session: ^Session) -> string {
 		csr := &session.machine.cpu.csr
 		fmt.sbprintf(
 			&builder,
-			"trap %v: mepc <- 0x%x, mcause <- %d, mtval <- %s; jumped to the handler at 0x%x",
+			"trap %v: mepc <- 0x%x, mcause <- %s, mtval <- %s; jumped to the handler at 0x%x",
 			rv.Trap_Cause(csr.mcause),
 			csr.mepc,
-			csr.mcause,
+			value_text(csr.mcause),
 			value_text(csr.mtval),
 			session.machine.cpu.pc,
 		)
@@ -279,21 +283,12 @@ explain_status :: proc(session: ^Session) -> string {
 		if exit_code == 0 {
 			return fmt.tprintf("Program finished through tohost after %d instructions: exit code 0 (pass)", cpu.instret)
 		}
-		return fmt.tprintf("Program finished through tohost: exit code %d (riscv-tests: test %d failed)", exit_code, exit_code)
+		return fmt.tprintf("Program finished through tohost: exit code %s (riscv-tests: test %d failed)", value_text(u64(exit_code)), exit_code)
 	}
 	if cpu.instret == 0 {
 		return "Ready. Press Next (or the right arrow key) to run the first instruction."
 	}
 	return fmt.tprintf("Paused after %d instructions.", cpu.instret)
-}
-
-// Small numbers in decimal (signed), large ones in hex: easiest to read.
-value_text :: proc(value: u64) -> string {
-	signed := i64(value)
-	if signed > -100_000 && signed < 100_000 {
-		return fmt.tprintf("%d", signed)
-	}
-	return fmt.tprintf("0x%x", value)
 }
 
 @(private = "file")

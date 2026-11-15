@@ -23,8 +23,8 @@ import rl "vendor:raylib"
 // Built from scratch every frame from the session state; strings use the
 // temp allocator, freed once the frame is drawn.
 
-// The code panel shows as many lines as fit, a third of them before the
-// current one. Heights in pixels, matching the styles used below.
+// The code panel shows as many lines as fit (see first_visible_index for
+// how it scrolls). Heights in pixels, matching the styles used below.
 CODE_LINE_HEIGHT :: 24 // Code font (18) + line padding (4) + gap (2)
 SOURCE_LINE_HEIGHT :: 22 // Code_Small font (16) + line padding (4) + gap (2)
 CODE_PANEL_OVERHEAD :: 76 // tabs, panel padding and border
@@ -263,9 +263,8 @@ panel_style :: proc(sizing: clay.Sizing, clip := true) -> clay.ElementDeclaratio
 	}
 }
 
-// The code panel: the program's source (with its comments) or its
-// disassembly, whichever tab is selected, scrolled so the current
-// instruction is a third of the way down.
+// The code panel: the program's source (with its comments), its
+// disassembly or the steps taken, whichever tab is selected.
 @(private = "file")
 code_panel :: proc(session: ^Session) {
 	if clay.UI(clay.ID("CodePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
@@ -308,11 +307,9 @@ source_view :: proc(session: ^Session) {
 		return
 	}
 
-	// Keep the current line a third of the way down, but don't scroll past
-	// the end: if the whole file fits, it is shown from line 1.
 	lines := visible_lines(SOURCE_LINE_HEIGHT)
 	total := len(source.lines)
-	first := max(1, min(current - lines / 3, total - lines + 1))
+	first := 1 + first_visible_index(current - 1, lines, total)
 	for number in first ..< min(first + lines, total + 1) {
 		text := source.lines[number - 1]
 		code, comment := split_comment(text)
@@ -342,7 +339,12 @@ steps_view :: proc(session: ^Session) {
 	colors := palette()
 	count := len(session.timeline)
 	lines := visible_lines(SOURCE_LINE_HEIGHT) - 1 // keep a line for "next"
-	first := max(0, count - lines)
+	newest_first := max(0, count - lines)
+	wanted := newest_first + int(view.code_scroll)
+	first := max(0, min(wanted, newest_first))
+	if first != wanted {
+		view.code_scroll = f32(first - newest_first)
+	}
 	for index in first ..< count {
 		if clay.UI(clay.ID("StepLine", u32(index - first)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
 			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), text_config(.Code_Small, colors.text))
@@ -388,13 +390,13 @@ split_comment :: proc(line: string) -> (code: string, comment: string) {
 disassembly_view :: proc(session: ^Session) {
 	colors := palette()
 	lines := visible_lines(CODE_LINE_HEIGHT)
-	lines_before_pc := u64(lines / 3)
-
 	pc := session.machine.cpu.pc
 	code_start, end := session_code_range(session)
-	first := pc - lines_before_pc * rv.INSTRUCTION_SIZE
-	if pc < code_start + lines_before_pc * rv.INSTRUCTION_SIZE {
-		first = code_start
+	first := code_start
+	if pc >= code_start && pc < end {
+		pc_index := int((pc - code_start) / rv.INSTRUCTION_SIZE)
+		total := int((end - code_start) / rv.INSTRUCTION_SIZE)
+		first = code_start + u64(first_visible_index(pc_index, lines, total)) * rv.INSTRUCTION_SIZE
 	}
 
 	// Symbol labels (e.g. "test_2:") take a line of their own, so count
@@ -468,6 +470,28 @@ encoding_field :: proc(instruction: u32, field: Encoding_Field, index: u32) {
 		clay.TextDynamic(field.label, text_config(.Code_Small, colors.fields[field.kind]))
 		clay.TextDynamic(field_value_text(instruction, field), text_config(.Code_Small, colors.text_dim))
 	}
+}
+
+// Which line to start at so the `current` one (0-based) is on screen,
+// scrolling as little as possible: start at the top, and only scroll once
+// the current line would pass two thirds of the way down. Never scroll
+// past the end, so a file that fits is always shown from its first line.
+//
+// The mouse wheel shifts that by view.code_scroll lines, to look at the
+// rest of the program (the next step scrolls back).
+@(private = "file")
+first_visible_index :: proc(current: int, lines: int, total: int) -> int {
+	keep_below := lines / 3 // lines kept visible after the current one
+	following := max(0, min(current - (lines - 1 - keep_below), total - lines))
+	wanted := following + int(view.code_scroll)
+	first := max(0, min(wanted, total - lines))
+	// At the top or bottom, stop the scroll growing, so scrolling back
+	// responds straight away. (Otherwise keep its fraction: a trackpad
+	// sends small amounts.)
+	if first != wanted {
+		view.code_scroll = f32(first - following)
+	}
+	return first
 }
 
 // How many lines of `line_height` pixels fit in the code panel, from its
@@ -641,7 +665,7 @@ csr_list :: proc(session: ^Session) {
 	}
 }
 
-// All 32 registers with ABI names. A tag shows what the next instruction
+// The pc, then all 32 registers with ABI names. A tag shows what the next instruction
 // does with each register (reads it as rs1 / rs2, writes it as rd), in the
 // Encoding strip's colours; the register the last step wrote is marked.
 @(private = "file")
@@ -654,9 +678,16 @@ register_list :: proc(session: ^Session) {
 	}
 	next_instruction, fetched := rv.bus_load(&session.machine.bus, cpu.pc, 4)
 
+	// The pc is not one of x0-x31: no instruction names it as rd/rs1/rs2,
+	// it just moves on by 4 (or jumps) after every instruction.
+	if clay.UI(clay.ID("PcLine"))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 4}}}) {
+		register_use_tag(.None)
+		clay.TextDynamic(fmt.tprintf("%-3s %-4s %s", "pc", "", register_value_text(cpu.pc)), text_config(.Code_Small, colors.accent))
+	}
+
 	for index in 0 ..< rv.REGISTER_COUNT {
 		value := cpu.regs[index]
-		text := fmt.tprintf("x%-2d %-4s 0x%016x  %s", index, rv.register_name(u32(index)), value, value_text(value))
+		text := fmt.tprintf("x%-2d %-4s %s", index, rv.register_name(u32(index)), register_value_text(value))
 		use := Register_Use.None
 		if fetched {
 			use = register_use(u32(next_instruction), u32(index))

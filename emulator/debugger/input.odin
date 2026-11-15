@@ -11,10 +11,12 @@ import rl "vendor:raylib"
 // toolbar switches between light and dark (see settings.odin), and the
 // side panel's tabs pick what it shows (view.odin). In the Programs tab, a
 // click on a program opens it. The mouse wheel
-// scrolls the side panel (handled by Clay).
+// scrolls the side panel (handled by Clay) and the code panel.
 //
 // Handled before the frame's layout is built, using the previous frame's
 // layout for hover tests (the usual pattern with Clay).
+
+CODE_SCROLL_LINES_PER_NOTCH :: 3
 
 BUTTON_ID_RESET :: "ResetButton"
 BUTTON_ID_PREV :: "PrevButton"
@@ -38,12 +40,19 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(BUTTON_ID_RESET) {
 		session_reset(session)
+		view.code_scroll = 0
 	}
 	if button_clicked(BUTTON_ID_PREV) || key_pressed(.LEFT) {
 		session_prev(session)
+		view.code_scroll = 0
 	}
 	if button_clicked(BUTTON_ID_NEXT) || key_pressed(.RIGHT) {
 		session_next(session)
+		view.code_scroll = 0
+	}
+	// The mouse wheel scrolls the code panel through the whole program.
+	if clay.PointerOver(clay.ID("CodePanel")) {
+		view.code_scroll -= rl.GetMouseWheelMove() * CODE_SCROLL_LINES_PER_NOTCH
 	}
 	if button_clicked(BUTTON_ID_THEME) {
 		settings_next_theme()
@@ -90,6 +99,7 @@ handle_program_selection :: proc(session: ^Session) {
 		if clay.PointerOver(clay.ID(PROGRAM_ROW_ID, u32(index))) {
 			if session_open(session, entry.path) {
 				view.selected_program = index
+				view.code_scroll = 0
 			}
 			return
 		}

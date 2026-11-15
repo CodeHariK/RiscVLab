@@ -121,9 +121,9 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 	value := field_value(instruction, field)
 	switch field.kind {
 	case .Opcode:
-		return opcode_name(value)
+		return fmt.tprintf("%s (0x%02x)", opcode_name(value), value)
 	case .Rd, .Rs1, .Rs2:
-		return fmt.tprintf("%s (%d)", rv.register_name(value), value)
+		return fmt.tprintf("%s (x%d)", rv.register_name(value), value)
 	case .Csr:
 		if name := rv.csr_name(value); name != "" {
 			return name
@@ -131,30 +131,30 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 		return "not implemented"
 	case .Funct, .Immediate, .Unknown:
 	}
-	return fmt.tprintf("%d", value)
+	return value_text(u64(value))
 }
 
 // One line under the fields: the format and the assembled immediate.
 encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> string {
 	switch encoding.format {
 	case "I-type":
-		return fmt.tprintf("I-type: imm = %d (12 bits, sign-extended)", i64(rv.imm_i(instruction)))
+		return fmt.tprintf("I-type: imm = %s (12 bits, sign-extended)", signed_text(i64(rv.imm_i(instruction))))
 	case "I-type (CSR)":
 		address := rv.csr_address(instruction)
 		name := rv.csr_name(address)
 		return fmt.tprintf("I-type (CSR): csr = 0x%03x (%s)", address, name if name != "" else "not implemented")
 	case "I-type (shift)":
-		return fmt.tprintf("I-type (shift): shift amount = %d", (instruction >> 20) & 0x3F)
+		return fmt.tprintf("I-type (shift): shift amount = %s", value_text(u64((instruction >> 20) & 0x3F)))
 	case "S-type":
-		return fmt.tprintf("S-type: imm = imm[11:5] imm[4:0] = %d", i64(rv.imm_s(instruction)))
+		return fmt.tprintf("S-type: imm = imm[11:5] imm[4:0] = %s", signed_text(i64(rv.imm_s(instruction))))
 	case "B-type":
 		offset := rv.imm_b(instruction)
-		return fmt.tprintf("B-type: offset = %d (bit 0 is always 0) -> target 0x%x", i64(offset), pc + offset)
+		return fmt.tprintf("B-type: offset = %s (bit 0 is always 0) -> target 0x%x", signed_text(i64(offset)), pc + offset)
 	case "U-type":
 		return fmt.tprintf("U-type: imm = 0x%x << 12 = 0x%x", instruction >> 12, rv.imm_u(instruction))
 	case "J-type":
 		offset := rv.imm_j(instruction)
-		return fmt.tprintf("J-type: offset = %d (bit 0 is always 0) -> target 0x%x", i64(offset), pc + offset)
+		return fmt.tprintf("J-type: offset = %s (bit 0 is always 0) -> target 0x%x", signed_text(i64(offset)), pc + offset)
 	}
 	return encoding.format
 }

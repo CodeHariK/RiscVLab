@@ -6,10 +6,10 @@ import rv "../core"
 
 // One debugging session: the machine plus what the UI needs to know
 // about it. All changes to the machine during debugging go through the
-// three actions below, which match the three controls: Start, Prev, Next.
+// three actions below, which match the three controls: Reset, Prev, Next.
 Session :: struct {
 	machine:      rv.Machine,
-	// The program's bytes, kept so Start can reload a fresh copy.
+	// The program's bytes, kept so Reset can reload a fresh copy.
 	image:        []u8,
 	// Where the program starts and where its code is (from the loader).
 	program:      rv.Program,
@@ -24,7 +24,7 @@ Session :: struct {
 	// Next, so Prev can put it back.
 	last_access:  Memory_Access,
 	access_trail: [dynamic]Memory_Access,
-	// Every step taken since Start, for the Steps view (timeline.odin).
+	// Every step taken since Reset, for the Steps view (timeline.odin).
 	timeline:     [dynamic]Timeline_Entry,
 	program_name: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
@@ -33,7 +33,7 @@ Session :: struct {
 	// Set when the program asked to exit through `tohost` (riscv-tests):
 	// its exit code. Next does nothing after that; Prev clears it.
 	exited:       Maybe(u64),
-	// What the most recent Next changed (nil after Start or Prev).
+	// What the most recent Next changed (nil after Reset or Prev).
 	last_step:    Maybe(rv.Undo_Record),
 }
 
@@ -62,7 +62,7 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 	session.program_name = filepath.base(path)
 	source_destroy(&session.source)
 	session.source, session.has_source = source_load(path)
-	session_start(session)
+	session_reset(session)
 	return true
 }
 
@@ -75,9 +75,9 @@ session_destroy :: proc(session: ^Session) {
 	source_destroy(&session.source)
 }
 
-// Start: a fresh machine with the program loaded, PC at the first
+// Reset: a fresh machine with the program loaded, PC at the first
 // instruction, empty undo history.
-session_start :: proc(session: ^Session) {
+session_reset :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
 	// session_open checked that the program loads, so it loads again here.

@@ -4,7 +4,7 @@ import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
 
 // The debugger's only controls:
-//   Start  (button)                     reload the program, back to the first instruction
+//   Reset  (button)                     reload the program, back to the first instruction
 //   Prev   (button or left arrow)       undo one instruction
 //   Next   (button or right arrow)      run one instruction
 // Holding an arrow key repeats it. The Theme button on the right of the
@@ -16,12 +16,11 @@ import rl "vendor:raylib"
 // Handled before the frame's layout is built, using the previous frame's
 // layout for hover tests (the usual pattern with Clay).
 
-BUTTON_ID_START :: "StartButton"
+BUTTON_ID_RESET :: "ResetButton"
 BUTTON_ID_PREV :: "PrevButton"
 BUTTON_ID_NEXT :: "NextButton"
 BUTTON_ID_THEME :: "ThemeButton"
 TAB_ID_PROGRAMS :: "ProgramsTab"
-TAB_ID_REGISTERS :: "RegistersTab"
 TAB_ID_CSRS :: "CsrsTab"
 TAB_ID_MEMORY :: "MemoryTab"
 TAB_ID_ELF :: "ElfTab"
@@ -37,8 +36,8 @@ handle_input :: proc(session: ^Session) {
 	if handle_panel_input() {
 		return
 	}
-	if button_clicked(BUTTON_ID_START) {
-		session_start(session)
+	if button_clicked(BUTTON_ID_RESET) {
+		session_reset(session)
 	}
 	if button_clicked(BUTTON_ID_PREV) || key_pressed(.LEFT) {
 		session_prev(session)
@@ -60,9 +59,6 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_PROGRAMS) {
 		view.side_tab = .Programs
-	}
-	if button_clicked(TAB_ID_REGISTERS) {
-		view.side_tab = .Registers
 	}
 	if button_clicked(TAB_ID_CSRS) {
 		view.side_tab = .Csrs

@@ -10,7 +10,7 @@ import rv "../core"
 //   #13  8000000c  add a0,a0,t0           a0 <- 6
 //
 // Each Next adds an entry (unless the program stopped, which changes
-// nothing); Prev removes the last one; Start clears the list. Entries keep
+// nothing); Prev removes the last one; Reset clears the list. Entries keep
 // raw values, and the text is only built for the lines on screen.
 
 Timeline_Entry :: struct {

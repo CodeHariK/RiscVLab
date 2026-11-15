@@ -14,7 +14,7 @@ import rl "vendor:raylib"
 //
 // With --tests, the Programs tab lists the lessons and tests found there.
 //
-// Controls: Start, Prev / Next (buttons, or the left / right arrow keys).
+// Controls: Reset, Prev / Next (buttons, or the left / right arrow keys).
 main :: proc() {
 	os.exit(run())
 }

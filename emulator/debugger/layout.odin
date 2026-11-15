@@ -9,7 +9,7 @@ import rl "vendor:raylib"
 // The debugger window, described with Clay:
 //
 //   +------------------------------------------------------------+
-//   | [Start] [Prev] [Next]   program   step   pc                |  toolbar
+//   | [Reset] [Prev] [Next]   program   step   pc                |  toolbar
 //   +-----------------------------------+------------------------+
 //   | [Source][Disassembly][Steps]      | [Programs][Regs][CSRs].|
 //   | (current instruction highlighted) | tab content, scrolls   |
@@ -198,7 +198,7 @@ toolbar :: proc(session: ^Session) {
 			childAlignment = {y = .Center},
 		},
 	}) {
-		button(BUTTON_ID_START, "Start")
+		button(BUTTON_ID_RESET, "Reset")
 		button(BUTTON_ID_PREV, "< Prev")
 		button(BUTTON_ID_NEXT, "Next >")
 
@@ -362,7 +362,7 @@ steps_view :: proc(session: ^Session) {
 @(private = "file")
 next_step_text :: proc(session: ^Session, number: int) -> string {
 	if session.stopped != nil || session.exited != nil {
-		return "(program finished: press Prev to step back or Start to run again)"
+		return "(program finished: press Prev to step back or Reset to run again)"
 	}
 	pc := session.machine.cpu.pc
 	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
@@ -490,7 +490,6 @@ side_panel :: proc(session: ^Session) {
 		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
 			panel_grip(.Side)
 			tab(TAB_ID_PROGRAMS, "Programs", view.side_tab == .Programs)
-			tab(TAB_ID_REGISTERS, "Registers", view.side_tab == .Registers)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
@@ -500,8 +499,6 @@ side_panel :: proc(session: ^Session) {
 			clip = {horizontal = true, vertical = true, childOffset = clay.GetScrollOffset()},
 		}) {
 			switch view.side_tab {
-			case .Registers:
-				register_list(session)
 			case .Csrs:
 				csr_list(session)
 			case .Memory:

@@ -29,8 +29,8 @@ import rl "vendor:raylib"
 Panel :: enum {
 	Code,
 	Encoding,
-	Side,      // tabbed: Programs, Registers, CSRs, Memory, ELF
-	Registers, // the register list on its own, for side-by-side layouts
+	Side,      // tabbed: Programs, CSRs, Memory, ELF
+	Registers, // the register list (the middle column)
 	Explanation,
 }
 

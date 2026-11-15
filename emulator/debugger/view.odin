@@ -6,7 +6,6 @@ package rvdbg
 
 Side_Tab :: enum {
 	Programs,  // the program selector (catalog.odin)
-	Registers, // x0..x31
 	Csrs,      // control and status registers, privilege level
 	Memory,    // hex dump around the address being used
 	Elf,       // what the loader found in the program file

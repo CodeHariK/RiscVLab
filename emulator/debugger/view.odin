@@ -8,6 +8,7 @@ Side_Tab :: enum {
 	Programs,  // the program selector (catalog.odin)
 	Registers, // x0..x31
 	Csrs,      // control and status registers, privilege level
+	Memory,    // hex dump around the address being used
 	Elf,       // what the loader found in the program file
 }
 
@@ -17,7 +18,14 @@ Code_Tab :: enum {
 	Disassembly, // the instructions decoded from memory
 }
 
+// How the Memory tab groups bytes.
+Memory_Layout :: enum {
+	Words, // 32-bit little-endian words, as instructions and lw / sw see them
+	Bytes, // one byte per column, in address order (shows little-endian order)
+}
+
 View_State :: struct {
+	memory_layout:    Memory_Layout,
 	code_tab:         Code_Tab,
 	side_tab:         Side_Tab,
 	// The catalog entry currently open, or -1 (a file not in the list).
@@ -25,6 +33,7 @@ View_State :: struct {
 }
 
 view := View_State {
+	memory_layout    = .Words,
 	code_tab         = .Source,
 	side_tab         = .Registers,
 	selected_program = -1,

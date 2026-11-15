@@ -18,6 +18,9 @@ Program :: struct {
 	entry:      u64,
 	code_start: u64,
 	code_end:   u64,
+	// The program's data (ELF only; zero size if none or raw binary).
+	data_start: u64,
+	data_end:   u64,
 	tohost:     Maybe(u64), // ELF only: where riscv-tests report their result
 }
 
@@ -43,6 +46,8 @@ machine_load_program :: proc(machine: ^Machine, image: []u8) -> (program: Progra
 			entry      = elf.entry,
 			code_start = elf.code_start,
 			code_end   = elf.code_end,
+			data_start = elf.data_start,
+			data_end   = elf.data_end,
 			tohost     = elf.tohost,
 		}
 	} else {

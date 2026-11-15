@@ -23,7 +23,10 @@ BUTTON_ID_THEME :: "ThemeButton"
 TAB_ID_PROGRAMS :: "ProgramsTab"
 TAB_ID_REGISTERS :: "RegistersTab"
 TAB_ID_CSRS :: "CsrsTab"
+TAB_ID_MEMORY :: "MemoryTab"
 TAB_ID_ELF :: "ElfTab"
+TAB_ID_MEMORY_WORDS :: "MemoryWordsTab"
+TAB_ID_MEMORY_BYTES :: "MemoryBytesTab"
 PROGRAM_ROW_ID :: "ProgramRow" // + catalog index
 TAB_ID_SOURCE :: "SourceTab"
 TAB_ID_DISASSEMBLY :: "DisassemblyTab"
@@ -55,6 +58,15 @@ handle_input :: proc(session: ^Session) {
 	}
 	if button_clicked(TAB_ID_CSRS) {
 		view.side_tab = .Csrs
+	}
+	if button_clicked(TAB_ID_MEMORY) {
+		view.side_tab = .Memory
+	}
+	if button_clicked(TAB_ID_MEMORY_WORDS) {
+		view.memory_layout = .Words
+	}
+	if button_clicked(TAB_ID_MEMORY_BYTES) {
+		view.memory_layout = .Bytes
 	}
 	if button_clicked(TAB_ID_ELF) {
 		view.side_tab = .Elf

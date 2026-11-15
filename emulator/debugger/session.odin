@@ -16,6 +16,14 @@ Session :: struct {
 	// The program's source and line table, if the build made one.
 	source:       Source_Map,
 	has_source:   bool,
+	// Labels and variables from the ELF symbol table, sorted by address
+	// (names point into `image`).
+	symbols:      []rv.Symbol,
+	// The most recent load or store, so the Memory tab can stay on the data
+	// a program is working with. `access_trail` holds its value before each
+	// Next, so Prev can put it back.
+	last_access:  Memory_Access,
+	access_trail: [dynamic]Memory_Access,
 	program_name: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
 	// program). Next does nothing while stopped; Prev clears it.
@@ -45,8 +53,10 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 		return false
 	}
 
+	delete(session.symbols)
 	delete(session.image)
 	session.image = image
+	session.symbols = rv.elf_symbols(image)
 	session.program_name = filepath.base(path)
 	source_destroy(&session.source)
 	session.source, session.has_source = source_load(path)
@@ -56,7 +66,9 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 
 session_destroy :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
+	delete(session.symbols)
 	delete(session.image)
+	delete(session.access_trail)
 	source_destroy(&session.source)
 }
 
@@ -70,6 +82,8 @@ session_start :: proc(session: ^Session) {
 	session.stopped = nil
 	session.exited = nil
 	session.last_step = nil
+	session.last_access = {}
+	clear(&session.access_trail)
 }
 
 // Next: run one instruction.
@@ -77,6 +91,7 @@ session_next :: proc(session: ^Session) {
 	if session.stopped != nil || session.exited != nil {
 		return
 	}
+	access := next_memory_access(session)
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
 		session.stopped = trap
@@ -84,6 +99,10 @@ session_next :: proc(session: ^Session) {
 		return
 	}
 	session.last_step = session.machine.cpu.undo
+	append(&session.access_trail, session.last_access)
+	if access.kind != .None {
+		session.last_access = access
+	}
 	session.exited = rv.machine_host_exit(&session.machine)
 }
 
@@ -94,7 +113,9 @@ session_prev :: proc(session: ^Session) {
 	session.stopped = nil
 	session.exited = nil
 	session.last_step = nil
-	rv.machine_step_back(&session.machine)
+	if rv.machine_step_back(&session.machine) && len(session.access_trail) > 0 {
+		session.last_access = pop(&session.access_trail)
+	}
 }
 
 // The program's code: [start, end).

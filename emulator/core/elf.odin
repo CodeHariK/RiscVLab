@@ -28,6 +28,10 @@ Elf_Program :: struct {
 	// The executable segment's address range (for disassembly views).
 	code_start: u64,
 	code_end:   u64,
+	// The first loadable segment that isn't executable: the program's data
+	// (.data / .bss). Zero size if there is none.
+	data_start: u64,
+	data_end:   u64,
 	// Address of the `tohost` symbol, if the program has one.
 	tohost:     Maybe(u64),
 }
@@ -69,9 +73,14 @@ load_elf :: proc(bus: ^Bus, image: []u8) -> (program: Elf_Program, error: Elf_Er
 			continue
 		}
 		load_segment(bus, image, segment) or_return
-		if segment.flags & SEGMENT_FLAG_EXECUTE != 0 && program.code_end == 0 {
-			program.code_start = segment.address
-			program.code_end = segment.address + segment.file_size
+		if segment.flags & SEGMENT_FLAG_EXECUTE != 0 {
+			if program.code_end == 0 {
+				program.code_start = segment.address
+				program.code_end = segment.address + segment.file_size
+			}
+		} else if program.data_end == 0 {
+			program.data_start = segment.address
+			program.data_end = segment.address + segment.memory_size
 		}
 	}
 
@@ -209,6 +218,78 @@ symbol_name_is :: proc(image: []u8, offset: u64, name: string) -> bool {
 		return false
 	}
 	return string(image[offset:offset + length]) == name && image[offset + length] == 0
+}
+
+// ------------------------------------------------------------- symbol list
+
+// A named address from the symbol table: a label in the code or a
+// variable in the data.
+Symbol :: struct {
+	name:    string, // points into the image bytes
+	address: u64,
+}
+
+// Every label and variable in the program, sorted by address, for showing
+// names in the debugger. Leaves out what isn't a real program location:
+// section and file entries, undefined symbols, the assembler's local
+// ".L..." labels and RISC-V "$x" / "$d" mapping symbols. The names point
+// into `image`, so it must outlive the result. Empty if `image` isn't an
+// ELF.
+elf_symbols :: proc(image: []u8, allocator := context.allocator) -> []Symbol {
+	header, error := parse_header(image)
+	if error != .None {
+		return nil
+	}
+	symbols := make([dynamic]Symbol, allocator)
+	for index in 0 ..< u64(header.section_count) {
+		section := header.section_offset + index * u64(header.section_size)
+		if !in_bounds(image, section, 64) || read_u32(image, section + 4) != SECTION_TYPE_SYMBOL_TABLE {
+			continue
+		}
+		symbols_offset := read_u64(image, section + 24)
+		symbols_size := read_u64(image, section + 32)
+		strings_section := header.section_offset + u64(read_u32(image, section + 40)) * u64(header.section_size)
+		if !in_bounds(image, strings_section, 64) || !in_bounds(image, symbols_offset, symbols_size) {
+			continue
+		}
+		strings_offset := read_u64(image, strings_section + 24)
+
+		for symbol := symbols_offset; symbol + SYMBOL_SIZE <= symbols_offset + symbols_size; symbol += SYMBOL_SIZE {
+			kind := image[symbol + 4] & 0xF // st_info: 0 none, 1 object, 2 function, 3 section, 4 file
+			section_index := read_u16(image, symbol + 6) // 0 = undefined
+			if kind > 2 || section_index == 0 {
+				continue
+			}
+			name := symbol_name(image, strings_offset + u64(read_u32(image, symbol)))
+			if name == "" || name[0] == '$' || (len(name) > 1 && name[0] == '.' && name[1] == 'L') {
+				continue
+			}
+			append(&symbols, Symbol{name, read_u64(image, symbol + 8)})
+		}
+	}
+	sort_symbols(symbols[:])
+	return symbols[:]
+}
+
+// The zero-terminated string at `offset`, or "" if it runs off the end.
+@(private = "file")
+symbol_name :: proc(image: []u8, offset: u64) -> string {
+	for end := offset; end < u64(len(image)); end += 1 {
+		if image[end] == 0 {
+			return string(image[offset:end])
+		}
+	}
+	return ""
+}
+
+// Insertion sort by address: symbol tables are small and mostly sorted.
+@(private = "file")
+sort_symbols :: proc(symbols: []Symbol) {
+	for i in 1 ..< len(symbols) {
+		for j := i; j > 0 && symbols[j - 1].address > symbols[j].address; j -= 1 {
+			symbols[j - 1], symbols[j] = symbols[j], symbols[j - 1]
+		}
+	}
 }
 
 // ------------------------------------------------------------- reading

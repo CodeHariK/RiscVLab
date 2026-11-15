@@ -24,7 +24,7 @@ make debug-ui                                              # opens the first les
 make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
-The **Programs** tab lists the lessons (`tests/programs/lessons/`), the test programs and, if built, the official riscv-tests; click one to open it. Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The code panel has a **Source** tab (the program's `.s` file with its comments, current line highlighted; programs are assembled with `-g` and the build writes an address → line map next to each one) and a **Disassembly** tab. The window also shows the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), a side panel with **Registers** (the last one written is highlighted), **CSRs** (privilege level and CSRs, with what the last step changed highlighted) and **Program** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
+The **Programs** tab lists the lessons (`tests/programs/lessons/`), the test programs and, if built, the official riscv-tests; click one to open it. Controls: **Start** reloads the program; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. On the right, **Theme** switches between light and dark. The code panel has a **Source** tab (the program's `.s` file with its comments, current line highlighted; programs are assembled with `-g` and the build writes an address → line map next to each one) and a **Disassembly** tab. The window also shows the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), a side panel with **Registers** (tags show which registers the next instruction reads as rs1 / rs2 and writes as rd; the last one written is highlighted), **Memory** (a dump around the address the next load / store uses, or what the last step wrote, or the stack; as 32-bit words or as bytes), **CSRs** (privilege level and CSRs, with what the last step changed highlighted) and **Program** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
 
 Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-objdump`; on macOS: `brew install riscv64-elf-binutils`).
 
@@ -56,7 +56,7 @@ No file access and no printing, so it compiles for any target.
 | `bus.odin` | Physical address routing (RAM for now) |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
 | `program.odin` | Loads a program (ELF or raw) and sets the PC: `machine_load_program` |
-| `elf.odin` | ELF64 loader: segments, entry point, symbol lookup (`tohost`) |
+| `elf.odin` | ELF64 loader: segments, entry point, symbol lookup (`tohost`), symbol list for the debugger |
 | `image.odin` | Copies a raw binary into RAM |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
@@ -79,12 +79,14 @@ No file access and no printing, so it compiles for any target.
 |---|---|
 | `main.odin` | Window, Clay setup, frame loop |
 | `session.odin` | The machine being debugged, opening a program, and the Start / Prev / Next actions |
+| `symbols.odin` | Symbol names for the code and memory views |
 | `source.odin` | Loads a program's source and its address → line map (`.lines`) for the Source tab |
 | `catalog.odin` | The Programs list: finds lessons, test programs and riscv-tests and reads their titles |
 | `input.odin` | Buttons and arrow keys -> session actions |
 | `layout.odin` | The Clay layout: toolbar, code, encoding strip, side panel (Registers / Program tabs), explanation |
+| `memory_view.odin` | The Memory tab: words or bytes around the address being used, accessed / changed parts coloured |
 | `csr_view.odin` | What the CSRs tab lists and how it reads each value |
-| `encoding.odin` | Splits an instruction into colour-coded fields for the Encoding strip |
+| `encoding.odin` | Splits an instruction into colour-coded fields for the Encoding strip; which registers it reads / writes |
 | `explain.odin` | Plain-language text for the next / last instruction and the status |
 | `theme.odin` | Light and dark palettes, text styles (font + size), spacing |
 | `settings.odin` | Theme setting, switched from the toolbar |

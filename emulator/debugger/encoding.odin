@@ -242,3 +242,37 @@ opcode_name :: proc(opcode: u32) -> string {
 	}
 	return "?"
 }
+
+// Which registers an instruction reads and writes, from its encoding
+// fields (rs1 / rs2 read, rd written). x0 is left out: reading it always
+// gives 0 and writing it does nothing.
+Register_Use :: enum {
+	None,
+	Read_Rs1,
+	Read_Rs2,
+	Write_Rd,
+}
+
+register_use :: proc(instruction: u32, register: u32) -> Register_Use {
+	if register == 0 {
+		return .None
+	}
+	encoding := encoding_of(instruction)
+	use := Register_Use.None
+	for field in encoding.fields[:encoding.field_count] {
+		if field_value(instruction, field) != register {
+			continue
+		}
+		#partial switch field.kind {
+		case .Rd:
+			return .Write_Rd // a write matters most when rd is also a source
+		case .Rs1:
+			use = .Read_Rs1
+		case .Rs2:
+			if use == .None {
+				use = .Read_Rs2
+			}
+		}
+	}
+	return use
+}

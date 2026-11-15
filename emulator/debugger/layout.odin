@@ -226,12 +226,22 @@ disassembly_view :: proc(session: ^Session) {
 		first = code_start
 	}
 
+	// Symbol labels (e.g. "test_2:") take a line of their own, so count
+	// lines drawn rather than instructions.
 	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	for line in 0 ..< lines {
+	drawn := 0
+	for line := 0; drawn < lines; line += 1 {
 		address := first + u64(line) * rv.INSTRUCTION_SIZE
 		if address + rv.INSTRUCTION_SIZE > end {
 			break
 		}
+		if label := symbol_names_at(session, address); label != "" {
+			if clay.UI(clay.ID("CodeLabel", u32(line)))({layout = {padding = {6, 6, 4, 0}}}) {
+				clay.TextDynamic(fmt.tprintf("%s:", label), text_config(.Code, colors.title))
+			}
+			drawn += 1
+		}
+		drawn += 1
 		raw, _ := rv.bus_load(&session.machine.bus, address, 4)
 		instruction := u32(raw)
 		text := fmt.tprintf(
@@ -310,6 +320,7 @@ side_panel :: proc(session: ^Session) {
 			tab(TAB_ID_PROGRAMS, "Programs", view.side_tab == .Programs)
 			tab(TAB_ID_REGISTERS, "Registers", view.side_tab == .Registers)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
+			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
 		}
 		if clay.UI(clay.ID("SideContent"))({
@@ -321,6 +332,8 @@ side_panel :: proc(session: ^Session) {
 				register_list(session)
 			case .Csrs:
 				csr_list(session)
+			case .Memory:
+				memory_list(session)
 			case .Elf:
 				program_info(session)
 			case .Programs:
@@ -330,7 +343,7 @@ side_panel :: proc(session: ^Session) {
 	}
 }
 
-@(private = "file")
+// A tab button (also used by the Memory tab's Words / Bytes switch).
 tab :: proc(id: string, label: string, selected: bool) {
 	colors := palette()
 	element_id := clay.ID(id)
@@ -341,7 +354,7 @@ tab :: proc(id: string, label: string, selected: bool) {
 		background = colors.button_hover
 	}
 	if clay.UI(element_id)({
-		layout = {padding = {14, 14, 5, 5}},
+		layout = {padding = {10, 10, 5, 5}},
 		backgroundColor = background,
 		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
 		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
@@ -408,6 +421,11 @@ program_info :: proc(session: ^Session) {
 			"code",
 			fmt.tprintf("0x%x - 0x%x (%d instructions)", program.code_start, program.code_end, instruction_count),
 		)
+		data := "none"
+		if program.data_end > program.data_start {
+			data = fmt.tprintf("0x%x - 0x%x (%d bytes)", program.data_start, program.data_end, program.data_end - program.data_start)
+		}
+		program_line("data", data)
 		program_line("tohost", tohost)
 	}
 }
@@ -454,34 +472,55 @@ csr_list :: proc(session: ^Session) {
 	}
 }
 
-// All 32 registers with ABI names; the one the last step wrote is marked.
+// All 32 registers with ABI names. A tag shows what the next instruction
+// does with each register (reads it as rs1 / rs2, writes it as rd), in the
+// Encoding strip's colours; the register the last step wrote is marked.
 @(private = "file")
 register_list :: proc(session: ^Session) {
 	colors := palette()
-	{
-		cpu := &session.machine.cpu
-		changed_index := -1
-		if record, has_record := session.last_step.?; has_record && record.register_changed {
-			changed_index = int(record.register_index)
-		}
+	cpu := &session.machine.cpu
+	changed_index := -1
+	if record, has_record := session.last_step.?; has_record && record.register_changed {
+		changed_index = int(record.register_index)
+	}
+	next_instruction, fetched := rv.bus_load(&session.machine.bus, cpu.pc, 4)
 
-		for index in 0 ..< rv.REGISTER_COUNT {
-			value := cpu.regs[index]
-			text := fmt.tprintf(
-				"x%-2d %-4s 0x%016x  %s",
-				index,
-				rv.register_name(u32(index)),
-				value,
-				value_text(value),
-			)
-			highlight := colors.changed if index == changed_index else COLOR_NONE
-			if clay.UI(clay.ID("RegisterLine", u32(index)))({
-				layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}},
-				backgroundColor = highlight,
-				cornerRadius = clay.CornerRadiusAll(3),
-			}) {
-				clay.TextDynamic(text, text_config(.Code_Small, colors.text))
-			}
+	for index in 0 ..< rv.REGISTER_COUNT {
+		value := cpu.regs[index]
+		text := fmt.tprintf("x%-2d %-4s 0x%016x  %s", index, rv.register_name(u32(index)), value, value_text(value))
+		use := Register_Use.None
+		if fetched {
+			use = register_use(u32(next_instruction), u32(index))
+		}
+		highlight := colors.changed if index == changed_index else COLOR_NONE
+		if clay.UI(clay.ID("RegisterLine", u32(index)))({
+			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}},
+			backgroundColor = highlight,
+			cornerRadius = clay.CornerRadiusAll(3),
+		}) {
+			register_use_tag(use)
+			clay.TextDynamic(text, text_config(.Code_Small, colors.text))
+		}
+	}
+}
+
+// "rs1" / "rs2" / "rd" in the field's colour, or blank, in a fixed width.
+@(private = "file")
+register_use_tag :: proc(use: Register_Use) {
+	colors := palette()
+	label, color := "", colors.text
+	switch use {
+	case .Read_Rs1:
+		label, color = "rs1", colors.fields[.Rs1]
+	case .Read_Rs2:
+		label, color = "rs2", colors.fields[.Rs2]
+	case .Write_Rd:
+		label, color = "rd", colors.fields[.Rd]
+	case .None:
+	}
+	if clay.UI()({layout = {sizing = {width = clay.SizingFixed(36)}}}) {
+		if label != "" {
+			clay.TextDynamic(label, text_config(.Code_Small, color))
 		}
 	}
 }

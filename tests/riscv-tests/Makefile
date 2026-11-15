@@ -34,10 +34,12 @@ check-source:
 	@test -d $(SRC)/env/p || { echo "riscv-tests source missing: run ./fetch.sh first"; exit 1; }
 
 # One test: preprocess, assemble, link, and keep a disassembly to read
-# alongside the emulator's trace.
+# alongside the emulator's trace. The test macros expand to many
+# instructions joined by ';' on one line; split_statements.awk puts each on
+# its own line, so the debugger's Source view can follow them one by one.
 $(BUILD)/rv64ui-p-%: $(SRC)/isa/rv64ui/%.S
 	@mkdir -p $(BUILD)
-	$(PREPROCESS) $(DEFINES) $(INCLUDE) $< -o $(BUILD)/$*.s
+	$(PREPROCESS) $(DEFINES) $(INCLUDE) $< | awk -f split_statements.awk > $(BUILD)/$*.s
 	$(CROSS)as $(ARCH) -g $(BUILD)/$*.s -o $(BUILD)/$*.o
 	$(CROSS)ld -T $(LINK) $(BUILD)/$*.o -o $@
 	$(CROSS)objdump -d -M no-aliases $@ > $@.dis

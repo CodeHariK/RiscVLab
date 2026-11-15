@@ -68,6 +68,7 @@ The core never reads files or prints. Front ends read the program (from disk, or
 - **Every state change is recorded for undo**: registers only change through `reg_write`, memory only through the store handler, and both note the old value first.
 - **Every handler returns a `Step_Result`**: `nil` for success, or a `Trap`. No handler stops the machine itself; the run loop decides what a trap means.
 - **The bus owns address checks.** Handlers never index RAM directly, so adding a device later means changing only `bus.odin` and `memory_map.odin`.
+- **Big buffers come straight from the OS.** RAM and the undo history are mapped with `mmap` (`zeroed_pages.odin`), so pages read as zero and take physical memory only once written: a small program costs a few pages, not 128 MiB, even after the debugger recreates the machine on Reset. (WebAssembly falls back to a normal allocation.)
 - **Little-endian host assumed.** RISC-V is little-endian, and so are Apple Silicon and x86, so multi-byte accesses are direct (unaligned) loads and stores.
 - **Misaligned data accesses are allowed** (as on QEMU). Misaligned jump targets trap, because without the C extension instructions must be 4-byte aligned.
 

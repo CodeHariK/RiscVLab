@@ -10,12 +10,14 @@ Bus :: struct {
 	ram: []u8,
 }
 
+// RAM comes straight from the OS (zeroed_pages.odin), so untouched RAM
+// takes no physical memory.
 bus_create :: proc(ram_size: u64) -> Bus {
-	return Bus{ram = make([]u8, ram_size)}
+	return Bus{ram = zeroed_pages_alloc(int(ram_size))}
 }
 
 bus_destroy :: proc(bus: ^Bus) {
-	delete(bus.ram)
+	zeroed_pages_free(bus.ram)
 	bus.ram = nil
 }
 

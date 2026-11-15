@@ -51,12 +51,16 @@ History :: struct {
 }
 
 // Capacity 0 creates an empty history: recording is then switched off.
+// The records come straight from the OS (zeroed_pages.odin), so slots not
+// used yet take no physical memory.
 history_create :: proc(capacity: int) -> History {
-	return History{records = make([]Undo_Record, capacity)}
+	bytes := zeroed_pages_alloc(capacity * size_of(Undo_Record))
+	return History{records = ([^]Undo_Record)(raw_data(bytes))[:capacity]}
 }
 
 history_destroy :: proc(history: ^History) {
-	delete(history.records)
+	bytes := ([^]u8)(raw_data(history.records))[:len(history.records) * size_of(Undo_Record)]
+	zeroed_pages_free(bytes)
 	history^ = {}
 }
 

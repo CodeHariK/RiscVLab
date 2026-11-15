@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import rl "vendor:raylib"
 
 // The debugger window, described with Clay:
 //
@@ -26,7 +27,7 @@ import rv "../core"
 // current one. Heights in pixels, matching the styles used below.
 CODE_LINE_HEIGHT :: 24 // Code font (18) + line padding (4) + gap (2)
 SOURCE_LINE_HEIGHT :: 22 // Code_Small font (16) + line padding (4) + gap (2)
-CODE_PANEL_OVERHEAD :: 72 // tabs, panel padding and border
+CODE_PANEL_OVERHEAD :: 76 // tabs, panel padding and border
 CODE_LINES_DEFAULT :: 20 // first frame, before the panel has a size
 
 build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.RenderCommand) {
@@ -43,22 +44,148 @@ build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.
 	}) {
 		toolbar(session)
 		toolbar_stripe()
-		if clay.UI(clay.ID("Main"))({layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, childGap = PANEL_GAP}}) {
-			if clay.UI(clay.ID("LeftColumn"))({
-				layout = {
-					sizing = {clay.SizingPercent(0.58), clay.SizingGrow()},
-					layoutDirection = .TopToBottom,
-					childGap = PANEL_GAP,
-				},
-			}) {
-				code_panel(session)
-				encoding_panel(session)
-			}
-			side_panel(session)
-		}
-		explanation_panel(session)
+		panel_area(session)
+	}
+	if panel, dragging := panel_layout.dragging_panel.?; dragging {
+		drag_label(panel)
 	}
 	return clay.EndLayout(frame_time)
+}
+
+// The columns, the bottom panel and the dividers between them (see
+// panel_layout.odin).
+@(private = "file")
+panel_area :: proc(session: ^Session) {
+	layout := &panel_layout
+	if clay.UI(clay.ID("Content"))({layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom}}) {
+		if clay.UI(clay.ID("Main"))({layout = {sizing = {clay.SizingGrow(), clay.SizingPercent(layout.main_height)}}}) {
+			for index in 0 ..< layout.column_count {
+				column := layout.columns[index]
+				is_last := index == layout.column_count - 1
+				width := clay.SizingGrow() if is_last else clay.SizingPercent(column.width)
+				if clay.UI(column_id(index))({layout = {sizing = {width, clay.SizingGrow()}, layoutDirection = .TopToBottom}}) {
+					if column.has_bottom {
+						slot(session, {column = index}, {clay.SizingGrow(), clay.SizingPercent(column.split)})
+						divider({.Column_Rows, index})
+						slot(session, {column = index, lower = true}, {clay.SizingGrow(), clay.SizingGrow()})
+					} else {
+						slot(session, {column = index}, {clay.SizingGrow(), clay.SizingGrow()})
+					}
+				}
+				if !is_last {
+					divider({.Column_Edge, index})
+				}
+			}
+		}
+		divider({.Main_Bottom, 0})
+		if clay.UI(clay.ID("BottomRow"))({layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}}}) {
+			if layout.bottom_count == 2 {
+				slot(session, {column = -1}, {clay.SizingPercent(layout.bottom_split), clay.SizingGrow()})
+				divider({.Bottom_Edge, 0})
+				slot(session, {column = -1, lower = true}, {clay.SizingGrow(), clay.SizingGrow()})
+			} else {
+				slot(session, {column = -1}, {clay.SizingGrow(), clay.SizingGrow()})
+			}
+		}
+	}
+}
+
+// One slot, showing whichever panel is assigned to it. While a panel is
+// dragged, the slot under the mouse is outlined as the drop target.
+@(private = "file")
+slot :: proc(session: ^Session, slot: Slot, sizing: clay.Sizing) {
+	colors := palette()
+	outline: clay.BorderElementConfig
+	if dragged, dragging := panel_layout.dragging_panel.?; dragging && clay.PointerOver(slot_id(slot)) {
+		if source, shown := slot_of(dragged).?; shown && source != slot {
+			outline = {colors.accent, clay.BorderOutside(4)}
+		}
+	}
+	if clay.UI(slot_id(slot))({layout = {sizing = sizing}, border = outline, cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS)}) {
+		switch panel_in(slot) {
+		case .Code:
+			code_panel(session)
+		case .Encoding:
+			encoding_panel(session)
+		case .Side:
+			side_panel(session)
+		case .Registers:
+			registers_panel(session)
+		case .Explanation:
+			explanation_panel(session)
+		}
+	}
+}
+
+// The gap between two slots: a bar appears in it on hover or while
+// dragging.
+@(private = "file")
+divider :: proc(divider: Divider) {
+	colors := palette()
+	vertical := divider.kind == .Column_Edge || divider.kind == .Bottom_Edge
+	sizing := clay.Sizing{clay.SizingGrow(), clay.SizingFixed(DIVIDER_THICKNESS)}
+	bar := clay.Sizing{clay.SizingGrow(), clay.SizingFixed(4)}
+	if vertical {
+		sizing = clay.Sizing{clay.SizingFixed(DIVIDER_THICKNESS), clay.SizingGrow()}
+		bar = clay.Sizing{clay.SizingFixed(4), clay.SizingGrow()}
+	}
+	active := panel_layout.dragging_divider == divider || clay.PointerOver(divider_id(divider))
+	if clay.UI(divider_id(divider))({layout = {sizing = sizing, childAlignment = {x = .Center, y = .Center}}}) {
+		if active {
+			if clay.UI()({layout = {sizing = bar}, backgroundColor = colors.accent, cornerRadius = clay.CornerRadiusAll(2)}) {}
+		}
+	}
+}
+
+// The register list as a panel of its own (the middle column),
+// scrolling with the mouse wheel when it doesn't fit.
+@(private = "file")
+registers_panel :: proc(session: ^Session) {
+	if clay.UI(clay.ID("RegistersPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
+		panel_header(.Registers, "Registers")
+		if clay.UI(clay.ID("RegistersContent"))({
+			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
+			clip = {horizontal = true, vertical = true, childOffset = clay.GetScrollOffset()},
+		}) {
+			register_list(session)
+		}
+	}
+}
+
+// The handle a panel is dragged by: "::" at the start of its header.
+@(private = "file")
+panel_grip :: proc(panel: Panel) {
+	colors := palette()
+	color := colors.title if clay.PointerOver(grip_id(panel)) else colors.text_dim
+	if clay.UI(grip_id(panel))({layout = {padding = {2, 8, 2, 2}, childAlignment = {y = .Center}}}) {
+		clay.TextDynamic("::", text_config(.Title, color))
+	}
+}
+
+// A panel's header: its grip and its title.
+@(private = "file")
+panel_header :: proc(panel: Panel, title: string) {
+	colors := palette()
+	if clay.UI()({layout = {padding = {bottom = 6}, childAlignment = {y = .Center}}}) {
+		panel_grip(panel)
+		clay.TextDynamic(title, text_config(.Title, colors.title))
+	}
+}
+
+// Follows the mouse while a panel is dragged.
+@(private = "file")
+drag_label :: proc(panel: Panel) {
+	colors := palette()
+	mouse := rl.GetMousePosition()
+	if clay.UI(clay.ID("DragLabel"))({
+		layout = {padding = {10, 10, 6, 6}},
+		floating = {attachTo = .Root, offset = {mouse.x + 16, mouse.y + 16}, zIndex = 100},
+		backgroundColor = colors.panel,
+		border = {colors.accent, clay.BorderOutside(BORDER_WIDTH)},
+		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
+	}) {
+		clay.TextDynamic(fmt.tprintf("Move %s: drop it on another panel to swap", panel_names[panel]), text_config(.Text, colors.text))
+	}
 }
 
 @(private = "file")
@@ -136,14 +263,6 @@ panel_style :: proc(sizing: clay.Sizing, clip := true) -> clay.ElementDeclaratio
 	}
 }
 
-@(private = "file")
-panel_title :: proc(title: string) {
-	colors := palette()
-	if clay.UI()({layout = {padding = {bottom = 6}}}) {
-		clay.TextDynamic(title, text_config(.Title, colors.title))
-	}
-}
-
 // The code panel: the program's source (with its comments) or its
 // disassembly, whichever tab is selected, scrolled so the current
 // instruction is a third of the way down.
@@ -155,7 +274,8 @@ code_panel :: proc(session: ^Session) {
 		if shown == .Source && !session.has_source {
 			shown = .Disassembly
 		}
-		if clay.UI(clay.ID("CodeTabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
+		if clay.UI(clay.ID("CodeTabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
+			panel_grip(.Code)
 			if session.has_source {
 				tab(TAB_ID_SOURCE, "Source", shown == .Source)
 			}
@@ -318,8 +438,8 @@ disassembly_view :: proc(session: ^Session) {
 @(private = "file")
 encoding_panel :: proc(session: ^Session) {
 	colors := palette()
-	if clay.UI(clay.ID("EncodingPanel"))(panel_style({clay.SizingGrow(), clay.SizingFit()})) {
-		panel_title("Encoding")
+	if clay.UI(clay.ID("EncodingPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
+		panel_header(.Encoding, "Encoding")
 
 		pc := session.machine.cpu.pc
 		raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
@@ -367,7 +487,8 @@ visible_lines :: proc(line_height: int) -> int {
 side_panel :: proc(session: ^Session) {
 	// No clip on the panel itself: SideContent is the scrolling area.
 	if clay.UI(clay.ID("SidePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
-		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}}}) {
+		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
+			panel_grip(.Side)
 			tab(TAB_ID_PROGRAMS, "Programs", view.side_tab == .Programs)
 			tab(TAB_ID_REGISTERS, "Registers", view.side_tab == .Registers)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
@@ -580,7 +701,8 @@ register_use_tag :: proc(use: Register_Use) {
 @(private = "file")
 explanation_panel :: proc(session: ^Session) {
 	colors := palette()
-	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingFit()})) {
+	if clay.UI(clay.ID("ExplanationPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
+		panel_header(.Explanation, "Explanation")
 		status_color := colors.stopped if session.stopped != nil || session.exited != nil else colors.text
 		explanation_line("Status", explain_status(session), status_color)
 		explanation_line("Next", explain_next(session), colors.text)

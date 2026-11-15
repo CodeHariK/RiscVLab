@@ -28,6 +28,7 @@ run :: proc() -> int {
 		return 2
 	}
 
+	reset_panel_layout()
 	if tests_root != "" {
 		catalog_load(tests_root)
 	}

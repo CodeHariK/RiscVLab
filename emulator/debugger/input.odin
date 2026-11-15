@@ -33,6 +33,10 @@ TAB_ID_DISASSEMBLY :: "DisassemblyTab"
 TAB_ID_STEPS :: "StepsTab"
 
 handle_input :: proc(session: ^Session) {
+	// Dragging a divider or a panel (panel_layout.odin) takes the mouse.
+	if handle_panel_input() {
+		return
+	}
 	if button_clicked(BUTTON_ID_START) {
 		session_start(session)
 	}

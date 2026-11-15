@@ -36,6 +36,6 @@ View_State :: struct {
 view := View_State {
 	memory_layout    = .Words,
 	code_tab         = .Source,
-	side_tab         = .Registers,
+	side_tab         = .Csrs, // Registers have their own column
 	selected_program = -1,
 }

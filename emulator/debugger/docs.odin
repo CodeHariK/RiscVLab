@@ -20,18 +20,34 @@ embedded_instruction_docs := #load("../../docs/reference/instructions.md", strin
 embedded_pseudo_docs := #load("../../docs/reference/pseudo-instructions.md", string)
 @(rodata)
 embedded_directive_docs := #load("../../docs/reference/directives.md", string)
+@(rodata)
+embedded_csr_docs := #load("../../docs/reference/csrs.md", string)
+@(rodata)
+embedded_trap_docs := #load("../../docs/reference/traps.md", string)
+@(rodata)
+embedded_elf_docs := #load("../../docs/reference/elf.md", string)
+@(rodata)
+embedded_term_docs := #load("../../docs/reference/terms.md", string)
 
 // Which file an entry comes from; the Docs window's list is grouped by it.
 Doc_Group :: enum {
 	Instructions,
 	Pseudo_Instructions,
 	Directives,
+	Csrs,
+	Traps,
+	Elf,
+	Terms,
 }
 
 doc_group_names := [Doc_Group]string {
 	.Instructions        = "Instructions",
 	.Pseudo_Instructions = "Pseudo-instructions",
 	.Directives          = "Assembler directives",
+	.Csrs                = "CSRs",
+	.Traps               = "Traps and privilege",
+	.Elf                 = "ELF and memory",
+	.Terms               = "Terms",
 }
 
 Doc_Entry :: struct {
@@ -39,6 +55,9 @@ Doc_Entry :: struct {
 	names: []string, // e.g. {"lb", "lh", ...}; point into the embedded text
 	title: string, // "Load from memory"
 	lines: []string, // the body, without trailing blank lines
+	// Heading and body in lower case, for the search (search.odin).
+	search_heading: string,
+	search_body: string,
 }
 
 Docs :: struct {
@@ -52,12 +71,18 @@ docs_load :: proc() {
 	docs_add_file(embedded_instruction_docs, .Instructions)
 	docs_add_file(embedded_pseudo_docs, .Pseudo_Instructions)
 	docs_add_file(embedded_directive_docs, .Directives)
+	docs_add_file(embedded_csr_docs, .Csrs)
+	docs_add_file(embedded_trap_docs, .Traps)
+	docs_add_file(embedded_elf_docs, .Elf)
+	docs_add_file(embedded_term_docs, .Terms)
 }
 
 docs_destroy :: proc() {
 	for entry in docs.entries {
 		delete(entry.names)
 		delete(entry.lines)
+		delete(entry.search_heading)
+		delete(entry.search_body)
 	}
 	delete(docs.entries)
 }
@@ -72,6 +97,28 @@ docs_find :: proc(name: string) -> int {
 		}
 	}
 	return -1
+}
+
+// Entry indices that match the docs search: entries whose heading matches
+// first, then those where only the body does. All of them, in order, when
+// the search is empty.
+docs_filtered :: proc() -> []int {
+	query := search_text(&view.docs_search)
+	matches := make([dynamic]int, context.temp_allocator)
+	for entry, index in docs.entries {
+		if search_matches(query, entry.search_heading) {
+			append(&matches, index)
+		}
+	}
+	if query == "" {
+		return matches[:]
+	}
+	for entry, index in docs.entries {
+		if !search_matches(query, entry.search_heading) && search_matches(query, entry.search_body) {
+			append(&matches, index)
+		}
+	}
+	return matches[:]
 }
 
 // "lb lh lw ... - Load from memory": the entry's heading, for lists.
@@ -127,6 +174,10 @@ docs_finish_entry :: proc(index: int, body: ^[dynamic]string) {
 	}
 	lines := make([]string, end - start)
 	copy(lines, body[start:end])
-	docs.entries[index].lines = lines
+	entry := &docs.entries[index]
+	entry.lines = lines
+	heading := strings.join({strings.join(entry.names, " ", context.temp_allocator), entry.title}, " ", context.temp_allocator)
+	entry.search_heading = strings.to_lower(heading)
+	entry.search_body = strings.to_lower(strings.join(lines, " ", context.temp_allocator))
 	clear(body)
 }

@@ -29,7 +29,7 @@ import rl "vendor:raylib"
 Panel :: enum {
 	Code,
 	Encoding,
-	Side,      // tabbed: Programs, CSRs, Memory, ELF
+	Side,      // tabbed: CSRs, Memory, ELF
 	Registers, // the register list (the middle column)
 }
 

@@ -11,7 +11,7 @@ import rl "vendor:raylib"
 //   +------------------------------------------------------------+
 //   | [Reset] [Prev] [Next]   program   step   pc   status       |  toolbar
 //   +-----------------------------------+------------------------+
-//   | [Source][Disassembly][Steps]      | [Programs][Regs][CSRs].|
+//   | [Source][Disassembly][Steps]      | [CSRs][Memory][ELF]    |
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
 //   +-----------------------------------+------------------------+
@@ -47,6 +47,7 @@ build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.
 	if panel, dragging := panel_layout.dragging_panel.?; dragging {
 		drag_label(panel)
 	}
+	programs_modal(session)
 	docs_modal(session)
 	return clay.EndLayout(frame_time)
 }
@@ -209,6 +210,7 @@ toolbar :: proc(session: ^Session) {
 
 		// Settings, pushed to the right edge.
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
+		button(BUTTON_ID_PROGRAMS, "Programs (~ / P)")
 		button(BUTTON_ID_DOCS, "Docs (D)")
 		button(BUTTON_ID_THEME, settings_theme_label())
 	}
@@ -475,7 +477,6 @@ side_panel :: proc(session: ^Session) {
 	if clay.UI(clay.ID("SidePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
 		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
 			panel_grip(.Side)
-			tab(TAB_ID_PROGRAMS, "Programs", view.side_tab == .Programs)
 			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
 			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
 			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
@@ -491,8 +492,6 @@ side_panel :: proc(session: ^Session) {
 				memory_list(session)
 			case .Elf:
 				program_info(session)
-			case .Programs:
-				program_list()
 			}
 		}
 	}
@@ -515,45 +514,6 @@ tab :: proc(id: string, label: string, selected: bool) {
 		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
 	}) {
 		clay.TextDynamic(label, text_config(.Text, colors.button_text if selected else colors.text_dim))
-	}
-}
-
-// The program selector: every program in the catalog, grouped, with its
-// title and one-line description. Clicking one opens it (input.odin).
-@(private = "file")
-program_list :: proc() {
-	colors := palette()
-	if len(catalog.entries) == 0 {
-		clay.TextDynamic("No program list: start rvdbg with --tests <tests folder>.", text_config(.Text, colors.text_dim))
-		return
-	}
-
-	previous_group := -1
-	for entry, index in catalog.entries {
-		if int(entry.group) != previous_group {
-			previous_group = int(entry.group)
-			if clay.UI(clay.ID("ProgramGroup", u32(entry.group)))({layout = {padding = {4, 4, 10, 4}}}) {
-				clay.TextDynamic(catalog_group_names[entry.group], text_config(.Title, colors.title))
-			}
-		}
-
-		element_id := clay.ID(PROGRAM_ROW_ID, u32(index))
-		background := COLOR_NONE
-		if index == view.selected_program {
-			background = colors.current_line
-		} else if clay.PointerOver(element_id) {
-			background = colors.button_hover
-		}
-		if clay.UI(element_id)({
-			layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {8, 8, 4, 4}, childGap = 2},
-			backgroundColor = background,
-			cornerRadius = clay.CornerRadiusAll(4),
-		}) {
-			clay.TextDynamic(entry.title, text_config(.Text, colors.text))
-			if entry.description != "" {
-				clay.TextDynamic(entry.description, text_config(.Code_Small, colors.text_dim))
-			}
-		}
 	}
 }
 

@@ -12,7 +12,7 @@ import rl "vendor:raylib"
 //
 //   rvdbg [program] [--tests <tests folder>]
 //
-// With --tests, the Programs tab lists the lessons and tests found there.
+// With --tests, the Programs window lists the lessons and tests found there.
 //
 // Controls: Reset, Prev / Next (buttons, or the left / right arrow keys).
 main :: proc() {
@@ -36,7 +36,7 @@ run :: proc() -> int {
 	}
 	if program_path == "" && len(catalog.entries) > 0 {
 		program_path = catalog.entries[0].path
-		view.side_tab = .Programs
+		view.programs_open = true // let the user pick one
 	}
 	if program_path == "" {
 		fmt.eprintln("error: no program given and none found (build the tests first)")

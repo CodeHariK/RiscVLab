@@ -5,7 +5,6 @@ package rvdbg
 // Changed by clicking the tabs (input.odin).
 
 Side_Tab :: enum {
-	Programs,  // the program selector (catalog.odin)
 	Csrs,      // control and status registers, privilege level
 	Memory,    // hex dump around the address being used
 	Elf,       // what the loader found in the program file
@@ -38,6 +37,20 @@ View_State :: struct {
 	// in its list, or -1 to follow the next instruction.
 	docs_open:        bool,
 	docs_pinned:      int,
+	docs_search:      Search_Field,
+	// Set by Up / Down: scroll the list to the chosen entry (next frame).
+	docs_scroll_pending: bool,
+	docs_list_scroll: Saved_Scroll,
+	docs_page_scroll: Saved_Scroll,
+	// The Programs window (programs_modal.odin): open or not, its search,
+	// and the chosen row (a position in the filtered list). Both windows
+	// keep their search, choice and scroll positions while closed, so they
+	// reopen where they were left.
+	programs_open:    bool,
+	programs_search:  Search_Field,
+	program_cursor:   int,
+	programs_scroll_pending: bool,
+	programs_list_scroll: Saved_Scroll,
 	// The catalog entry currently open, or -1 (a file not in the list).
 	selected_program: int,
 }
@@ -45,7 +58,7 @@ View_State :: struct {
 view := View_State {
 	memory_layout    = .Words,
 	code_tab         = .Source,
-	side_tab         = .Csrs, // Registers have their own column
+	side_tab         = .Csrs,
 	selected_program = -1,
 	docs_pinned      = -1,
 }

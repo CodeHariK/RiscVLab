@@ -20,7 +20,7 @@ make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ### Step debugger
 
 ```
-make debug-ui                                              # opens the first lesson; pick others in the Programs tab
+make debug-ui                                              # opens the first lesson and the Programs window (P) to pick others
 make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 

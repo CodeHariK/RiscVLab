@@ -56,9 +56,12 @@ exec_op_imm :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 }
 
 // ADD / SUB / SLL / SLT / SLTU / XOR / SRL / SRA / OR / AND.
-// The M extension (MUL, DIV, ...) will also live under this opcode,
-// selected by funct7 = 1.
+// The M extension (MUL, DIV, ...) shares this opcode, selected by
+// funct7 = 1 (rv64m.odin).
 exec_op :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	if funct7(instruction) == FUNCT7_MULDIV {
+		return exec_muldiv(cpu, instruction)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	b := reg_read(cpu, rs2(instruction))
 	shift_amount := b & 0x3F

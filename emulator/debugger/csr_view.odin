@@ -46,7 +46,7 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 		}
 		return fmt.tprintf("%v", rv.Trap_Cause(value))
 	case rv.CSR_MISA:
-		return "RV64I"
+		return "RV64IM"
 	case rv.CSR_MINSTRET:
 		return "instructions retired (= mcycle)"
 	}

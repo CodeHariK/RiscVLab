@@ -194,6 +194,14 @@ op_mnemonic :: proc(instruction: u32) -> string {
 	case (FUNCT7_ALT << 3) | 0b101: return "sra"
 	case (FUNCT7_BASE << 3) | 0b110: return "or"
 	case (FUNCT7_BASE << 3) | 0b111: return "and"
+	case (FUNCT7_MULDIV << 3) | 0b000: return "mul"
+	case (FUNCT7_MULDIV << 3) | 0b001: return "mulh"
+	case (FUNCT7_MULDIV << 3) | 0b010: return "mulhsu"
+	case (FUNCT7_MULDIV << 3) | 0b011: return "mulhu"
+	case (FUNCT7_MULDIV << 3) | 0b100: return "div"
+	case (FUNCT7_MULDIV << 3) | 0b101: return "divu"
+	case (FUNCT7_MULDIV << 3) | 0b110: return "rem"
+	case (FUNCT7_MULDIV << 3) | 0b111: return "remu"
 	}
 	return ""
 }
@@ -206,6 +214,11 @@ op_32_mnemonic :: proc(instruction: u32) -> string {
 	case (FUNCT7_BASE << 3) | 0b001: return "sllw"
 	case (FUNCT7_BASE << 3) | 0b101: return "srlw"
 	case (FUNCT7_ALT << 3) | 0b101: return "sraw"
+	case (FUNCT7_MULDIV << 3) | 0b000: return "mulw"
+	case (FUNCT7_MULDIV << 3) | 0b100: return "divw"
+	case (FUNCT7_MULDIV << 3) | 0b101: return "divuw"
+	case (FUNCT7_MULDIV << 3) | 0b110: return "remw"
+	case (FUNCT7_MULDIV << 3) | 0b111: return "remuw"
 	}
 	return ""
 }

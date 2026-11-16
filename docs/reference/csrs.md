@@ -235,7 +235,7 @@ Fields:
 - MXL (bits 63..62): register width: 1 = 32-bit, 2 = 64-bit.
 - Extensions (bits 25..0): one bit per letter: bit 0 = A, bit 8 = I, bit 12 = M, and so on.
 
-How it works: here misa = 0x8000000000000100: MXL = 2 (RV64) and bit 8 (I).
+How it works: here misa = 0x8000000000001100: MXL = 2 (RV64), bit 8 (I) and bit 12 (M).
 
 For: software that adapts to the hardware it runs on.
 

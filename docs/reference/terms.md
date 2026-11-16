@@ -173,7 +173,7 @@ How it works:
 - M: multiply and divide. A: atomic instructions. C: compressed 16-bit instructions. F, D: floating point.
 - Zicsr: the CSR instructions. Zifencei: `fence.i`.
 
-This emulator implements RV64I + Zicsr + Zifencei (plus machine-mode traps). xv6 needs rv64ima, so M and A come next.
+This emulator implements RV64IM + Zicsr + Zifencei (plus machine-mode traps). xv6 needs rv64ima, so A comes next.
 
 Related: misa
 

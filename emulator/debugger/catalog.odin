@@ -10,7 +10,7 @@ import "core:strings"
 //
 //   Lessons      tests/programs/lessons/*.s   (built into programs/build/lessons/)
 //   Tests        tests/programs/*.s           (built into programs/build/)
-//   riscv-tests  tests/riscv-tests/build/rv64ui-p-*  (if built)
+//   riscv-tests  tests/riscv-tests/build/rv64ui-p-*, rv64um-p-*  (if built)
 //
 // Titles and descriptions come from the first two comment lines of each
 // source file. Only programs that have been built are listed.
@@ -24,7 +24,7 @@ Catalog_Group :: enum {
 catalog_group_names := [Catalog_Group]string {
 	.Lessons     = "Lessons",
 	.Tests       = "Test programs",
-	.Riscv_Tests = "Official riscv-tests (rv64ui)",
+	.Riscv_Tests = "Official riscv-tests (rv64ui, rv64um)",
 }
 
 Catalog_Entry :: struct {
@@ -76,10 +76,11 @@ add_programs :: proc(group: Catalog_Group, source_dir: string, build_dir: string
 @(private = "file")
 add_riscv_tests :: proc(build_dir: string) {
 	for name in sorted_file_names(build_dir, "") {
-		if !strings.has_prefix(name, "rv64ui-p-") || strings.contains(name, ".") {
+		is_test := strings.has_prefix(name, "rv64ui-p-") || strings.has_prefix(name, "rv64um-p-")
+		if !is_test || strings.contains(name, ".") {
 			continue // skip the .s / .o / .dis files next to each test
 		}
-		instruction := strings.trim_prefix(name, "rv64ui-p-")
+		instruction := name[len("rv64ui-p-"):] // both prefixes have this length
 		append(
 			&catalog.entries,
 			Catalog_Entry {

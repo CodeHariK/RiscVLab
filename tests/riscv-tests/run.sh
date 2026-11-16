@@ -12,7 +12,7 @@ build=${2:-$(dirname "$0")/build}
 passed=0
 failed=0
 failures=""
-for test in "$build"/rv64ui-p-*; do
+for test in "$build"/rv64u?-p-*; do
     case "$(basename "$test")" in *.*) continue ;; esac  # skip .dis / .lines files
     name=$(basename "$test")
     if output=$("$emulator" "$test" --max-steps 1000000 2>&1); then

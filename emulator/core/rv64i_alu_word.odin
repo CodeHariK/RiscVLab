@@ -36,6 +36,9 @@ exec_op_imm_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 
 // ADDW / SUBW / SLLW / SRLW / SRAW.
 exec_op_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	if funct7(instruction) == FUNCT7_MULDIV {
+		return exec_muldiv_32(cpu, instruction) // M extension (rv64m.odin)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	b := reg_read(cpu, rs2(instruction))
 	shift_amount := b & 0x1F

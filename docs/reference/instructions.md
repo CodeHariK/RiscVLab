@@ -333,6 +333,7 @@ mulhsu  -1 * (2^64 - 1) = -(2^64 - 1)        high half 0xffffffffffffffff
 mulhu   (2^64 - 1)^2 = 2^128 - 2^65 + 1      high half 0xfffffffffffffffe
 mul     (all three)                          low half  0x1
 ```
+Lesson 15 shows the wrap-around and both high halves.
 
 For:
 - Detecting overflow: the product fits in 64 bits only if the high half is just the sign extension of the low half (all zeros, or all ones for a negative result).
@@ -370,7 +371,7 @@ Division never traps. Two cases have no real answer, so the spec defines one:
 divide by zero           all ones (-1 / 2^64-1)     the dividend
 -2^63 / -1 (div only)    the dividend (-2^63)       0
 ```
-The second case is overflow: the smallest i64 is -2^63 (0x8000000000000000, `min(i64)` in Odin), but the largest is 2^63 - 1, so +2^63 does not fit. Two's complement has one more negative number than positive ones. Many CPUs (x86) crash on this division; RISC-V gives the dividend back. Software that cares checks the divisor first.
+The second case is overflow: the smallest i64 is -2^63 (0x8000000000000000, `min(i64)` in Odin), but the largest is 2^63 - 1, so +2^63 does not fit. Two's complement has one more negative number than positive ones. Many CPUs (x86) crash on this division; RISC-V gives the dividend back. Software that cares checks the divisor first. Lesson 15 runs each of these cases.
 
 For: averages, converting numbers to decimal digits (`remu` by 10, `divu` by 10), wrapping an index around a buffer (`remu` by its size).
 

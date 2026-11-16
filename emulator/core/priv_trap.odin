@@ -53,6 +53,9 @@ trap_enter :: proc(cpu: ^Cpu, trap: Trap) {
 
 	cpu.privilege = .Machine
 	cpu.pc = csr.mtvec &~ 0b11
+
+	// An SC must not succeed across a trap (rv64a.odin).
+	reservation_set(cpu, Reservation{})
 }
 
 // The environment-call cause for the current privilege level.

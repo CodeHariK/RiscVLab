@@ -60,6 +60,10 @@ next_memory_access :: proc(session: ^Session) -> Memory_Access {
 		return {.Load, base + rv.imm_i(instruction), size}
 	case rv.OPCODE_STORE:
 		return {.Store, base + rv.imm_s(instruction), size}
+	case rv.OPCODE_AMO:
+		// No offset; LR only reads, SC and the AMOs write.
+		kind := Memory_Access_Kind.Load if rv.funct5(instruction) == rv.AMO_LR else .Store
+		return {kind, base, size}
 	}
 	return {}
 }

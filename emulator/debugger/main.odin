@@ -49,6 +49,7 @@ run :: proc() -> int {
 	}
 	defer session_destroy(&session)
 	view.selected_program = catalog_find(program_path)
+	docs_show_lesson(&session)
 
 	clay_memory := init_clay()
 	defer free(clay_memory)

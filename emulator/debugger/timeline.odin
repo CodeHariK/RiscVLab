@@ -22,7 +22,8 @@ Step_Inputs :: struct {
 	rs1_value:  u64,
 	rs2_value:  u64,
 	csr_value:  u64, // a CSR instruction's CSR, before it is written
-	load_value: u64, // the bytes at a load's address, before extension
+	load_value: u64, // the bytes at a load's (or atomic's) address, before extension
+	reservation: rv.Reservation, // the LR reservation, for explaining an SC
 }
 
 Timeline_Entry :: struct {
@@ -56,6 +57,10 @@ step_inputs_capture :: proc(session: ^Session, instruction: u32) -> Step_Inputs 
 		address := inputs.rs1_value + rv.imm_i(instruction)
 		size := u64(1) << (rv.funct3(instruction) & 0b11)
 		inputs.load_value, _ = rv.bus_load(&machine.bus, address, size)
+	case rv.OPCODE_AMO:
+		size := u64(1) << (rv.funct3(instruction) & 0b11)
+		inputs.load_value, _ = rv.bus_load(&machine.bus, inputs.rs1_value, size)
+		inputs.reservation = machine.cpu.reservation
 	}
 	return inputs
 }

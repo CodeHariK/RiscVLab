@@ -71,6 +71,8 @@ execute :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 		return exec_op_32(cpu, instruction)
 	case OPCODE_MISC_MEM:
 		return exec_misc_mem(instruction)
+	case OPCODE_AMO:
+		return exec_amo(cpu, bus, instruction)
 	case OPCODE_SYSTEM:
 		return exec_system(cpu, instruction)
 	}

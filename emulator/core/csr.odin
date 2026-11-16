@@ -50,9 +50,9 @@ MSTATUS_MPIE :: u64(1) << 7 // MIE before the last trap
 MSTATUS_MPP :: u64(0b11) << 11 // privilege level before the last trap
 
 // misa: MXL = 2 (64-bit) in bits 63:62, then one bit per extension letter
-// (bit 0 = A, ..., bit 8 = I, bit 12 = M): RV64IM. Zicsr and Zifencei
+// (bit 0 = A, ..., bit 8 = I, bit 12 = M): RV64IMA. Zicsr and Zifencei
 // have no letter.
-MISA_VALUE :: u64(2) << 62 | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A')
+MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A')
 
 // Interrupt bits in mie / mip: software, timer and external interrupts,
 // for machine mode. (Supervisor bits come with supervisor mode.)

@@ -112,6 +112,9 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		// Restore the exact old value (no WARL fix-ups on the way back).
 		csr_restore(&machine.cpu, record.csr_address, record.csr_old)
 	}
+	if record.reservation_changed {
+		machine.cpu.reservation = record.reservation_old
+	}
 	if record.trap_taken {
 		machine.cpu.csr.mstatus = record.trap_mstatus
 		machine.cpu.csr.mepc = record.trap_mepc

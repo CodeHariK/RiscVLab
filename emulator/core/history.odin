@@ -30,6 +30,9 @@ Undo_Record :: struct {
 	csr_changed:      bool,
 	csr_address:      u32,
 	csr_old:          u64,
+	// The LR / SC reservation the step changed, if any (rv64a.odin).
+	reservation_changed: bool,
+	reservation_old:     Reservation,
 	// If the step trapped into a handler: the CSRs trap entry overwrote.
 	// (PC and privilege are restored from the fields above.)
 	trap_taken:       bool,
@@ -39,8 +42,8 @@ Undo_Record :: struct {
 	trap_mtval:       u64,
 }
 
-// Default number of steps that can be undone. Each record is 104 bytes,
-// so this is 26 MiB. When full, the oldest steps are forgotten.
+// Default number of steps that can be undone. Each record is 152 bytes,
+// so this is 38 MiB (taken from the OS only as it is used). When full, the oldest steps are forgotten.
 HISTORY_CAPACITY_DEFAULT :: 256 * 1024
 
 // Fixed-size ring buffer of undo records, newest last.

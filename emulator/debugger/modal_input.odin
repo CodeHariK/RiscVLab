@@ -103,6 +103,7 @@ open_program :: proc(session: ^Session, index: int) {
 	if session_open(session, catalog.entries[index].path) {
 		view.selected_program = index
 		view.code_scroll = 0
+		docs_show_lesson(session)
 	}
 	view.programs_open = false
 }
@@ -150,6 +151,12 @@ handle_docs_window :: proc(session: ^Session) {
 	if rl.IsMouseButtonPressed(.LEFT) {
 		for index in docs_filtered() {
 			if clay.PointerOver(clay.ID(DOCS_ENTRY_ID, u32(index))) {
+				view.docs_pinned = index
+				return
+			}
+		}
+		for index in lesson_doc_entries(session) {
+			if clay.PointerOver(clay.ID(DOCS_LESSON_ENTRY_ID, u32(index))) {
 				view.docs_pinned = index
 				return
 			}

@@ -1,6 +1,7 @@
 package rvdbg
 
 import "core:fmt"
+import "core:slice"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
@@ -37,6 +38,9 @@ import rv "../core"
 // Backticks (Markdown code marks) are left out.
 
 DOCS_ENTRY_ID :: "DocsEntry" // + entry index
+DOCS_LESSON_ENTRY_ID :: "DocsLessonEntry" // + entry index, in the "This lesson" group
+// How far into a source file to look for its "# Docs:" line.
+LESSON_HEADER_LINES :: 10
 BUTTON_ID_DOCS_FOLLOW :: "DocsFollow"
 BUTTON_ID_DOCS_CLOSE :: "DocsClose"
 DOCS_LIST_WIDTH :: 420
@@ -83,7 +87,7 @@ docs_panes :: proc(session: ^Session) {
 				layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom},
 				clip = {vertical = true, childOffset = clay.GetScrollOffset()},
 			}) {
-				docs_index(shown)
+				docs_index(session, shown)
 			}
 		}
 		// Clipping only up and down lets the text wrap at the pane's width.
@@ -199,7 +203,16 @@ next_mnemonic :: proc(session: ^Session) -> string {
 	}
 	buffer: [rv.DISASM_BUFFER_SIZE]u8
 	text := rv.disassemble(buffer[:], pc, u32(raw))
-	return strings.clone(first_word(text), context.temp_allocator)
+	// Atomics carry their ordering bits in the name (amoswap.w.aq); the
+	// docs list them without.
+	mnemonic := first_word(text)
+	for suffix in ([]string{".aqrl", ".aq", ".rl"}) {
+		if strings.has_suffix(mnemonic, suffix) {
+			mnemonic = mnemonic[:len(mnemonic) - len(suffix)]
+			break
+		}
+	}
+	return strings.clone(mnemonic, context.temp_allocator)
 }
 
 // `slot` keeps the ids of the (up to two) entries shown apart.
@@ -294,12 +307,21 @@ docs_section_row :: proc(label: string, marker: string, text: string, color: cla
 	}
 }
 
-// The entries that match the search, grouped by file; click one to pin
+// The open lesson's entries first ("This lesson", without a search), then
+// the entries that match the search, grouped by file; click one to pin
 // it. With a search, entries whose heading matches come first, so a group
 // can appear twice.
 @(private = "file")
-docs_index :: proc(shown: int) {
+docs_index :: proc(session: ^Session, shown: int) {
 	colors := palette()
+	if lesson := lesson_doc_entries(session); len(lesson) > 0 && view.docs_search.length == 0 {
+		if clay.UI(clay.ID("DocsLessonTitle"))({layout = {padding = {top = 4, bottom = 4}}}) {
+			clay.TextDynamic("This lesson", text_config(.Title, colors.title))
+		}
+		for index in lesson {
+			docs_row(DOCS_LESSON_ENTRY_ID, index, shown)
+		}
+	}
 	matches := docs_filtered()
 	if len(matches) == 0 {
 		clay.TextDynamic("Nothing matches the search.", text_config(.Code_Small, colors.text_dim))
@@ -315,19 +337,60 @@ docs_index :: proc(shown: int) {
 				clay.TextDynamic(doc_group_names[entry.group], text_config(.Title, colors.title))
 			}
 		}
-		element_id := clay.ID(DOCS_ENTRY_ID, u32(index))
-		background := COLOR_NONE
-		if index == shown {
-			background = colors.current_line
-		} else if clay.PointerOver(element_id) {
-			background = colors.button_hover
+		docs_row(DOCS_ENTRY_ID, index, shown)
+	}
+}
+
+// One clickable entry in the list (`id` + the entry's index).
+@(private = "file")
+docs_row :: proc(id: string, index: int, shown: int) {
+	colors := palette()
+	element_id := clay.ID(id, u32(index))
+	background := COLOR_NONE
+	if index == shown {
+		background = colors.current_line
+	} else if clay.PointerOver(element_id) {
+		background = colors.button_hover
+	}
+	if clay.UI(element_id)({
+		layout = {sizing = {width = clay.SizingGrow()}, padding = {8, 8, 3, 3}},
+		backgroundColor = background,
+		cornerRadius = clay.CornerRadiusAll(4),
+	}) {
+		clay.TextDynamic(docs_heading(docs.entries[index]), text_config(.Code_Small, colors.text))
+	}
+}
+
+// The entries the open program names on a "# Docs: a, b, c" line near the
+// top of its source (every lesson has one), in that order.
+lesson_doc_entries :: proc(session: ^Session) -> []int {
+	if !session.has_source {
+		return nil
+	}
+	entries := make([dynamic]int, context.temp_allocator)
+	for line, number in session.source.lines {
+		if number >= LESSON_HEADER_LINES {
+			break
 		}
-		if clay.UI(element_id)({
-			layout = {sizing = {width = clay.SizingGrow()}, padding = {8, 8, 3, 3}},
-			backgroundColor = background,
-			cornerRadius = clay.CornerRadiusAll(4),
-		}) {
-			clay.TextDynamic(docs_heading(entry), text_config(.Code_Small, colors.text))
+		text := strings.trim_space(line)
+		if !strings.has_prefix(text, "# Docs:") {
+			continue
+		}
+		for name in strings.split(text[len("# Docs:"):], ",", context.temp_allocator) {
+			index := docs_find(strings.trim_space(name))
+			if index >= 0 && !slice.contains(entries[:], index) {
+				append(&entries, index)
+			}
 		}
 	}
+	return entries[:]
+}
+
+// After opening a program: the Docs window starts on the lesson's first
+// entry (or follows the next instruction if it names none).
+docs_show_lesson :: proc(session: ^Session) {
+	entries := lesson_doc_entries(session)
+	view.docs_pinned = entries[0] if len(entries) > 0 else -1
+	view.docs_scroll_pending = true
+	view.docs_page_scroll.position = {}
 }

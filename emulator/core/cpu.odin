@@ -32,9 +32,29 @@ Cpu :: struct {
 	privilege:  Privilege,
 	// Last register write, for tracing. Cleared at the start of each step.
 	last_write: Register_Write,
+	// The address LR reserved for the next SC (rv64a.odin).
+	reservation: Reservation,
 	// What the current instruction overwrote, so it can be undone.
 	// Filled in during the step; `machine_step` saves it to the history.
 	undo:       Undo_Record,
+}
+
+// What LR.W / LR.D reserved: SC succeeds only on the same address and
+// size while this is still valid.
+Reservation :: struct {
+	valid:   bool,
+	address: u64,
+	size:    u64,
+}
+
+// Changes the reservation, keeping the old one in the undo record (the
+// first change in a step is the one to restore).
+reservation_set :: proc(cpu: ^Cpu, reservation: Reservation) {
+	if !cpu.undo.reservation_changed {
+		cpu.undo.reservation_changed = true
+		cpu.undo.reservation_old = cpu.reservation
+	}
+	cpu.reservation = reservation
 }
 
 reg_read :: #force_inline proc(cpu: ^Cpu, index: u32) -> u64 {

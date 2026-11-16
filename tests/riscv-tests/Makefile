@@ -1,10 +1,10 @@
 # Builds the official riscv-tests for the emulator.
 #
 #   ./fetch.sh        once: download the tests into src/
-#   make              build every rv64ui-p and rv64um-p test into build/
+#   make              build every rv64ui-p, rv64um-p and rv64ua-p test into build/
 #
 # rv64ui = 64-bit user-level integer instructions, rv64um = multiply and
-# divide (the M extension); -p = the "physical" environment: no virtual
+# divide (the M extension), rv64ua = atomics (the A extension); -p = the "physical" environment: no virtual
 # memory, runs in machine mode. Each test is an
 # ELF that reports through `tohost`: exit code 0 = pass, n = test n failed.
 #
@@ -19,14 +19,16 @@ CROSS   ?= riscv64-elf-
 PREPROCESS ?= clang -E -P -x assembler-with-cpp
 DEFINES := -D__riscv_xlen=64
 INCLUDE := -I$(SRC)/env/p -I$(SRC)/env -I$(SRC)/isa/macros/scalar
-ARCH    := -march=rv64im_zicsr_zifencei -mabi=lp64
+ARCH    := -march=rv64ima_zicsr_zifencei -mabi=lp64
 LINK    := $(SRC)/env/p/link.ld
 
 # The suites' own lists of tests (rv64ui_sc_tests, rv64um_sc_tests).
 -include $(SRC)/isa/rv64ui/Makefrag
 -include $(SRC)/isa/rv64um/Makefrag
+-include $(SRC)/isa/rv64ua/Makefrag
 TESTS := $(addprefix $(BUILD)/rv64ui-p-,$(rv64ui_sc_tests)) \
-         $(addprefix $(BUILD)/rv64um-p-,$(rv64um_sc_tests))
+         $(addprefix $(BUILD)/rv64um-p-,$(rv64um_sc_tests)) \
+         $(addprefix $(BUILD)/rv64ua-p-,$(rv64ua_sc_tests))
 LINES := $(addsuffix .lines,$(TESTS))
 
 .PHONY: all clean check-source
@@ -46,6 +48,9 @@ $(BUILD)/rv64ui-p-%: $(SRC)/isa/rv64ui/%.S
 $(BUILD)/rv64um-p-%: $(SRC)/isa/rv64um/%.S
 	$(call build_test,rv64um-$*)
 
+$(BUILD)/rv64ua-p-%: $(SRC)/isa/rv64ua/%.S
+	$(call build_test,rv64ua-$*)
+
 # $(1): a name for the intermediate files, e.g. rv64ui-add.
 define build_test
 	@mkdir -p $(BUILD)
@@ -63,6 +68,9 @@ $(BUILD)/rv64ui-p-%.lines: $(BUILD)/rv64ui-p-%
 
 $(BUILD)/rv64um-p-%.lines: $(BUILD)/rv64um-p-%
 	$(call line_map,rv64um-$*)
+
+$(BUILD)/rv64ua-p-%.lines: $(BUILD)/rv64ua-p-%
+	$(call line_map,rv64ua-$*)
 
 define line_map
 	@echo "source $(abspath $(BUILD)/$(1).s)" > $@

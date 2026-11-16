@@ -25,6 +25,8 @@ embedded_csr_docs := #load("../../docs/reference/csrs.md", string)
 @(rodata)
 embedded_trap_docs := #load("../../docs/reference/traps.md", string)
 @(rodata)
+embedded_concurrency_docs := #load("../../docs/reference/concurrency.md", string)
+@(rodata)
 embedded_elf_docs := #load("../../docs/reference/elf.md", string)
 @(rodata)
 embedded_term_docs := #load("../../docs/reference/terms.md", string)
@@ -36,6 +38,7 @@ Doc_Group :: enum {
 	Directives,
 	Csrs,
 	Traps,
+	Concurrency,
 	Elf,
 	Terms,
 }
@@ -46,6 +49,7 @@ doc_group_names := [Doc_Group]string {
 	.Directives          = "Assembler directives",
 	.Csrs                = "CSRs",
 	.Traps               = "Traps and privilege",
+	.Concurrency         = "Atomics, locks, ordering",
 	.Elf                 = "ELF and memory",
 	.Terms               = "Terms",
 }
@@ -73,6 +77,7 @@ docs_load :: proc() {
 	docs_add_file(embedded_directive_docs, .Directives)
 	docs_add_file(embedded_csr_docs, .Csrs)
 	docs_add_file(embedded_trap_docs, .Traps)
+	docs_add_file(embedded_concurrency_docs, .Concurrency)
 	docs_add_file(embedded_elf_docs, .Elf)
 	docs_add_file(embedded_term_docs, .Terms)
 }

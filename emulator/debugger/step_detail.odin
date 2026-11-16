@@ -178,6 +178,8 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			text = fmt.tprintf("%s -> %s", text, value_text(entry.register_new))
 		}
 		return text
+	case rv.OPCODE_AMO:
+		return atomic_memory_text(session, entry, size)
 	case rv.OPCODE_STORE:
 		record := entry.record
 		return fmt.tprintf(
@@ -191,6 +193,31 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 		)
 	}
 	return ""
+}
+
+// LR: the load and the reservation; SC: the store, or why it didn't
+// happen; AMO: the old value read and the new one written, in one step.
+@(private = "file")
+atomic_memory_text :: proc(session: ^Session, entry: Timeline_Entry, size: u64) -> string {
+	instruction := entry.instruction
+	address := entry.rs1_value
+	place := symbol_label(session, address)
+	switch rv.funct5(instruction) {
+	case rv.AMO_LR:
+		return fmt.tprintf("load %d bytes @ 0x%x%s -> 0x%s, and reserve 0x%x for an SC", size, address, place, hex_digits(entry.load_value, size), address)
+	case rv.AMO_SC:
+		if !entry.record.memory_changed {
+			return "nothing stored: the reservation didn't hold"
+		}
+		return fmt.tprintf("store %d bytes @ 0x%x%s: %s -> %s", size, address, place, value_text(entry.record.memory_old), value_text(entry.memory_new))
+	}
+	return fmt.tprintf(
+		"in one step: read 0x%s @ 0x%x%s, write %s back",
+		hex_digits(entry.load_value, size),
+		address,
+		place,
+		value_text(entry.memory_new),
+	)
 }
 
 // `size` bytes of `value` as hex, all digits shown: 0000000a.

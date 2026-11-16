@@ -6,7 +6,7 @@
 #   make CROSS=riscv64-unknown-elf-
 
 CROSS     ?= riscv64-elf-
-ARCH      := -march=rv64im_zicsr -mabi=lp64
+ARCH      := -march=rv64ima_zicsr -mabi=lp64
 # -g: record which source line each instruction came from (DWARF line
 # table), so the debugger can show the source. The code itself is unchanged.
 ASFLAGS   := -g

@@ -81,6 +81,16 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 		case 0b001:
 			return fmt.bprintf(buffer, "fence.i")
 		}
+	case OPCODE_AMO:
+		if name := amo_mnemonic(instruction); name != "" {
+			order := amo_order_suffix(instruction)
+			switch funct5(instruction) {
+			case AMO_LR:
+				return fmt.bprintf(buffer, "%s%s %s,(%s)", name, order, d, s1)
+			case:
+				return fmt.bprintf(buffer, "%s%s %s,%s,(%s)", name, order, d, s2, s1)
+			}
+		}
 	case OPCODE_SYSTEM:
 		if name := zicsr_mnemonic(instruction); name != "" {
 			csr_buffer: [8]u8
@@ -219,6 +229,47 @@ op_32_mnemonic :: proc(instruction: u32) -> string {
 	case (FUNCT7_MULDIV << 3) | 0b101: return "divuw"
 	case (FUNCT7_MULDIV << 3) | 0b110: return "remw"
 	case (FUNCT7_MULDIV << 3) | 0b111: return "remuw"
+	}
+	return ""
+}
+
+// "amoadd.w", "lr.d", ...; "" if it doesn't exist (LR with rs2 != 0
+// included).
+@(private = "file")
+amo_mnemonic :: proc(instruction: u32) -> string {
+	word := funct3(instruction) == AMO_WORD
+	if !word && funct3(instruction) != AMO_DOUBLE {
+		return ""
+	}
+	switch funct5(instruction) {
+	case AMO_LR:
+		if rs2(instruction) != 0 {
+			return ""
+		}
+		return "lr.w" if word else "lr.d"
+	case AMO_SC: return "sc.w" if word else "sc.d"
+	case AMO_SWAP: return "amoswap.w" if word else "amoswap.d"
+	case AMO_ADD: return "amoadd.w" if word else "amoadd.d"
+	case AMO_XOR: return "amoxor.w" if word else "amoxor.d"
+	case AMO_AND: return "amoand.w" if word else "amoand.d"
+	case AMO_OR: return "amoor.w" if word else "amoor.d"
+	case AMO_MIN: return "amomin.w" if word else "amomin.d"
+	case AMO_MAX: return "amomax.w" if word else "amomax.d"
+	case AMO_MINU: return "amominu.w" if word else "amominu.d"
+	case AMO_MAXU: return "amomaxu.w" if word else "amomaxu.d"
+	}
+	return ""
+}
+
+// The ordering bits as objdump writes them: ".aq", ".rl", ".aqrl" or "".
+@(private = "file")
+amo_order_suffix :: proc(instruction: u32) -> string {
+	acquire := (instruction >> 26) & 1 != 0
+	release := (instruction >> 25) & 1 != 0
+	switch {
+	case acquire && release: return ".aqrl"
+	case acquire: return ".aq"
+	case release: return ".rl"
 	}
 	return ""
 }

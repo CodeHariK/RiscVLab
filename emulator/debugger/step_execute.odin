@@ -92,6 +92,8 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 		return fmt.tprintf("%s%s", text, muldiv_note(mnemonic, a, b))
 	case rv.OPCODE_MISC_MEM:
 		return "fence: orders memory accesses; nothing to do on one in-order hart"
+	case rv.OPCODE_AMO:
+		return atomic_execute_text(session, entry, mnemonic, s1, s2)
 	case rv.OPCODE_SYSTEM:
 		if rv.funct3(instruction) != 0 {
 			return csr_execute_text(entry, mnemonic, s1)
@@ -100,6 +102,65 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf("unknown encoding: raises %v (mtval = 0x%x)", trap.cause, trap.value)
+	}
+	return "?"
+}
+
+// LR / SC / AMO: the address (rs1, no offset), and for SC whether the
+// reservation holds, for an AMO the new value.
+@(private = "file")
+atomic_execute_text :: proc(session: ^Session, entry: Timeline_Entry, mnemonic: string, s1: string, s2: string) -> string {
+	instruction := entry.instruction
+	address := entry.rs1_value
+	place := symbol_label(session, address)
+	if trap, took_trap := entry.trap.?; took_trap {
+		return fmt.tprintf("address = %s 0x%x: raises %v (atomics must be aligned to their size)", s1, address, trap.cause)
+	}
+	size := u64(1) << (rv.funct3(instruction) & 0b11)
+	switch rv.funct5(instruction) {
+	case rv.AMO_LR:
+		return fmt.tprintf("address = %s 0x%x%s; reserve it, so a later SC there can succeed", s1, address, place)
+	case rv.AMO_SC:
+		reservation := entry.reservation
+		if !reservation.valid {
+			return fmt.tprintf("no reservation (no LR since the last SC or trap): fail, %s = 1", rv.register_name(rv.rd(instruction)))
+		}
+		if reservation.address != address || reservation.size != size {
+			return fmt.tprintf("the reservation is for 0x%x, not 0x%x: fail, rd = 1", reservation.address, address)
+		}
+		return fmt.tprintf("the reservation for 0x%x%s holds: store %s, rd = 0 (success)", address, place, s2)
+	}
+	old := entry.load_value
+	if size == 4 {
+		old = u64(i64(i32(u32(old))))
+	}
+	return fmt.tprintf(
+		"address = %s 0x%x%s; rd = old %s; memory = old %s %s %s = %s",
+		s1,
+		address,
+		place,
+		value_text(old),
+		atomic_operator(mnemonic),
+		s2,
+		value_text(entry.rs2_value),
+		value_text(entry.memory_new),
+	)
+}
+
+// "+" for amoadd, "min (signed) with" for amomin, ...
+@(private = "file")
+atomic_operator :: proc(mnemonic: string) -> string {
+	name := mnemonic[:strings.index_byte(mnemonic, '.')] if strings.contains(mnemonic, ".") else mnemonic
+	switch name {
+	case "amoswap": return "replaced by"
+	case "amoadd": return "+"
+	case "amoand": return "&"
+	case "amoor": return "|"
+	case "amoxor": return "^"
+	case "amomin": return "min (signed) with"
+	case "amomax": return "max (signed) with"
+	case "amominu": return "min (unsigned) with"
+	case "amomaxu": return "max (unsigned) with"
 	}
 	return "?"
 }

@@ -62,6 +62,14 @@ encoding_of :: proc(instruction: u32) -> Encoding {
 		} else {
 			i_type(&encoding)
 		}
+	case rv.OPCODE_AMO:
+		encoding.format = "R-type (atomic)"
+		add_field(&encoding, 31, 27, "funct5", .Funct)
+		add_field(&encoding, 26, 26, "aq", .Funct)
+		add_field(&encoding, 25, 25, "rl", .Funct)
+		add_source_registers(&encoding) // rs2, rs1, funct3 (.w = 010, .d = 011)
+		add_field(&encoding, 11, 7, "rd", .Rd)
+		add_field(&encoding, 6, 0, "opcode", .Opcode)
 	case rv.OPCODE_LOAD, rv.OPCODE_JALR, rv.OPCODE_MISC_MEM:
 		i_type(&encoding)
 	case rv.OPCODE_STORE:
@@ -137,6 +145,9 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 // One line under the fields: the format and the assembled immediate.
 encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> string {
 	switch encoding.format {
+	case "R-type (atomic)":
+		width := "32-bit (.w)" if rv.funct3(instruction) == rv.AMO_WORD else "64-bit (.d)"
+		return fmt.tprintf("R-type (atomic): funct5 picks the operation, %s; aq / rl are ordering hints; address = rs1, no offset", width)
 	case "I-type":
 		return fmt.tprintf("I-type: imm = %s (12 bits, sign-extended)", signed_text(i64(rv.imm_i(instruction))))
 	case "I-type (CSR)":
@@ -238,6 +249,7 @@ opcode_name :: proc(opcode: u32) -> string {
 	case rv.OPCODE_JALR: return "JALR"
 	case rv.OPCODE_JAL: return "JAL"
 	case rv.OPCODE_SYSTEM: return "SYSTEM"
+	case rv.OPCODE_AMO: return "AMO"
 	}
 	return "?"
 }

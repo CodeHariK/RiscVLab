@@ -116,9 +116,11 @@ Related: two's-complement, lb lh lw ld lbu lhu lwu, addiw
 
 Does: how negative numbers are stored: -x is stored as (2^64 - x). -1 is 0xffffffffffffffff, -2 is 0xfffffffffffffffe.
 
-How it works: adding works the same for signed and unsigned numbers, so one `add` serves both. The top bit tells the sign. Only comparisons, right shifts, extension and division need to know which kind a number is; that is why `slt` / `sltu`, `sra` / `srl` and `lb` / `lbu` come in pairs.
+How it works: with 64 bits the signed range is -2^63 (0x8000000000000000) to 2^63 - 1 (0x7fffffffffffffff); in Odin these are `min(i64)` and `max(i64)`. There is one more negative number than positive: -2^63 has no positive partner, so negating it or dividing it by -1 overflows back to -2^63 (see `div`).
 
-Related: sign-extension, slt sltu, blt bge bltu bgeu
+Adding works the same for signed and unsigned numbers, so one `add` serves both. The top bit tells the sign. Only comparisons, right shifts, extension and division need to know which kind a number is; that is why `slt` / `sltu`, `sra` / `srl` and `lb` / `lbu` come in pairs.
+
+Related: sign-extension, slt sltu, blt bge bltu bgeu, div divu rem remu
 
 ## little-endian - Byte order
 
@@ -171,7 +173,10 @@ Does: the instruction set architecture: the list of instructions and registers a
 How it works:
 - RV64I: the 64-bit base integer instructions.
 - M: multiply and divide. A: atomic instructions. C: compressed 16-bit instructions. F, D: floating point.
-- Zicsr: the CSR instructions. Zifencei: `fence.i`.
+- Zicsr: the CSR instructions.
+- Zifencei: one instruction, `fence.i`: "make the instructions I fetch next see the stores I just made". CPUs with separate instruction and data caches need it after writing code into memory (a loader, a JIT). It used to be in the base ISA and was split out because some designs need a different mechanism. Names starting with Z are small extensions without a single letter.
+
+M, F and D: M is integer multiply and divide only. Floating point is separate: F (32-bit floats) and D (64-bit doubles), with their own registers f0..f31. xv6 doesn't use floating point, so this emulator won't need F or D.
 
 This emulator implements RV64IM + Zicsr + Zifencei (plus machine-mode traps). xv6 needs rv64ima, so A comes next.
 

@@ -162,7 +162,7 @@ For:
 - turning an array index into a byte offset: `slli t0, t0, 0x3` for 8-byte elements;
 - packing and unpacking bit fields.
 
-Watch out: `srai` rounds toward minus infinity: -0x5 >> 1 is -0x3, while dividing -5 by 2 in C gives -2.
+Watch out: `srai` rounds toward minus infinity: -0x5 >> 1 is -0x3, while dividing -5 by 2 in C (or with `div`) gives -2.
 
 Related: sll, srl, sra, slliw
 
@@ -288,6 +288,127 @@ Example:
 ```
 addiw t0, t0, 0x1        # 32-bit add
 addw  a0, a0, a1
+```
+
+## mul - Multiply
+
+*R-type, M extension*
+
+Does: rd = the low 64 bits of rs1 * rs2.
+
+How it works: multiplying two 64-bit numbers gives up to 128 bits; `mul` keeps the low half and the high half is dropped, so a result that doesn't fit wraps around, like `add`. With t0 = 0x6 and t1 = 0x7, `mul a0, t0, t1` gives 0x2a (42).
+
+For: everyday multiplication: array index times element size (when it isn't a power of two), area, scaling.
+
+Watch out:
+- The low half is the same whether the numbers are signed or unsigned, so there is only one `mul`. The high half differs: see `mulh`.
+- A product that needs more than 64 bits silently wraps: 2^40 * 2^40 gives 0x0. Use `mulh` to see the part that didn't fit.
+
+Related: mulh mulhsu mulhu, mulw, slli (multiplying by a power of two)
+
+Example:
+```
+addi t0, zero, 0x6
+addi t1, zero, 0x7
+mul  a0, t0, t1          # a0 = 0x2a (42)
+```
+
+## mulh mulhsu mulhu - High half of a multiply
+
+*R-type, M extension*
+
+Does: rd = the high 64 bits of the 128-bit product rs1 * rs2. The three differ in how they read the operands:
+- `mulh`: signed x signed.
+- `mulhsu`: rs1 signed x rs2 unsigned.
+- `mulhu`: unsigned x unsigned.
+
+How it works: think of 2-digit decimal registers. 99 * 99 = 9801: the low half (`mul`) is 01, the high half (`mulh`) is 98, the part that didn't fit. Nothing overflows: `mul` and `mulh` together hold the whole product.
+
+In binary: 2^40 * 2^40 = 2^80. `mul` gives 0x0 and `mulhu` gives 0x10000 (bit 80 - 64 = bit 16).
+
+Signedness only changes the high half. With both operands 0xffffffffffffffff:
+```
+mulh    -1 * -1 = 1                          high half 0x0
+mulhsu  -1 * (2^64 - 1) = -(2^64 - 1)        high half 0xffffffffffffffff
+mulhu   (2^64 - 1)^2 = 2^128 - 2^65 + 1      high half 0xfffffffffffffffe
+mul     (all three)                          low half  0x1
+```
+
+For:
+- Detecting overflow: the product fits in 64 bits only if the high half is just the sign extension of the low half (all zeros, or all ones for a negative result).
+- Full 128-bit products for big numbers (cryptography, arbitrary precision). `mulhsu` is for a signed top word times an unsigned lower word.
+- Dividing by a constant without `div`: compilers turn x / 10 into `mulhu` by about 2^64 / 10, then a shift, which is much faster.
+- Fixed-point math, where the useful result sits across the two halves.
+
+Watch out: there are no 32-bit (W) forms of these.
+
+Related: mul, div divu rem remu
+
+Example:
+```
+mul   t2, a0, a1         # low half
+mulhu t3, a0, a1         # high half: t3:t2 is the full 128-bit product
+```
+
+## div divu rem remu - Divide and remainder
+
+*R-type, M extension*
+
+Does: `div` / `divu`: rd = rs1 / rs2. `rem` / `remu`: rd = the remainder. Without `u` the numbers are signed, with `u` unsigned.
+
+How it works: signed division rounds toward zero, as in C, and the remainder takes the sign of the dividend:
+```
+ 7 /  2 =  3   remainder  1
+-7 /  2 = -3   remainder -1        (not -4 remainder 1)
+ 7 / -2 = -3   remainder  1
+```
+dividend = divisor * quotient + remainder always holds.
+
+Division never traps. Two cases have no real answer, so the spec defines one:
+```
+                         div / divu                 rem / remu
+divide by zero           all ones (-1 / 2^64-1)     the dividend
+-2^63 / -1 (div only)    the dividend (-2^63)       0
+```
+The second case is overflow: the smallest i64 is -2^63 (0x8000000000000000, `min(i64)` in Odin), but the largest is 2^63 - 1, so +2^63 does not fit. Two's complement has one more negative number than positive ones. Many CPUs (x86) crash on this division; RISC-V gives the dividend back. Software that cares checks the divisor first.
+
+For: averages, converting numbers to decimal digits (`remu` by 10, `divu` by 10), wrapping an index around a buffer (`remu` by its size).
+
+Watch out:
+- Division is slow on real hardware (tens of cycles); compilers avoid it for constants (see `mulh`) and powers of two (`srli` / `srai`).
+- `srai` by 1 is not the same as `div` by 2 for negative numbers: -7 >> 1 is -4, -7 / 2 is -3.
+
+Related: mul, mulh mulhsu mulhu, divw, two's-complement
+
+Example:
+```
+addi t0, zero, 0x2a      # 42
+addi t1, zero, 0x5
+div  a0, t0, t1          # a0 = 0x8
+rem  a1, t0, t1          # a1 = 0x2
+divu a2, t0, zero        # divide by zero: a2 = 0xffffffffffffffff, no trap
+```
+
+## mulw divw divuw remw remuw - 32-bit multiply and divide
+
+*R-type, M extension (RV64 only)*
+
+Does: like `mul`, `div`, `divu`, `rem`, `remu`, but on the low 32 bits of the operands; the 32-bit result is then sign-extended to 64 bits, like every W instruction.
+
+How it works:
+- `mulw` with 0x10000 * 0x10000 = 2^32: the low 32 bits are 0, so the result is 0x0.
+- Only the low 32 bits of the operands count: `divw` of 0x100000006 by 3 divides 6 by 3 = 0x2.
+- The special cases are the 32-bit versions: divide by zero gives all ones; -2^31 / -1 gives -2^31 (0xffffffff80000000).
+- Even `divuw` sign-extends its result: 2^32 - 1 becomes 0xffffffffffffffff.
+
+For: C's 32-bit `int` and `unsigned` arithmetic on a 64-bit machine.
+
+Related: mul, div divu rem remu, addiw slliw srliw sraiw addw subw sllw srlw sraw
+
+Example:
+```
+mulw a0, a0, a1          # 32-bit int multiply
+divw a2, a0, a1
 ```
 
 ## lb lh lw ld lbu lhu lwu - Load from memory

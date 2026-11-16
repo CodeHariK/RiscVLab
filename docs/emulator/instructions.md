@@ -2,7 +2,7 @@
 
 What RiscVOdin executes today, with the encoding fields it decodes. Anything not listed raises `Illegal_Instruction`.
 
-**Current status: RV64I base (all 52 instructions) + Zifencei + Zicsr + MRET. 60 in total.**
+**Current status: RV64I base (all 52 instructions) + M (13) + Zifencei + Zicsr + MRET. 73 in total.**
 
 Formats: see the diagram at the top of `emulator/core/decode.odin`.
 `imm` is always sign-extended to 64 bits. Arithmetic wraps modulo 2^64.
@@ -13,7 +13,7 @@ The same instructions, grouped by bit layout instead of by job. The layouts are 
 
 | Format | Fields | Immediate | Instructions |
 |---|---|---|---|
-| **R** | funct7, rs2, rs1, funct3, rd | none | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND, ADDW, SUBW, SLLW, SRLW, SRAW |
+| **R** | funct7, rs2, rs1, funct3, rd | none | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND, ADDW, SUBW, SLLW, SRLW, SRAW, and the M extension: MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU, MULW, DIVW, DIVUW, REMW, REMUW |
 | **I** | imm[11:0], rs1, funct3, rd | 12 bits, `imm_i` | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, JALR, FENCE, FENCE.I, ECALL, EBREAK, MRET, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI |
 | **S** | imm[11:5], rs2, rs1, funct3, imm[4:0] | 12 bits, `imm_s` | SB, SH, SW, SD |
 | **B** | imm[12\|10:5], rs2, rs1, funct3, imm[4:1\|11] | 13 bits (bit 0 always 0), `imm_b` | BEQ, BNE, BLT, BGE, BLTU, BGEU |
@@ -112,6 +112,33 @@ Compute on the low 32 bits, then sign-extend the 32-bit result to 64 bits. Shift
 | SLLW | R | 0111011 | 001 | 0000000 | rd = sext32(rs1[31:0] << (rs2 & 31)) |
 | SRLW | R | 0111011 | 101 | 0000000 | logical, 32-bit |
 | SRAW | R | 0111011 | 101 | 0100000 | arithmetic, 32-bit |
+
+## M extension: multiply and divide (`rv64m.odin`)
+
+R-type, funct7 = 0000001, sharing the OP and OP-32 opcodes with ADD and ADDW. Integers only (floating point is the separate F and D extensions).
+
+| Instruction | Opcode | funct3 | Effect |
+|---|---|---|---|
+| MUL rd, rs1, rs2 | 0110011 | 000 | rd = low 64 bits of rs1 * rs2 (same for signed and unsigned) |
+| MULH | 0110011 | 001 | rd = high 64 bits of the 128-bit product, signed x signed |
+| MULHSU | 0110011 | 010 | high 64 bits, rs1 signed x rs2 unsigned |
+| MULHU | 0110011 | 011 | high 64 bits, unsigned x unsigned |
+| DIV | 0110011 | 100 | rd = rs1 / rs2, signed, rounded toward zero |
+| DIVU | 0110011 | 101 | rd = rs1 / rs2, unsigned |
+| REM | 0110011 | 110 | rd = rs1 % rs2, signed (sign of the dividend) |
+| REMU | 0110011 | 111 | rd = rs1 % rs2, unsigned |
+| MULW | 0111011 | 000 | rd = sext32(low 32 bits of rs1 * rs2) |
+| DIVW / DIVUW | 0111011 | 100 / 101 | 32-bit signed / unsigned divide, result sign-extended |
+| REMW / REMUW | 0111011 | 110 / 111 | 32-bit signed / unsigned remainder, result sign-extended |
+
+Division never traps. The results the spec defines for the two cases with no real answer:
+
+| Case | DIV / DIVU | REM / REMU |
+|---|---|---|
+| divide by zero | all ones (-1 / 2^64-1) | the dividend |
+| signed overflow: -2^63 / -1 | the dividend (-2^63) | 0 |
+
+The W forms follow the same table on 32-bit values. OP-32 has no MULH forms: funct3 001..011 there is illegal.
 
 ## Fences and system (`rv64i_system.odin`)
 

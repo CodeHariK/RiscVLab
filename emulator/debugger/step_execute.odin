@@ -88,7 +88,8 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 		}
 		return arithmetic_text(mnemonic, s1, a, operand, result)
 	case rv.OPCODE_OP, rv.OPCODE_OP_32:
-		return arithmetic_text(mnemonic, s1, a, fmt.tprintf("%s %s", s2, value_text(b)), result)
+		text := arithmetic_text(mnemonic, s1, a, fmt.tprintf("%s %s", s2, value_text(b)), result)
+		return fmt.tprintf("%s%s", text, muldiv_note(mnemonic, a, b))
 	case rv.OPCODE_MISC_MEM:
 		return "fence: orders memory accesses; nothing to do on one in-order hart"
 	case rv.OPCODE_SYSTEM:

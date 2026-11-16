@@ -1,6 +1,7 @@
 # Lesson 04: Big constants with lui and addi
 # Build a 32-bit value from two instructions, and see the carry trick when the low part looks negative.
 # Expect: exit 120
+# Docs: lui, li, sign-extension
 #
 # addi only holds 12 bits, so larger constants take two instructions:
 #

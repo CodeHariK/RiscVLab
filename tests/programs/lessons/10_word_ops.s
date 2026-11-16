@@ -1,6 +1,7 @@
 # Lesson 10: 32-bit word operations
 # addw / addiw compute on the low 32 bits and sign-extend the result, like C's int on a 64-bit machine.
 # Expect: exit 3
+# Docs: addiw, sign-extension
 #
 # RV64 adds "word" versions of the arithmetic instructions (the W suffix).
 # They use only the low 32 bits of their inputs, and the 32-bit result is

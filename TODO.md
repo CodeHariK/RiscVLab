@@ -8,17 +8,18 @@ and, where it teaches something new, a lesson.
 
 - [x] RV64I base, Zicsr, Zifencei, machine-mode traps, mret
 - [x] M extension: multiply and divide (lesson 15, rv64um tests)
-- [x] ELF and raw binary loading, tohost, riscv-tests (rv64ui, rv64um: 67 pass)
+- [x] A extension: lr / sc and the AMOs (lessons 16-18, rv64ua tests)
+- [x] ELF and raw binary loading, tohost, riscv-tests (rv64ui, rv64um, rv64ua: 86 pass)
 - [x] Undo history (step back), disassembler matching objdump
 - [x] Debugger: source / disassembly / steps (compact and detailed), encoding,
       registers, CSRs, memory, stack, ELF tabs; Programs and Docs windows with
-      search; lessons 01-15
+      search; lessons 01-18
+- [x] Lessons name their Docs entries (# Docs: line); the Docs window opens on them
 - [x] Reference docs: instructions, pseudo-instructions, directives, CSRs,
-      traps, ELF and memory map, terms
+      traps, concurrency, ELF and memory map, terms
 
 ## Emulator: on the way to xv6
 
-- [ ] A extension: lr / sc and the amo* instructions (rv64ua tests, lesson)
 - [ ] UART at 0x10000000: programs can print; Console tab in the debugger
 - [ ] Supervisor and user modes: s-CSRs (sstatus, stvec, sepc, scause, ...),
       medeleg / mideleg, sret, ecall from U / S (rv64mi / rv64si tests);

@@ -1,39 +1,13 @@
 # Lesson 15: Multiply and divide
 # The M extension: mul and its high half (mulh), division that rounds toward zero, and the defined results for divide by zero and overflow.
 # Expect: exit 52
+# Docs: mul, mulh, div, two's-complement
 #
-# MULTIPLY: TWO HALVES
-# Two 64-bit numbers multiply to up to 128 bits. A register holds 64, so
-# RISC-V gives the product in two halves, each with its own instruction:
-#
-#   [ high 64 bits | low 64 bits ]
-#       mulh            mul
-#
-# Like 2-digit decimal registers: 99 * 99 = 9801, low half 01, high half
-# 98. The high half is the part that didn't fit. mul alone silently wraps
-# (2^40 * 2^40 = 2^80 gives 0); mulh / mulhu show what was lost, so
-# together they hold the whole product.
-#
-# The low half is the same for signed and unsigned numbers (one mul), but
-# the high half is not: 0xffffffffffffffff squared is 1 if it means -1
-# (mulh: high half 0), and almost 2^128 if it is unsigned (mulhu: high half
-# 0xfffffffffffffffe). mulhsu reads rs1 signed and rs2 unsigned.
-#
-# DIVIDE: ROUNDS TOWARD ZERO
-# div / rem are signed, divu / remu unsigned. Signed division rounds
-# toward zero, as in C, and the remainder takes the dividend's sign:
-#   -7 / 2 = -3, remainder -1      (dividend = divisor * quotient + remainder)
-#
-# DIVISION NEVER TRAPS
-# Two divisions have no real answer. Instead of trapping, RISC-V defines
-# a result, and software that cares checks the divisor first:
-#   divide by zero:       quotient = all ones (-1), remainder = the dividend
-#   -2^63 / -1 (signed):  +2^63 doesn't fit in 64 bits (the smallest i64 has
-#                         no positive partner), so quotient = -2^63, remainder = 0
-#
-# Each result below is checked; a0 = 42 (6 * 7) + 1 for each of the 10
-# checks that pass = 52. Step through and compare the step details with
-# the comments. Open the Docs window (D) for mul, mulh and div.
+# A 64 x 64-bit product has up to 128 bits: mul gives the low 64, mulh /
+# mulhu the high 64 (the part that didn't fit). Division rounds toward
+# zero (-7 / 2 = -3), and never traps: divide by zero and -2^63 / -1 have
+# defined results. Each result below is checked: a0 = 42 (6 * 7) + 1 for
+# each of the 10 checks = 52. Compare the step details with the comments.
 
     .section .text
     .globl _start

@@ -15,7 +15,7 @@ Same format as instructions.md, plus two labels: `Fields:` for the bits
 of a CSR, and `Emulator:` for what this emulator does differently from
 real hardware.
 
-## csrs - What CSRs are, and who changes them
+## csr-overview - What CSRs are, and who changes them
 
 *overview*
 
@@ -235,7 +235,7 @@ Fields:
 - MXL (bits 63..62): register width: 1 = 32-bit, 2 = 64-bit.
 - Extensions (bits 25..0): one bit per letter: bit 0 = A, bit 8 = I, bit 12 = M, and so on.
 
-How it works: here misa = 0x8000000000001100: MXL = 2 (RV64), bit 8 (I) and bit 12 (M).
+How it works: here misa = 0x8000000000001101: MXL = 2 (RV64), bit 0 (A), bit 8 (I) and bit 12 (M).
 
 For: software that adapts to the hardware it runs on.
 

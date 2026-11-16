@@ -1,6 +1,7 @@
 # Lesson 08: Calling a function
 # jal jumps to a function and saves the return address in ra; jalr (ret) jumps back to it.
 # Expect: exit 42
+# Docs: jal, jalr, ret, abi
 #
 #   jal  ra, label     ra = address of the next instruction; jump to label
 #   jalr zero, 0(ra)   jump to the address in ra (the "ret" shorthand)

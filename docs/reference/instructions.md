@@ -308,9 +308,12 @@ Related: mulh mulhsu mulhu, mulw, slli (multiplying by a power of two)
 
 Example:
 ```
-addi t0, zero, 0x6
-addi t1, zero, 0x7
-mul  a0, t0, t1          # a0 = 0x2a (42)
+li    t0, 6
+li    t1, 7
+mul   a0, t0, t1         # a0 = 0x2a (42)
+li    t2, 1
+slli  t2, t2, 40         # t2 = 2^40
+mul   t3, t2, t2         # 2^80 doesn't fit: the low half is 0x0
 ```
 
 ## mulh mulhsu mulhu - High half of a multiply
@@ -322,7 +325,12 @@ Does: rd = the high 64 bits of the 128-bit product rs1 * rs2. The three differ i
 - `mulhsu`: rs1 signed x rs2 unsigned.
 - `mulhu`: unsigned x unsigned.
 
-How it works: think of 2-digit decimal registers. 99 * 99 = 9801: the low half (`mul`) is 01, the high half (`mulh`) is 98, the part that didn't fit. Nothing overflows: `mul` and `mulh` together hold the whole product.
+How it works: a register holds 64 bits, so the 128-bit product comes in two halves, each with its own instruction:
+```
+[ high 64 bits | low 64 bits ]
+    mulh            mul
+```
+Think of 2-digit decimal registers. 99 * 99 = 9801: the low half (`mul`) is 01, the high half (`mulh`) is 98, the part that didn't fit. Nothing overflows: `mul` and `mulh` together hold the whole product.
 
 In binary: 2^40 * 2^40 = 2^80. `mul` gives 0x0 and `mulhu` gives 0x10000 (bit 80 - 64 = bit 16).
 
@@ -347,8 +355,13 @@ Related: mul, div divu rem remu
 
 Example:
 ```
-mul   t2, a0, a1         # low half
-mulhu t3, a0, a1         # high half: t3:t2 is the full 128-bit product
+li    t2, 1
+slli  t2, t2, 40         # t2 = 2^40
+mul   t3, t2, t2         # low half of 2^80:  0x0
+mulhu t4, t2, t2         # high half of 2^80: 0x10000 (2^16)
+li    t5, -1             # 0xffffffffffffffff
+mulh  s2, t5, t5         # -1 * -1 = 1: high half 0x0
+mulhu s3, t5, t5         # (2^64 - 1)^2: high half 0xfffffffffffffffe
 ```
 
 ## div divu rem remu - Divide and remainder
@@ -383,11 +396,24 @@ Related: mul, mulh mulhsu mulhu, divw, two's-complement
 
 Example:
 ```
-addi t0, zero, 0x2a      # 42
-addi t1, zero, 0x5
-div  a0, t0, t1          # a0 = 0x8
-rem  a1, t0, t1          # a1 = 0x2
-divu a2, t0, zero        # divide by zero: a2 = 0xffffffffffffffff, no trap
+li   t0, 42
+li   t1, 5
+div  a0, t0, t1          # 0x8
+rem  a1, t0, t1          # 0x2: 42 = 5 * 8 + 2
+
+li   t0, -7
+li   t1, 2
+div  s4, t0, t1          # -3, rounded toward zero (not -4)
+rem  s5, t0, t1          # -1: -7 = 2 * -3 + -1
+
+divu s6, t0, zero        # divide by zero: all ones, no trap
+rem  s7, t0, zero        # divide by zero: the dividend, -7
+
+li   t2, 1
+slli t2, t2, 63          # -2^63, the smallest i64
+li   t3, -1
+div  s8, t2, t3          # overflow: the dividend, -2^63
+rem  s9, t2, t3          # overflow: 0x0
 ```
 
 ## mulw divw divuw remw remuw - 32-bit multiply and divide
@@ -565,6 +591,74 @@ Example:
 jalr zero, 0(ra)         # ret: back to the caller
 ```
 
+## lr.w lr.d sc.w sc.d - Load-reserved, store-conditional
+
+*R-type (atomic), A extension*
+
+Does:
+- `lr.w` / `lr.d`: rd = the value at address rs1 (sign-extended for .w), and reserve that address.
+- `sc.w` / `sc.d`: store rs2 at address rs1, but only if the reservation still holds. rd = 0 if it stored, 1 if it didn't. Either way the reservation is used up.
+
+How it works: the pair turns any read-modify-write into an atomic one. Read with `lr`, compute, write with `sc`; if `sc` fails, something may have touched the value in between, so go back and try again:
+```
+retry:
+    lr.w  t0, (a0)           # read and reserve
+    addi  t0, t0, 0x1        # compute
+    sc.w  t1, t0, (a0)       # write if nothing came in between
+    bnez  t1, retry          # t1 = 1: it failed, try again
+```
+The reservation breaks when another hart writes the reserved memory, on a trap, or at the next `sc`. The address has no offset, and must be aligned to the size (4 or 8), or it traps.
+
+For: operations no single AMO does, such as compare-and-swap ("if it is still 5, make it 9"), the building block of lock-free data structures. Lesson 18 does one.
+
+Watch out:
+- An `sc` can fail even when nothing seems to have happened: on one hart, a trap between `lr` and `sc` is enough. Always loop.
+- Keep the code between `lr` and `sc` short and simple (no other loads, stores or calls); the spec only promises eventual success for short loops like the one above.
+- `sc` writes rd: 0 means success, the opposite of most "true" flags.
+
+Related: amoswap.w amoadd.w (the AMOs), locks, memory-ordering, fence
+
+Example:
+```
+cas:
+    lr.w  t3, (s1)           # load and reserve
+    bne   t3, t1, done       # not the expected value: give up
+    sc.w  t4, t2, (s1)       # store the new value if still reserved
+    bnez  t4, cas            # someone touched it: try again
+done:
+```
+
+## amoswap.w amoswap.d amoadd.w amoadd.d amoand.w amoand.d amoor.w amoor.d amoxor.w amoxor.d amomin.w amomin.d amomax.w amomax.d amominu.w amominu.d amomaxu.w amomaxu.d - Atomic memory operations
+
+*R-type (atomic), A extension*
+
+Does: in one indivisible step: rd = the value in memory at rs1, then memory = (that value) op rs2.
+- `amoswap`: memory = rs2 (exchange).
+- `amoadd`, `amoand`, `amoor`, `amoxor`: memory = old +, &, |, ^ rs2.
+- `amomin` / `amomax`: the smaller / larger, signed; `amominu` / `amomaxu`: unsigned.
+- `.w` works on 32 bits (the old value is sign-extended into rd), `.d` on 64.
+
+How it works: `amoadd.w a1, t1, (t0)` with 41 in memory and t1 = 1: a1 = 41 and memory = 42. Nothing, not another hart nor an interrupt, can come between the read and the write, so two harts adding at the same time never lose an update. The address has no offset and must be aligned to the size, or it traps (Store_Address_Misaligned).
+
+For:
+- Counters shared between harts: `amoadd`.
+- Locks: `amoswap` a 1 in; getting a 0 back means you took the lock (xv6's acquire). Release by swapping 0 in.
+- Setting and clearing flag bits: `amoor` / `amoand`.
+- Keeping a running maximum or minimum: `amomax` / `amomin`.
+
+Watch out:
+- With rd = zero the old value is thrown away: `amoswap.w zero, zero, (a0)` just stores 0 atomically (a lock release).
+- The suffixes `.aq` / `.rl` / `.aqrl` (e.g. `amoswap.w.aq`) add memory ordering: see memory-ordering. They don't change what the instruction computes.
+
+Related: lr.w lr.d sc.w sc.d, locks, memory-ordering, add sub
+
+Example:
+```
+amoadd.w     a1, t1, (t0)    # atomic counter += t1; a1 = the old value
+amoswap.w.aq t2, t1, (s0)    # take a lock: t2 = 0 if it was free
+amoswap.w.rl zero, zero, (s0)  # release it
+```
+
 ## fence - Memory ordering fence
 
 *I-type, RV64I*
@@ -573,9 +667,9 @@ Does: makes memory accesses before the fence visible to other harts and devices 
 
 For: multi-core code and device drivers, e.g. writing data before setting the flag that says it is ready.
 
-Watch out: this emulator has one hart that does everything in order, so `fence` does nothing here. It will matter once devices arrive.
+Watch out: this emulator has one hart that does everything in order, so `fence` does nothing here. It matters on real multi-core CPUs and with devices; see memory-ordering for why.
 
-Related: fence.i
+Related: fence.i, memory-ordering, locks
 
 Example:
 ```
@@ -617,7 +711,7 @@ Watch out:
 - The handler must add 4 to mepc before `mret`, or it returns to the `ecall` and runs it again.
 - With no handler (mtvec = 0) this emulator stops instead. Lessons 12 and 13.
 
-Related: mret, ebreak, csrrw (mtvec)
+Related: mret, ebreak, csrrw (mtvec), system-call
 
 Example:
 ```
@@ -654,9 +748,11 @@ How it works:
 
 For: the last instruction of a trap handler. Also how a kernel starts a user program the first time: set mepc to the program and MPP to user mode, then `mret`.
 
-Watch out: after an `ecall`, mepc points at the `ecall` itself; add 4 first or it runs again. Lesson 13.
+Watch out:
+- After an `ecall`, mepc points at the `ecall` itself; add 4 first or it runs again. Lesson 13.
+- A plain `jr` to mepc + 4 gets back to the right place but leaves interrupts off and the privilege level raised. See trap-return.
 
-Related: ecall, csrrw (mepc, mstatus)
+Related: ecall, csrrw (mepc, mstatus), trap-return, system-call
 
 Example:
 ```

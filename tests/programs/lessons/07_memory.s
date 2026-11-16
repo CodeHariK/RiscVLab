@@ -1,6 +1,7 @@
 # Lesson 07: Memory: load and store
 # Add up an array from the program's data with lw, store the total with sw, and compare lb with lbu.
 # Expect: exit 110
+# Docs: lw, sw, .section, little-endian, sign-extension
 #
 # The .data section holds the program's variables. It is loaded into
 # memory with the code (here at 0x80001000; see the ELF and Memory tabs).

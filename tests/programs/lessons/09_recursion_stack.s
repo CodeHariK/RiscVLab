@@ -1,6 +1,7 @@
 # Lesson 09: Recursion and the stack
 # sum(n) = n + sum(n - 1) calls itself, saving its return address and n on the stack each time.
 # Expect: exit 15
+# Docs: stack, sd, ret
 #
 # A call overwrites ra, so a function that calls another must save its own
 # ra first. Values are saved on the stack: a region of memory the stack

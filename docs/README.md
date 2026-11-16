@@ -19,3 +19,4 @@ files (they are embedded in it), following the instruction about to run.
 - [Traps and privilege](reference/traps.md): what happens on a trap, writing a handler, privilege levels, and every trap cause.
 - [ELF and memory](reference/elf.md): ELF files, segments and sections, symbols, the linker script, the memory map, raw binaries, `tohost`.
 - [Terms](reference/terms.md): hart, registers and the ABI, the stack, sign extension, little-endian, WARL and other words the docs use.
+- [Concurrency](reference/concurrency.md): race conditions, locks, and memory ordering (fence, acquire and release), from beginner to advanced.

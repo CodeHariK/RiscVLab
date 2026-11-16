@@ -1,6 +1,7 @@
 # Lesson 02: add, sub and wrap-around
 # Subtract to get negative numbers, and see that 64-bit arithmetic wraps around instead of trapping.
 # Expect: exit 1
+# Docs: add, two's-complement
 #
 # Registers hold 64 bits. Negative numbers use two's complement: -1 is all
 # 64 bits set (0xffffffffffffffff), -7 is 0xfffffffffffffff9.

@@ -2,7 +2,7 @@
 
 What RiscVOdin executes today, with the encoding fields it decodes. Anything not listed raises `Illegal_Instruction`.
 
-**Current status: RV64I base (all 52 instructions) + M (13) + Zifencei + Zicsr + MRET. 73 in total.**
+**Current status: RV64I base (all 52 instructions) + M (13) + A (22) + Zifencei + Zicsr + MRET. 95 in total.**
 
 Formats: see the diagram at the top of `emulator/core/decode.odin`.
 `imm` is always sign-extended to 64 bits. Arithmetic wraps modulo 2^64.
@@ -139,6 +139,22 @@ Division never traps. The results the spec defines for the two cases with no rea
 | signed overflow: -2^63 / -1 | the dividend (-2^63) | 0 |
 
 The W forms follow the same table on 32-bit values. OP-32 has no MULH forms: funct3 001..011 there is illegal.
+
+## A extension: atomics (`rv64a.odin`)
+
+R-type, opcode 0101111 (AMO). funct5 (bits 31..27) picks the operation; bit 26 is aq and bit 25 rl (ordering hints, no effect with one in-order hart); funct3 010 = .W, 011 = .D. The address is rs1 with no offset and must be aligned to the size.
+
+| Instruction | funct5 | Effect |
+|---|---|---|
+| LR.W / LR.D rd, (rs1) | 00010 | rd = memory (sign-extended for .W); reserve the address. rs2 must be 0 |
+| SC.W / SC.D rd, rs2, (rs1) | 00011 | if the reservation holds: memory = rs2, rd = 0; else rd = 1. The reservation is used up |
+| AMOSWAP | 00001 | rd = memory; memory = rs2 |
+| AMOADD | 00000 | rd = memory; memory += rs2 |
+| AMOXOR / AMOAND / AMOOR | 00100 / 01100 / 01000 | rd = memory; memory ^= / &= / \|= rs2 |
+| AMOMIN / AMOMAX | 10000 / 10100 | signed min / max |
+| AMOMINU / AMOMAXU | 11000 / 11100 | unsigned min / max |
+
+Misaligned: LR raises Load_Address_Misaligned, SC and AMOs Store_Address_Misaligned. Outside memory: Load_Access_Fault for LR, Store_Access_Fault for SC and AMOs. Trap entry clears the reservation, and undo restores it.
 
 ## Fences and system (`rv64i_system.odin`)
 

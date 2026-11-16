@@ -1,6 +1,7 @@
 # Lesson 05: Branches and a loop
 # Add up 1..5 with a loop, and watch the PC jump back until the counter reaches the end.
 # Expect: exit 15
+# Docs: beq, blt, labels
 #
 # A branch compares two registers and, if the comparison holds, jumps to a
 # label (the assembler turns the label into an offset from the branch):

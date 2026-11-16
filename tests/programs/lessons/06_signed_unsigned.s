@@ -1,6 +1,7 @@
 # Lesson 06: Signed vs unsigned
 # The same 64 bits compare differently as signed or unsigned numbers: slt vs sltu, blt vs bltu.
 # Expect: exit 13
+# Docs: slt, blt, two's-complement
 #
 # A register doesn't know whether it holds a signed or an unsigned number;
 # the instruction decides. -1 is all 64 bits set: as a signed number it is

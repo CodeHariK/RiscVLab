@@ -1,6 +1,7 @@
 # Lesson 03: Logic and shifts
 # Combine bits with and / or / xor, and compare logical with arithmetic right shifts.
 # Expect: exit 15
+# Docs: and, slli
 #
 #   and  rd, a, b   1 where both bits are 1       1100 and 1010 = 1000
 #   or   rd, a, b   1 where either bit is 1       1100 or  1010 = 1110

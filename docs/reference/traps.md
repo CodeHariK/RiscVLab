@@ -2,11 +2,45 @@
 
 A trap is the CPU stopping what it is doing and jumping to a handler.
 Exceptions are caused by an instruction (a bad load, `ecall`); interrupts
-come from outside (a timer, a device). This file explains how traps work,
-what each cause means, and the privilege levels that traps move between.
+come from outside (a timer, a device). This file starts with why traps
+exist, then how they work, writing a handler, returning with mret,
+system calls, the privilege levels that traps move between, and what
+each cause means.
 
 The debugger's Docs window shows the entry for a trap cause when the next
 instruction will trap. Same format as instructions.md and csrs.md.
+
+## why-traps - Why traps exist
+
+*overview: read this first*
+
+Does: explains what traps are for. In lesson 12 a trap looks like a function call, because one program, in machine mode, both makes the trap and handles it. Traps exist for the cases where that is not true.
+
+How it works: a trap differs from a function call in three ways.
+1. It can happen without the code planning it. A load hits a bad address, an instruction is invalid, a timer fires between two instructions. The interrupted code saved nothing and may be using every register, ra included. So the CPU can't put the return address or the reason in x0..x31 without destroying the program's values: it puts them in CSRs (mepc: where, mcause: why, mtval: detail).
+2. It changes privilege. A user program must not `jal` into the kernel: it could jump into the middle of kernel code and run it with kernel power. A trap enters only through one door, the address in mtvec, which the kernel chose, and raises the privilege level on the way in. `mret` lowers it on the way out.
+3. The door must be locked. If a user program could write mtvec, it could point traps at its own code and give itself kernel power. So mtvec, mstatus and the rest are privileged CSRs: only more privileged code can change them. That is why this state lives in CSRs, not in ordinary registers or memory.
+
+The kinds of traps:
+```
+Faults            an instruction can't complete     illegal instruction, access fault,
+                  (at that instruction)             misaligned jump, page faults (later)
+Deliberate traps  an instruction meant to trap      ecall (system call), ebreak (debugger)
+Interrupts        something outside the program     timer, a device, another hart
+                  (between any two instructions)    (coming with the timer)
+```
+Faults and deliberate traps are exceptions: mcause bit 63 is 0. Interrupts set bit 63.
+
+For: an OS like xv6 needs every kind.
+- System calls: user programs can't reach the disk or screen; they ask the kernel with `ecall`. The trap is the only safe way in.
+- Protection: a bad pointer or a garbage instruction faults into the kernel, which kills just that program instead of the whole machine going down.
+- Sharing the CPU: a program stuck in `while(1);` never calls the kernel. Only the timer interrupt gets the CPU back, so the kernel can switch to another process.
+- Devices: instead of asking "is the disk done yet?" in a loop, the kernel lets the disk interrupt it when it finishes.
+- Virtual memory: a page fault tells the kernel a program touched memory that isn't mapped.
+
+Watch out: the lessons run everything in machine mode, so they show the mechanism but not the protection. That part appears with user and supervisor mode, on the way to xv6.
+
+Related: trap, handler, privilege, mtvec, mepc, mcause, ecall
 
 ## trap - What happens on a trap
 
@@ -21,19 +55,21 @@ How it works: when an instruction raises an exception, instead of finishing it t
 4. mstatus: MPIE = MIE, MIE = 0 (interrupts off in the handler), MPP = the current privilege level.
 5. Switches to machine mode and jumps to the handler at mtvec.
 
+The instruction that trapped changes nothing else: a faulting load leaves its rd alone, a faulting jump doesn't move the pc. The handler sees the state exactly as it was just before the mistake.
+
 The handler does its work and ends with `mret`, which undoes steps 4 and 5 and jumps back to mepc.
 
 For: everything an OS does beyond running one program: system calls (`ecall`), handling faults (paging loads a missing page), and timer interrupts that switch between programs.
 
 Emulator: if mtvec is 0, no handler has been set up, so the trap stops the machine (real hardware would jump to address 0). The step details show every CSR the trap writes.
 
-Related: mtvec, mepc, mcause, mtval, mstatus, mret, handler
+Related: why-traps, mtvec, mepc, mcause, mtval, mstatus, mret, handler, trap-return
 
 ## handler - Writing a trap handler
 
 *how a handler is laid out*
 
-Does: the code mtvec points at, which runs on every trap.
+Does: the code mtvec points at, which runs on every trap. There is only one: every kind of trap arrives there, so it starts by asking why (mcause, plus mtval for the detail) and where from (mepc). Since a trap can interrupt code that didn't expect it, the handler must leave every register as it found it, except a result it hands back on purpose, such as a system call's answer in a0. After a fault it can kill the program, skip the faulting instruction (mepc + 4), or fix the cause and return to mepc unchanged so the instruction runs again.
 
 How it works: a typical handler:
 1. Frees a register to work with, often by swapping with mscratch.
@@ -41,7 +77,7 @@ How it works: a typical handler:
 3. Reads mcause to find out why it was called, and mtval if needed.
 4. Does the work: a system call, a fault report, a timer tick.
 5. For `ecall` (and faults it wants to skip), adds 4 to mepc.
-6. Restores the registers and ends with `mret`.
+6. Restores the registers and ends with `mret` (trap-return says why not a plain jump).
 
 Lessons 12 to 14 have small handlers that skip steps 1, 2 and 6, since they own all the registers.
 
@@ -50,7 +86,7 @@ Watch out:
 - Forgetting to add 4 to mepc after `ecall` returns to the `ecall`, which traps again forever.
 - A trap inside the handler overwrites mepc and mcause, so save them first if that can happen.
 
-Related: trap, mtvec, mscratch, mepc, mret
+Related: why-traps, trap, trap-return, mtvec, mscratch, mepc, mret
 
 Example:
 ```
@@ -61,6 +97,65 @@ handler:
     addi t6, t6, 0x4         # skip the instruction that trapped
     csrw mepc, t6
     mret
+```
+
+## trap-return - Returning from a trap: mret, not jr
+
+*how a handler goes back*
+
+Does: a handler must undo everything the trap did, not only go back to the right address. `mret` does all of it in one instruction; a plain jump does not.
+
+How it works: what the trap changed, and what each way back restores:
+```
+                           trap entry         jr mepc+4      mret
+pc                         -> mtvec           restored       restored (= mepc)
+mstatus.MIE (interrupts)   -> 0               stays 0        = MPIE (as before)
+privilege level            -> machine         stays machine  = MPP (as before)
+```
+So the handler first sets mepc to where it should return (for `ecall`, mepc + 4), then ends with `mret`.
+
+For: a correct handler.
+- Interrupts: the trap turned them off so the handler isn't interrupted halfway. With `jr` they would stay off after the first trap.
+- Privilege: a trap from a user program raises the level to machine (or supervisor). Only `mret` (or `sret`) can bring it back down; `jr` would leave the user program running with full power.
+
+Watch out: lesson 12 returns with `jr`. It works there only because everything runs in machine mode and nothing turned interrupts on. Lesson 13 does it properly: it turns MIE on, and you can watch the trap clear it and `mret` restore it.
+
+Related: mret, trap, handler, mstatus, mepc
+
+Example:
+```
+handler:
+    csrr t1, mepc
+    addi t1, t1, 0x4         # return after the ecall, not to it
+    csrw mepc, t1
+    mret                     # pc = mepc, MIE = MPIE, privilege = MPP
+```
+
+## system-call - System calls
+
+*the ecall convention*
+
+Does: a system call is a program asking the kernel to do something it may not do itself: write to the screen, read a file, start a process. The program makes the request with `ecall`; the kernel's trap handler does the work and returns with `mret` (or `sret`).
+
+How it works: registers carry the request, by convention (the same in Linux and xv6):
+1. The program puts the request number in a7, and the arguments in a0 to a5.
+2. `ecall` traps: mcause = 0x8 (from user mode), mepc = the `ecall`.
+3. The handler sees mcause 0x8, reads a7 to pick the request, and does it with the arguments.
+4. It puts the result in a0, sets mepc to mepc + 4, and `mret`s.
+5. The program continues after the `ecall`, with the answer in a0. To the program it looks like a function call into the kernel.
+
+For: every interaction with the outside world in a protected OS goes through here. In xv6, user programs call C functions such as `write(fd, buf, n)`; each is a few lines of assembly that set a7 (16 for write) and run `ecall`.
+
+Watch out: the handler must not change other registers the program uses: a real kernel saves all of them on entry and restores them before returning. Lesson 13 is a tiny version: request 1 in a7, argument 1 in a0, result 3 in a0.
+
+Related: ecall, Ecall_From_U_Mode Ecall_From_S_Mode Ecall_From_M_Mode, trap-return, handler, abi
+
+Example:
+```
+li   a0, 0x1             # argument
+li   a7, 0x1             # which system call
+ecall                    # into the kernel...
+                         # ...back here, result in a0
 ```
 
 ## privilege - Privilege levels
@@ -82,7 +177,7 @@ Related: mstatus, mret, ecall, csr-addresses
 
 ## Instruction_Address_Misaligned - Jump to a misaligned address (cause 0x0)
 
-*exception*
+*exception: a fault*
 
 Does: raised by a jump or taken branch whose target is not a multiple of 4.
 
@@ -101,7 +196,7 @@ jr   t3                  # traps (lesson 14)
 
 ## Instruction_Access_Fault - Fetch from outside memory (cause 0x1)
 
-*exception*
+*exception: a fault*
 
 Does: raised when pc points somewhere with no memory to fetch the instruction from.
 
@@ -113,7 +208,7 @@ Related: trap, mtval
 
 ## Illegal_Instruction - Not a valid instruction (cause 0x2)
 
-*exception*
+*exception: a fault*
 
 Does: raised when the 32 bits at pc are not an instruction this CPU knows, or when a CSR instruction is not allowed.
 
@@ -133,7 +228,7 @@ Example:
 
 ## Breakpoint - ebreak (cause 0x3)
 
-*exception*
+*exception: a deliberate trap*
 
 Does: raised by `ebreak`.
 
@@ -141,11 +236,13 @@ How it works: mepc = the `ebreak`, mtval = 0.
 
 For: debuggers replace an instruction with `ebreak` to stop there. In this emulator, with no handler set up, it ends the program: the run stops and a0 is the result.
 
+Watch out: with a handler set, `ebreak` traps to it like any other trap instead of ending the program. That is why lessons 12 to 14 remove their handler (`csrw mtvec, zero`) before the final `ebreak`.
+
 Related: ebreak, trap
 
 ## Load_Address_Misaligned Store_Address_Misaligned - Misaligned load or store (causes 0x4 and 0x6)
 
-*exception*
+*exception: a fault*
 
 Does: may be raised by a load or store whose address is not a multiple of its size (e.g. `lw` from an odd address).
 
@@ -155,7 +252,7 @@ Related: lb lh lw ld, sb sh sw sd
 
 ## Load_Access_Fault Store_Access_Fault - Load or store outside memory (causes 0x5 and 0x7)
 
-*exception*
+*exception: a fault*
 
 Does: raised by a load (0x5) or store (0x7) to an address where there is no memory or device.
 
@@ -173,7 +270,7 @@ ld t2, 0(t1)             # nothing at 0x1000: traps (lesson 14)
 
 ## Ecall_From_U_Mode Ecall_From_S_Mode Ecall_From_M_Mode - ecall (causes 0x8, 0x9, 0xb)
 
-*exception*
+*exception: a deliberate trap (system call)*
 
 Does: raised by `ecall`. The cause says which level made the call: 0x8 user, 0x9 supervisor, 0xb machine.
 
@@ -183,4 +280,4 @@ For: system calls: a user program asking the kernel (cause 0x8), or the kernel a
 
 Watch out: add 4 to mepc before returning, or the `ecall` runs again (lessons 12 and 13).
 
-Related: ecall, mret, handler, privilege
+Related: system-call, ecall, mret, handler, privilege

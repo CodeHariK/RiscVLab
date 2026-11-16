@@ -1,6 +1,7 @@
 # Lesson 01: Registers and addi
 # Put small numbers into registers with addi, and see that x0 always stays zero.
 # Expect: exit 12
+# Docs: register, addi, immediate
 #
 # RISC-V has 32 integer registers, x0..x31, each 64 bits wide. Assemblers
 # also give them ABI names (t0 = x5, a0 = x10, ...); the debugger shows both.

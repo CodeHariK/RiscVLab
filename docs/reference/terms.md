@@ -178,7 +178,7 @@ How it works:
 
 M, F and D: M is integer multiply and divide only. Floating point is separate: F (32-bit floats) and D (64-bit doubles), with their own registers f0..f31. xv6 doesn't use floating point, so this emulator won't need F or D.
 
-This emulator implements RV64IM + Zicsr + Zifencei (plus machine-mode traps). xv6 needs rv64ima, so A comes next.
+This emulator implements RV64IMA + Zicsr + Zifencei (plus machine-mode traps): the instruction set xv6 needs (rv64ima).
 
 Related: misa
 
@@ -205,3 +205,15 @@ Does:
 How it works: here `make` in tests/programs runs both, then `objcopy` makes the raw .bin and `objdump` the .dis listing. The emulator only loads the result; it never assembles anything.
 
 Related: elf, link.ld, la
+
+## atomic - Atomic
+
+*term*
+
+Does: an operation is atomic when it happens as one indivisible step: no other hart and no interrupt can see it half done or come between its parts.
+
+How it works: a plain `lw` / `addi` / `sw` increment is three steps, so two harts can interleave and lose an update (a race condition). `amoadd.w` does the read, the add and the write as one atomic step. Single aligned loads and stores are atomic on their own; anything that reads and then writes needs an AMO or an lr / sc pair.
+
+For: lessons 16-18, and the race-condition, locks and memory-ordering entries.
+
+Related: race-condition, amoswap.w amoswap.d ... (the AMOs), lr.w lr.d sc.w sc.d

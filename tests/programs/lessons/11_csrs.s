@@ -1,6 +1,7 @@
 # Lesson 11: CSRs
 # Read and write control and status registers (mhartid, mscratch, minstret); open the CSRs tab to watch them.
 # Expect: exit 3
+# Docs: csr-overview, csr-addresses, csrrs, mscratch, minstret
 #
 # CSRs are registers inside the CPU that describe and control it. They are
 # separate from x0..x31 and only reachable with the CSR instructions:

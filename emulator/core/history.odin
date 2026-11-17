@@ -27,6 +27,13 @@ Undo_Record :: struct {
 	memory_address:   u64,
 	memory_size:      u64,
 	memory_old:       u64,
+	// The device the step's load or store changed, if any, and its state
+	// before (bus.odin). Its memory fields above are then not used: a
+	// device register can't be put back by writing the old value (writing
+	// a UART's transmit register sends a byte).
+	device_changed:   bool,
+	device_index:     u8,
+	device_state:     Device_State,
 	// The CSR the step overwrote, if any.
 	csr_changed:      bool,
 	csr_address:      u32,
@@ -43,8 +50,8 @@ Undo_Record :: struct {
 	trap_mtval:       u64,
 }
 
-// Default number of steps that can be undone. Each record is about 160
-// bytes, so this is about 40 MiB (taken from the OS only as it is used). When full, the oldest steps are forgotten.
+// Default number of steps that can be undone. Each record is about 200
+// bytes, so this is about 50 MiB (taken from the OS only as it is used). When full, the oldest steps are forgotten.
 HISTORY_CAPACITY_DEFAULT :: 256 * 1024
 
 // Fixed-size ring buffer of undo records, newest last.

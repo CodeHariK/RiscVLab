@@ -75,8 +75,14 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		privilege = cpu.privilege,
 	}
 	machine.last_trap = nil
+	machine.bus.touched = {}
 
 	result := cpu_step(cpu, &machine.bus)
+	if touch := machine.bus.touched; touch.touched {
+		cpu.undo.device_changed = true
+		cpu.undo.device_index = u8(touch.index)
+		cpu.undo.device_state = touch.state
+	}
 	if trap, has_trap := result.?; has_trap {
 		if !trap_has_handler(cpu) {
 			return result
@@ -103,9 +109,14 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	if !ok {
 		return false
 	}
-	if record.memory_changed {
-		// Fine for RAM. A device register (a UART's transmit register)
-		// can't be "unwritten" like this: devices will need their own undo.
+	if record.device_changed {
+		// A device puts back its own state: writing the old value to a
+		// register would act on it again (send another byte).
+		device := &machine.bus.devices[record.device_index]
+		if device.restore != nil {
+			device.restore(device.data, record.device_state)
+		}
+	} else if record.memory_changed {
 		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old)
 	}
 	if record.register_changed {

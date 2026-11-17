@@ -30,11 +30,10 @@ cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	cpu.instret_written = false
 	cpu.cycle_written = false
 
-	raw, fetched := bus_load(bus, cpu.pc, 4)
+	instruction, fetched := bus_fetch(bus, cpu.pc)
 	if !fetched {
 		return trap_make(.Instruction_Access_Fault, cpu.pc)
 	}
-	instruction := u32(raw)
 
 	cpu.next_pc = cpu.pc + INSTRUCTION_SIZE
 	if trap, has_trap := execute(cpu, bus, instruction).?; has_trap {

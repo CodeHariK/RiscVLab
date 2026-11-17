@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
@@ -14,9 +15,18 @@ import state "state"
 
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
-//   rvdbg [program] [--tests <tests folder>]
+//   rvdbg [program] [--tests <tests folder>] [--windowed]
+//         [--steps N] [--tab <name>]... [--screenshot <file.png>]
 //
 // With --tests, the Programs window lists the lessons and tests found there.
+// --windowed opens a normal maximized window instead of native fullscreen
+// (which on macOS is a Space of its own, out of reach of screen capture).
+//
+// Scripted runs, to look at the UI without clicking: --steps runs N
+// instructions after opening the program, --tab selects a tab by name
+// (Devices, Memory, Steps, ...; repeat for several), and --screenshot
+// saves the window as a PNG once the layout has settled, then quits.
+// A scripted run never saves the settings (settings_file.odin).
 //
 // Controls: Reset, Prev / Next (buttons, or the left / right arrow keys).
 main :: proc() {
@@ -24,13 +34,19 @@ main :: proc() {
 }
 
 run :: proc() -> int {
-	program_path, tests_root, ok := parse_arguments(os.args)
+	options, ok := parse_arguments(os.args)
 	if !ok {
-		fmt.eprintln("usage: rvdbg [program] [--tests <tests folder>]")
-		fmt.eprintln("  program            ELF or raw binary to open (default: the first listed program)")
-		fmt.eprintln("  --tests <folder>   list the lessons and tests found in that folder")
+		fmt.eprintln("usage: rvdbg [program] [--tests <folder>] [--windowed] [--steps N] [--tab <name>]... [--screenshot <file.png>]")
+		fmt.eprintln("  program              ELF or raw binary to open (default: the last one opened, or the first listed)")
+		fmt.eprintln("  --tests <folder>     list the lessons and tests found in that folder")
+		fmt.eprintln("  --windowed           a normal maximized window, not native fullscreen")
+		fmt.eprintln("  --steps N            run N instructions after opening the program")
+		fmt.eprintln("  --tab <name>         select a tab (Source, Steps, Memory, Devices, ...); repeatable")
+		fmt.eprintln("  --screenshot <file>  save the window as a PNG, then quit")
 		return 2
 	}
+	program_path, tests_root := options.program_path, options.tests_root
+	saving = !options.scripted
 
 	view.reset_panel_layout()
 	last_program := settings_load() // settings_file.odin
@@ -60,6 +76,15 @@ run :: proc() -> int {
 	defer state.session_destroy(&session)
 	view.display.selected_program = state.catalog_find(program_path)
 	view.docs_show_lesson(&session)
+	if options.scripted {
+		view.display.programs_open = false
+		for _ in 0 ..< options.steps {
+			state.session_next(&session)
+		}
+		for tab in options.tabs {
+			view.display.selected_tab[view.panel_of(tab)] = tab
+		}
+	}
 
 	clay_memory := init_clay()
 	defer free(clay_memory)
@@ -67,7 +92,11 @@ run :: proc() -> int {
 	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE, .MSAA_4X_HINT})
 	rl.InitWindow(ui.WINDOW_WIDTH, ui.WINDOW_HEIGHT, "RiscVOdin debugger")
 	defer rl.CloseWindow()
-	start_full_screen() // window_mode_darwin.odin / window_mode_other.odin
+	if options.windowed || options.screenshot != "" {
+		rl.MaximizeWindow()
+	} else {
+		start_full_screen() // window_mode_darwin.odin / window_mode_other.odin
+	}
 	rl.SetTargetFPS(60)
 	// Esc closes the Docs window; it should not quit the debugger (raylib's
 	// default).
@@ -83,10 +112,16 @@ run :: proc() -> int {
 	// Every frame that follows a wait is followed by one more without
 	// waiting: some things are laid out from the previous frame (hit tests,
 	// the Docs wrap width), and the extra frame lets them settle.
+	//
+	// A screenshot run never waits: it draws SCREENSHOT_FRAME frames, so
+	// sizes taken from the previous frame (wrapping, visible lines) settle,
+	// saves the last one and quits.
 	wait_after_frame := false
+	frame := 0
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)
-		if wait_after_frame {
+		frame += 1
+		if wait_after_frame && options.screenshot == "" {
 			rl.EnableEventWaiting()
 		} else {
 			rl.DisableEventWaiting()
@@ -106,6 +141,11 @@ run :: proc() -> int {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)
 		ui.clay_raylib_render(&render_commands)
+		if options.screenshot != "" && frame == SCREENSHOT_FRAME {
+			saved := save_screenshot(options.screenshot)
+			rl.EndDrawing()
+			return 0 if saved else 1
+		}
 		rl.EndDrawing()
 	}
 	settings_save(&session)
@@ -114,6 +154,35 @@ run :: proc() -> int {
 
 // Longest frame time passed to Clay (seconds).
 MAX_FRAME_TIME :: 1.0 / 30.0
+
+// The frame a --screenshot run saves: the first few use sizes from the
+// frame before, which don't exist yet on frame 1.
+SCREENSHOT_FRAME :: 5
+
+// Saves what has been drawn this frame (before it is shown) as a PNG.
+@(private = "file")
+save_screenshot :: proc(path: string) -> bool {
+	image := rl.LoadImageFromScreen()
+	defer rl.UnloadImage(image)
+	if !rl.ExportImage(image, strings.clone_to_cstring(path, context.temp_allocator)) {
+		fmt.eprintfln("error: cannot write the screenshot to %s", path)
+		return false
+	}
+	fmt.printfln("screenshot: %s (%dx%d)", path, image.width, image.height)
+	return true
+}
+
+Options :: struct {
+	program_path: string,
+	tests_root:   string,
+	windowed:     bool,
+	steps:        int,
+	tabs:         [dynamic]view.Tab,
+	screenshot:   string,
+	// Any of --steps, --tab, --screenshot: a run that isn't the user's
+	// session, so it doesn't save the settings.
+	scripted:     bool,
+}
 
 // Gives Clay the memory it asks for and the text-measuring callback.
 @(private = "file")
@@ -133,16 +202,43 @@ clay_error :: proc "c" (error: clay.ErrorData) {
 }
 
 @(private = "file")
-parse_arguments :: proc(args: []string) -> (program_path: string, tests_root: string, ok: bool) {
+parse_arguments :: proc(args: []string) -> (options: Options, ok: bool) {
 	for i := 1; i < len(args); i += 1 {
-		if args[i] == "--tests" && i + 1 < len(args) {
+		argument := args[i]
+		has_value := i + 1 < len(args)
+		switch {
+		case argument == "--tests" && has_value:
 			i += 1
-			tests_root = args[i]
-		} else if program_path == "" && !strings.has_prefix(args[i], "--") {
-			program_path = args[i]
-		} else {
-			return "", "", false
+			options.tests_root = args[i]
+		case argument == "--windowed":
+			options.windowed = true
+		case argument == "--steps" && has_value:
+			i += 1
+			steps, parsed := strconv.parse_int(args[i])
+			if !parsed || steps < 0 {
+				fmt.eprintfln("error: --steps: %s is not a count", args[i])
+				return {}, false
+			}
+			options.steps = steps
+			options.scripted = true
+		case argument == "--tab" && has_value:
+			i += 1
+			tab, found := view.tab_named(args[i])
+			if !found {
+				fmt.eprintfln("error: --tab: no tab called %s", args[i])
+				return {}, false
+			}
+			append(&options.tabs, tab)
+			options.scripted = true
+		case argument == "--screenshot" && has_value:
+			i += 1
+			options.screenshot = args[i]
+			options.scripted = true
+		case options.program_path == "" && !strings.has_prefix(argument, "--"):
+			options.program_path = argument
+		case:
+			return {}, false
 		}
 	}
-	return program_path, tests_root, true
+	return options, true
 }

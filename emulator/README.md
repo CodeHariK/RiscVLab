@@ -24,6 +24,12 @@ make debug-ui                                              # opens the first les
 make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
+`rvdbg` options: `--windowed` opens a normal maximized window instead of native fullscreen (which on macOS is a Space of its own). For a picture of the UI without clicking: `--steps N` runs N instructions, `--tab <name>` selects a tab (repeatable), `--screenshot <file.png>` saves the window once the layout has settled and quits. Scripted runs don't save the settings.
+
+```
+./build/rvdbg ../tests/programs/build/lessons/19_uart_hello.elf --steps 40 --tab Devices --tab Steps --screenshot build/ui.png
+```
+
 - **Controls:** **Reset** reloads the program; **Prev** / **Next** (or the left / right arrow keys) undo or run one instruction. **Programs** (P or ~) opens the program list, **Docs** (D) the reference docs; both windows have a search box and close with Esc. **Theme** switches light / dark.
 - **Code panel:** **Source** (the `.s` file with its comments; programs are assembled with `-g` and the build writes an address -> line map), **Disassembly** (with symbol labels) and **Steps** (every step so far, newest first; Compact or Detailed with every stage of each instruction).
 - **Registers:** the pc and x0..x31; tags show what the next instruction reads (rs1 / rs2) and writes (rd), and the last change is highlighted.

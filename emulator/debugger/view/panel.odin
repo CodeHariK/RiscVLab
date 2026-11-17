@@ -1,5 +1,7 @@
 package view
 
+import "core:fmt"
+import "core:strings"
 import clay "../../vendor/clay-odin"
 import ui "../ui"
 import state "../state"
@@ -60,6 +62,29 @@ panel_tabs := [Panel][]Tab {
 	.Side      = {.Csrs, .Memory, .Stack, .Elf, .Devices},
 	.Encoding  = {.Encoding},
 	.Console   = {.Console},
+}
+
+// The tab called `name` (its title or its enum name, any case), for
+// rvdbg --tab.
+tab_named :: proc(name: string) -> (Tab, bool) {
+	for tab in Tab {
+		if strings.equal_fold(name, tab_titles[tab]) || strings.equal_fold(name, fmt.tprintf("%v", tab)) {
+			return tab, true
+		}
+	}
+	return .Source, false
+}
+
+// The panel that holds `tab`.
+panel_of :: proc(tab: Tab) -> Panel {
+	for tabs, panel in panel_tabs {
+		for candidate in tabs {
+			if candidate == tab {
+				return panel
+			}
+		}
+	}
+	return .Code
 }
 
 // The code tabs draw only the lines that fit and scroll themselves (see

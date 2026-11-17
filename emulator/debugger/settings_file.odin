@@ -24,6 +24,10 @@ import state "state"
 // gaining values. Fields missing from the file keep their defaults;
 // unknown ones are ignored, so files from older or newer builds load.
 
+// False for scripted runs (--steps, --tab, --screenshot): those set tabs
+// for one picture and must not change what the user's next run restores.
+saving := true
+
 SETTINGS_FOLDER :: "RiscVLab"
 SETTINGS_FILE :: "rvdbg.json"
 
@@ -87,6 +91,9 @@ settings_load :: proc() -> (last_program: string) {
 // Writes the current settings. Failing to save only loses them for next
 // time, so it is reported and otherwise ignored.
 settings_save :: proc(session: ^state.Session) {
+	if !saving {
+		return
+	}
 	path := settings_path()
 	if path == "" {
 		return

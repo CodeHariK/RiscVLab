@@ -100,14 +100,18 @@ handle_programs_window :: proc(session: ^state.Session) {
 	}
 }
 
-// Opens catalog entry `index` and closes the window.
+// Opens catalog entry `index` and closes the window. If it can't be
+// opened, the window stays open and says so (the details go to stderr).
 @(private = "file")
 open_program :: proc(session: ^state.Session, index: int) {
-	if state.session_open(session, state.catalog.entries[index].path) {
-		view.display.selected_program = index
-		view.display.code_scroll = 0
-		view.docs_show_lesson(session)
+	if !state.session_open(session, state.catalog.entries[index].path) {
+		view.display.program_failed = index
+		return
 	}
+	view.display.program_failed = -1
+	view.display.selected_program = index
+	view.display.code_scroll = 0
+	view.docs_show_lesson(session)
 	view.display.programs_open = false
 }
 

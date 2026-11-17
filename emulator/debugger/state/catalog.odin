@@ -42,9 +42,11 @@ Catalog :: struct {
 catalog: Catalog
 
 catalog_load :: proc(tests_root: string) {
-	add_programs(.Lessons, fmt.aprintf("%s/programs/lessons", tests_root), fmt.aprintf("%s/programs/build/lessons", tests_root))
-	add_programs(.Tests, fmt.aprintf("%s/programs", tests_root), fmt.aprintf("%s/programs/build", tests_root))
-	add_riscv_tests(fmt.aprintf("%s/riscv-tests/build", tests_root))
+	// Folder names are only needed while loading; entries keep copies of
+	// what they use.
+	add_programs(.Lessons, fmt.tprintf("%s/programs/lessons", tests_root), fmt.tprintf("%s/programs/build/lessons", tests_root))
+	add_programs(.Tests, fmt.tprintf("%s/programs", tests_root), fmt.tprintf("%s/programs/build", tests_root))
+	add_riscv_tests(fmt.tprintf("%s/riscv-tests/build", tests_root))
 }
 
 // Index of the entry with this path, or -1.
@@ -62,10 +64,11 @@ catalog_find :: proc(path: string) -> int {
 add_programs :: proc(group: Catalog_Group, source_dir: string, build_dir: string) {
 	for name in sorted_file_names(source_dir, ".s") {
 		stem := strings.trim_suffix(name, ".s")
-		elf := fmt.aprintf("%s/%s.elf", build_dir, stem)
+		elf := fmt.tprintf("%s/%s.elf", build_dir, stem)
 		if !os.exists(elf) {
 			continue
 		}
+		elf = strings.clone(elf)
 		title, description := read_header(fmt.tprintf("%s/%s", source_dir, name), stem)
 		append(&catalog.entries, Catalog_Entry{group, title, description, elf})
 	}
@@ -103,7 +106,7 @@ sorted_file_names :: proc(dir: string, suffix: string) -> []string {
 	names := make([dynamic]string, context.temp_allocator)
 	for info in infos {
 		if info.type == .Regular && strings.has_suffix(info.name, suffix) {
-			append(&names, strings.clone(info.name))
+			append(&names, strings.clone(info.name, context.temp_allocator))
 		}
 	}
 	slice.sort(names[:])

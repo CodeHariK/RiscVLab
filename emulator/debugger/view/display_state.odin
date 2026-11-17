@@ -38,6 +38,9 @@ View_State :: struct {
 	programs_open:    bool,
 	programs_search:  ui.Search_Field,
 	program_cursor:   int,
+	// The catalog entry that last failed to open (the window stays open
+	// and says so), or -1.
+	program_failed:   int,
 	programs_scroll_pending: bool,
 	programs_list_scroll: ui.Saved_Scroll,
 	// The catalog entry currently open, or -1 (a file not in the list).
@@ -48,5 +51,6 @@ display := View_State {
 	memory_layout    = .Words,
 	selected_tab     = {.Code = .Source, .Registers = .Registers, .Side = .Csrs, .Encoding = .Encoding},
 	selected_program = -1,
+	program_failed   = -1,
 	docs_pinned      = -1,
 }

@@ -245,11 +245,13 @@ write_text :: proc(entry: state.Timeline_Entry) -> string {
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf(
-			"mepc <- 0x%x, mcause <- %s (%v), mtval <- %s, mstatus: MPIE <- MIE, MIE <- 0",
+			"mepc <- 0x%x, mcause <- %s (%v), mtval <- %s, mstatus: MPIE <- MIE, MIE <- 0, MPP <- %v; privilege <- Machine; pc <- mtvec 0x%x",
 			entry.pc,
 			value_text(u64(trap.cause)),
 			trap.cause,
 			value_text(trap.value),
+			entry.record.privilege,
+			entry.next_pc,
 		)
 	}
 	builder := strings.builder_make(context.temp_allocator)

@@ -1,5 +1,6 @@
 package view
 
+import "core:fmt"
 import "core:path/filepath"
 import "core:strings"
 import clay "../../vendor/clay-odin"
@@ -48,6 +49,11 @@ programs_content :: proc(_: rawptr) {
 	colors := ui.palette()
 	ui.search_box("ProgramsSearch", &display.programs_search, "Type to search programs")
 	ui.modal_hint("Up / Down to choose, Enter to open, Esc to close")
+	if failed := display.program_failed; failed >= 0 && failed < len(state.catalog.entries) {
+		entry := state.catalog.entries[failed]
+		message := fmt.tprintf("Could not open %s (%s): see the terminal for why.", entry.title, entry.path)
+		clay.TextDynamic(message, ui.text_config(.Code_Small, colors.stopped))
+	}
 
 	matches := programs_filtered()
 	display.program_cursor = clamp(display.program_cursor, 0, max(0, len(matches) - 1))

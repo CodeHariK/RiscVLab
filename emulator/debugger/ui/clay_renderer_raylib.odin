@@ -6,6 +6,8 @@
 //   - package name and clay import path
 //   - text positions are rounded to whole pixels (marked "RiscVOdin"), so
 //     glyphs line up with the screen's pixels and stay sharp
+//   - measure_text_ascii measures bytes the font has no glyph for as '?'
+//     (marked "RiscVOdin"), instead of reading past the glyph table
 
 package ui
 
@@ -75,7 +77,15 @@ measure_text_ascii :: proc "c" (text: clay.StringSlice, config: ^clay.TextElemen
 	text_str := string(text.chars[:text.length])
 
 	for i in 0 ..< len(text_str) {
-		glyph_index := text_str[i] - 32
+		// RiscVOdin: the font has printable ASCII only (32..126). Anything
+		// else (a UTF-8 byte in a file name or symbol, a control character)
+		// would index past the glyph table; raylib draws '?' for it, so
+		// measure '?'.
+		character := text_str[i]
+		if character < 32 || character > 126 {
+			character = '?'
+		}
+		glyph_index := character - 32
 
 		glyph := font.glyphs[glyph_index]
 

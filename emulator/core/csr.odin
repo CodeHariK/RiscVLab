@@ -76,7 +76,13 @@ Csr_File :: struct {
 // its address are the lowest level allowed (0 user, 1 supervisor,
 // 3 machine).
 csr_allowed :: proc(cpu: ^Cpu, address: u32) -> bool {
-	return u32(cpu.privilege) >= (address >> 8) & 0b11
+	return u32(cpu.privilege) >= csr_level(address)
+}
+
+// The lowest privilege level that may access the CSR (address bits 9:8):
+// 0 user, 1 supervisor, 3 machine.
+csr_level :: proc(address: u32) -> u32 {
+	return (address >> 8) & 0b11
 }
 
 // True if the address is in a read-only range (bits 11:10 = 11).

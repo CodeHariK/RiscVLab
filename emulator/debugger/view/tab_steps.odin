@@ -97,9 +97,9 @@ detailed_steps :: proc(session: ^state.Session) {
 	blocks := count + 1 // the coming step, or the "finished" line
 	display.code_scroll = clamp(display.code_scroll, 0, f32(blocks - 1))
 	skip := int(display.code_scroll)
-	// Every block is at least one line tall, so this many always fill the
-	// panel; the panel clips whatever doesn't fit.
-	shown := visible_lines(SOURCE_LINE_HEIGHT)
+	// Every block has at least four lines (heading, fetch, decode,
+	// execute), so this many always fill the panel; it clips the rest.
+	shown := visible_lines(SOURCE_LINE_HEIGHT) / 4 + 1
 
 	block := 0
 	if skip == 0 {

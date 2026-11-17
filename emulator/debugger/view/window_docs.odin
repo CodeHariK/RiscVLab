@@ -211,7 +211,7 @@ next_mnemonic :: proc(session: ^state.Session) -> string {
 	return strings.clone(mnemonic, context.temp_allocator)
 }
 
-// `slot` keeps the ids of the (up to two) entries shown apart.
+// `slot` keeps the ids of the (up to four) entries shown apart.
 @(private)
 docs_entry :: proc(entry: reference.Entry, slot: u32) {
 	colors := ui.palette()

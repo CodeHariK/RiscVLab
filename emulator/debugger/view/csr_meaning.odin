@@ -19,6 +19,7 @@ csr_view_order := [?]u32 {
 	rv.CSR_MIP,
 	rv.CSR_MISA,
 	rv.CSR_MINSTRET,
+	rv.CSR_MCYCLE,
 	rv.CSR_MHARTID,
 	rv.CSR_MVENDORID,
 	rv.CSR_MARCHID,
@@ -45,13 +46,31 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 		if cpu.csr.mepc == 0 && value == 0 {
 			return "no trap yet"
 		}
-		return fmt.tprintf("%v", rv.Trap_Cause(value))
+		return cause_text(value)
 	case rv.CSR_MISA:
 		return "RV64IMA"
 	case rv.CSR_MINSTRET:
 		return "instructions retired"
+	case rv.CSR_MCYCLE:
+		return "clock cycles (one per instruction here)"
 	}
 	return value_text(value)
+}
+
+// mcause as a name: "Illegal_Instruction", "interrupt 7" (bit 63 set), or
+// the number for a value that names no cause (software can write any).
+@(private)
+cause_text :: proc(value: u64) -> string {
+	INTERRUPT_BIT :: u64(1) << 63
+	if value & INTERRUPT_BIT != 0 {
+		return fmt.tprintf("interrupt %d", value &~ INTERRUPT_BIT)
+	}
+	for cause in rv.Trap_Cause {
+		if u64(cause) == value {
+			return fmt.tprintf("%v", cause)
+		}
+	}
+	return fmt.tprintf("%s: not a cause this hart raises", value_text(value))
 }
 
 // True if the last Next changed this CSR: a CSR instruction or MRET wrote

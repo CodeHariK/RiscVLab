@@ -30,23 +30,23 @@ execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> st
 	case rv.OPCODE_JAL:
 		offset := rv.imm_j(instruction)
 		return fmt.tprintf(
-			"target = pc 0x%x + %s = 0x%x%s; return address = pc + 4 = 0x%x",
+			"target = pc 0x%x + %s = 0x%x%s%s",
 			pc,
 			signed_text(i64(offset)),
 			pc + offset,
 			state.symbol_label(session, pc + offset),
-			pc + rv.INSTRUCTION_SIZE,
+			return_address_text(instruction, pc),
 		)
 	case rv.OPCODE_JALR:
 		target := (a + rv.imm_i(instruction)) & ~u64(1)
 		return fmt.tprintf(
-			"target = (%s 0x%x + %s) & ~1 = 0x%x%s; return address = pc + 4 = 0x%x",
+			"target = (%s 0x%x + %s) & ~1 = 0x%x%s%s",
 			s1,
 			a,
 			signed_text(i64(rv.imm_i(instruction))),
 			target,
 			state.symbol_label(session, target),
-			pc + rv.INSTRUCTION_SIZE,
+			return_address_text(instruction, pc),
 		)
 	case rv.OPCODE_BRANCH:
 		comparison, taken := branch_comparison(mnemonic, a, b)
@@ -98,7 +98,7 @@ execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> st
 		return atomic_execute_text(session, entry, mnemonic, s1, s2)
 	case rv.OPCODE_SYSTEM:
 		if rv.funct3(instruction) != 0 {
-			return csr_execute_text(entry, mnemonic, s1)
+			return csr_execute_text(session, entry, mnemonic, s1)
 		}
 		return system_call_text(entry)
 	}
@@ -106,6 +106,16 @@ execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> st
 		return fmt.tprintf("unknown encoding: raises %v (mtval = 0x%x)", trap.cause, trap.value)
 	}
 	return "?"
+}
+
+// "; return address = pc + 4 = 0x...", or that there is none: with
+// rd = zero (j, ret) the jump keeps no way back.
+@(private)
+return_address_text :: proc(instruction: u32, pc: u64) -> string {
+	if rv.rd(instruction) == 0 {
+		return "; rd is zero, so no return address is kept"
+	}
+	return fmt.tprintf("; return address = pc + 4 = 0x%x", pc + rv.INSTRUCTION_SIZE)
 }
 
 // LR / SC / AMO: the address (rs1, no offset), and for SC whether the
@@ -116,7 +126,13 @@ atomic_execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry
 	address := entry.rs1_value
 	place := state.symbol_label(session, address)
 	if trap, took_trap := entry.trap.?; took_trap {
-		return fmt.tprintf("address = %s 0x%x: raises %v (atomics must be aligned to their size)", s1, address, trap.cause)
+		#partial switch trap.cause {
+		case .Load_Address_Misaligned, .Store_Address_Misaligned:
+			return fmt.tprintf("address = %s 0x%x: raises %v (atomics must be aligned to their size)", s1, address, trap.cause)
+		case .Load_Access_Fault, .Store_Access_Fault:
+			return fmt.tprintf("address = %s 0x%x: raises %v (no memory there)", s1, address, trap.cause)
+		}
+		return fmt.tprintf("raises %v", trap.cause)
 	}
 	size := u64(1) << (rv.funct3(instruction) & 0b11)
 	switch rv.funct5(instruction) {
@@ -189,11 +205,11 @@ arithmetic_text :: proc(mnemonic: string, s1: string, a: u64, operand: string, r
 // CSRRW / CSRRS / CSRRC (and the immediate forms): the new value worked
 // out from the old one, and what the CSR kept.
 @(private)
-csr_execute_text :: proc(entry: state.Timeline_Entry, mnemonic: string, s1: string) -> string {
+csr_execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry, mnemonic: string, s1: string) -> string {
 	instruction := entry.instruction
 	csr := disasm.csr_name(rv.csr_address(instruction))
 	if trap, took_trap := entry.trap.?; took_trap {
-		return fmt.tprintf("CSR 0x%03x is not implemented: raises %v", rv.csr_address(instruction), trap.cause)
+		return fmt.tprintf("%s: raises %v", csr_trap_reason(session, entry), trap.cause)
 	}
 	old := entry.csr_value
 	source := entry.rs1_value
@@ -223,6 +239,28 @@ csr_execute_text :: proc(entry: state.Timeline_Entry, mnemonic: string, s1: stri
 		kept = fmt.tprintf(" -> kept 0x%x (WARL: the CSR only keeps the bits it supports)", entry.csr_new)
 	}
 	return fmt.tprintf("%s%s; rd gets the old value %s", how, kept, value_text(old))
+}
+
+// Why a CSR instruction trapped, in the order the hart checks: privilege,
+// whether the CSR exists, then writing a read-only one.
+@(private)
+csr_trap_reason :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> string {
+	address := rv.csr_address(entry.instruction)
+	name := disasm.csr_name(address)
+	if name == "" {
+		name = fmt.tprintf("CSR 0x%03x", address)
+	}
+	privilege := entry.record.privilege // before the step
+	if u32(privilege) < rv.csr_level(address) {
+		return fmt.tprintf("%s needs privilege level %d, but the hart runs in %v mode", name, rv.csr_level(address), privilege)
+	}
+	if _, exists := rv.csr_read(&session.machine.cpu, address); !exists {
+		return fmt.tprintf("%s is not implemented", name)
+	}
+	if rv.csr_is_read_only(address) {
+		return fmt.tprintf("%s is read-only (address bits 11:10 = 11), and this instruction writes it", name)
+	}
+	return fmt.tprintf("%s can't be accessed this way", name)
 }
 
 // ECALL / EBREAK (trap into the handler) and MRET (return from it).

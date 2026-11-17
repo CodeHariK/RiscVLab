@@ -21,6 +21,16 @@ tab_disassembly :: proc(session: ^state.Session) {
 		pc_index := int((pc - code_start) / rv.INSTRUCTION_SIZE)
 		total := int((end - code_start) / rv.INSTRUCTION_SIZE)
 		first = code_start + u64(first_visible_index(pc_index, lines, total)) * rv.INSTRUCTION_SIZE
+		// first_visible_index counts instructions, but labels take lines
+		// too: start later until the pc's line is back above the bottom
+		// third. (Not while scrolled with the wheel: then the pc may be
+		// out of view on purpose.)
+		if display.code_scroll == 0 {
+			keep_below := lines / 3
+			for first < pc && disassembly_lines(session, first, pc) > lines - keep_below {
+				first += rv.INSTRUCTION_SIZE
+			}
+		}
 	}
 
 	// Symbol labels (e.g. "test_2:") take a line of their own, so count
@@ -57,4 +67,18 @@ tab_disassembly :: proc(session: ^state.Session) {
 			clay.TextDynamic(text, ui.text_config(.Code, colors.text))
 		}
 	}
+}
+
+// Lines the listing takes from `first` up to and including the
+// instruction at `last`: one per instruction, one per label line.
+@(private)
+disassembly_lines :: proc(session: ^state.Session, first: u64, last: u64) -> int {
+	count := 0
+	for address := first; address <= last; address += rv.INSTRUCTION_SIZE {
+		count += 1
+		if state.symbol_names_at(session, address) != "" {
+			count += 1
+		}
+	}
+	return count
 }

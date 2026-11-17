@@ -1,6 +1,7 @@
 package state
 
 import "core:os"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
 
@@ -29,7 +30,7 @@ Line_Entry :: struct {
 Source_Map :: struct {
 	path:    string,
 	lines:   []string, // the source text, one entry per line (line 1 = lines[0])
-	entries: [dynamic]Line_Entry, // sorted by address, as in the file
+	entries: [dynamic]Line_Entry, // sorted by address (source_line_at searches them)
 	// Backing storage the strings above point into.
 	text:    []u8,
 	map_text: []u8,
@@ -59,6 +60,13 @@ source_load :: proc(program_path: string) -> (source: Source_Map, ok: bool) {
 			append(&source.entries, Line_Entry{address, line_number})
 		}
 	}
+
+	// The build writes them in address order, but a program with several
+	// code sections might not: the lookup needs them sorted. (A stable
+	// sort keeps the first line listed for an address first.)
+	slice.stable_sort_by(source.entries[:], proc(a, b: Line_Entry) -> bool {
+		return a.address < b.address
+	})
 
 	text, text_error := os.read_entire_file(source.path, context.allocator)
 	if text_error != nil {

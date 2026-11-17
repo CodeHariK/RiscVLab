@@ -9,8 +9,8 @@ import state "../state"
 // The Stack tab: the words from just below sp up to the top of the stack,
 // newest (lowest address) first, one 8-byte word per row.
 //
-//   sp ->  sp+0x0   800011e0  0x0000000000000004 (4)
-//          sp+0x8   800011e8  0x0000000080000034   -> sum+0x18 (code)
+//   sp ->  sp+0x0  800011e0  0x0000000000000004 (4)
+//          sp+0x8  800011e8  0x0000000080000034  -> sum+0x18 (code)
 //
 // Values that point into code are named with their label: a saved return
 // address looks like `-> sum+0x18`. Values that point into data or into
@@ -44,7 +44,7 @@ tab_stack :: proc(session: ^state.Session) {
 	colors := ui.palette()
 	sp := rv.reg_read(&session.machine.cpu, STACK_SP)
 	if _, in_ram := rv.bus_load(&session.machine.bus, sp - 1, 1); !in_ram || sp == 0 {
-		clay.TextDynamic(
+		wrapped_text(
 			fmt.tprintf("sp = 0x%x does not point into RAM yet: programs set it up first, e.g. la sp, stack_top (lesson 09).", sp),
 			ui.text_config(.Code_Small, colors.text_dim),
 		)
@@ -54,13 +54,12 @@ tab_stack :: proc(session: ^state.Session) {
 	frames := stack_frames(session)
 	top := stack_top(session, sp, frames)
 	used := top - sp if top > sp else 0
-	// Two short lines: the side panel doesn't wrap text.
-	clay.TextDynamic(fmt.tprintf("sp = 0x%x, top = 0x%x", sp, top), ui.text_config(.Code_Small, colors.text_dim))
+	wrapped_text(fmt.tprintf("sp = 0x%x, top = 0x%x", sp, top), ui.text_config(.Code_Small, colors.text_dim))
 	usage := fmt.tprintf("%s bytes in use, %d frame(s)", value_text(used), len(frames))
 	if reserved, ok := state.symbol_address(session, "stack"); ok && reserved < top {
 		usage = fmt.tprintf("%s, %s bytes reserved", usage, value_text(top - reserved))
 	}
-	clay.TextDynamic(usage, ui.text_config(.Code_Small, colors.text_dim))
+	wrapped_text(usage, ui.text_config(.Code_Small, colors.text_dim))
 
 	access := state.next_memory_access(session)
 	changed: state.Memory_Access
@@ -69,16 +68,18 @@ tab_stack :: proc(session: ^state.Session) {
 	}
 
 	first := sp - STACK_FREE_ROWS * STACK_WORD
+	rows := make([dynamic]ui.Table_Row, context.temp_allocator)
 	row := 0
 	for address := first; address < top && row < STACK_MAX_ROWS; address += STACK_WORD {
 		if frame, starts := frame_starting_at(frames, address); starts {
-			frame_heading(session, frame, row)
+			append(&rows, frame_heading(session, frame))
 		}
-		stack_row(session, address, sp, top, access, changed, row)
+		append(&rows, stack_row(session, address, sp, top, access, changed))
 		row += 1
 	}
+	ui.table(clay.ID("StackTable"), rows[:], tab_table())
 	if top > sp && (top - first) / STACK_WORD > STACK_MAX_ROWS {
-		clay.TextDynamic(fmt.tprintf("... %d more words up to the top", (top - first) / STACK_WORD - STACK_MAX_ROWS), ui.text_config(.Code_Small, colors.text_dim))
+		wrapped_text(fmt.tprintf("... %d more words up to the top", (top - first) / STACK_WORD - STACK_MAX_ROWS), ui.text_config(.Code_Small, colors.text_dim))
 	}
 	clay.TextDynamic(fmt.tprintf("%08x  top of the stack", top), ui.text_config(.Code_Small, colors.accent))
 }
@@ -127,22 +128,20 @@ frame_starting_at :: proc(frames: []Stack_Frame, address: u64) -> (Stack_Frame, 
 	return {}, false
 }
 
-// "frame of sum+0x4: 0x10 bytes": where the step that made it was.
+// "frame made at sum+0x4: 0x10 bytes": where the step that made it was.
 @(private)
-frame_heading :: proc(session: ^state.Session, frame: Stack_Frame, row: int) {
-	colors := ui.palette()
-	if clay.UI(clay.ID("StackFrame", u32(row)))({layout = {padding = {6, 6, 6, 0}}}) {
-		place := state.symbol_place(session, frame.made_at)
-		if place == "" {
-			place = fmt.tprintf("0x%x", frame.made_at)
-		}
-		text := fmt.tprintf("frame made at %s: %s bytes", place, value_text(frame.high - frame.low))
-		clay.TextDynamic(text, ui.text_config(.Code_Small, colors.accent))
+frame_heading :: proc(session: ^state.Session, frame: Stack_Frame) -> ui.Table_Row {
+	place := state.symbol_place(session, frame.made_at)
+	if place == "" {
+		place = fmt.tprintf("0x%x", frame.made_at)
 	}
+	text := fmt.tprintf("frame made at %s: %s bytes", place, value_text(frame.high - frame.low))
+	return {cells = ui.cells({text = text}), color = ui.palette().accent, span = true}
 }
 
+// marker | offset from sp | address | value | what the value points at
 @(private)
-stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, access: state.Memory_Access, changed: state.Memory_Access, row: int) {
+stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, access: state.Memory_Access, changed: state.Memory_Access) -> ui.Table_Row {
 	colors := ui.palette()
 	value, _ := rv.bus_load(&session.machine.bus, address, STACK_WORD)
 	free := address < sp
@@ -153,10 +152,9 @@ stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, acce
 	} else {
 		offset = fmt.tprintf("sp+0x%x", address - sp)
 	}
-	marker := "sp -> " if address == sp else "      "
-	text := fmt.tprintf("%s%-9s %08x  %s%s", marker, offset, address, register_value_text(value), value_meaning(session, value, sp, top))
+	meaning := value_meaning(session, value, sp, top)
 	if free {
-		text = fmt.tprintf("%s   (free)", text)
+		meaning = "(free)" if meaning == "" else fmt.tprintf("%s (free)", meaning)
 	}
 
 	color := colors.text_dim if free else colors.text
@@ -169,28 +167,32 @@ stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, acce
 	if changed.kind != .None && overlaps_access(word, changed) {
 		background = colors.changed
 	}
-	if clay.UI(clay.ID("StackRow", u32(row)))({
-		layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}},
-		backgroundColor = background,
-		cornerRadius = clay.CornerRadiusAll(2),
-	}) {
-		clay.TextDynamic(text, ui.text_config(.Code_Small, color))
+	return {
+		cells = ui.cells(
+			{text = "sp ->" if address == sp else ""},
+			{text = offset},
+			{text = fmt.tprintf("%08x", address)},
+			{text = register_value_text(value)},
+			{text = meaning},
+		),
+		color = color,
+		background = background,
 	}
 }
 
-// "   -> sum+0x20 (code)" when the value is an address we can name.
+// "-> sum+0x20 (code)" when the value is an address we can name.
 @(private)
 value_meaning :: proc(session: ^state.Session, value: u64, sp: u64, top: u64) -> string {
 	program := session.program
 	if value >= program.code_start && value < program.code_end {
-		return fmt.tprintf("   -> %s (code)", symbol_place_or_address(session, value))
+		return fmt.tprintf("-> %s (code)", symbol_place_or_address(session, value))
 	}
 	// Before the data check: the stack itself is usually in .bss.
 	if value >= sp && value <= top {
-		return fmt.tprintf("   -> stack sp+0x%x", value - sp)
+		return fmt.tprintf("-> stack sp+0x%x", value - sp)
 	}
 	if value >= program.data_start && value < program.data_end {
-		return fmt.tprintf("   -> %s (data)", symbol_place_or_address(session, value))
+		return fmt.tprintf("-> %s (data)", symbol_place_or_address(session, value))
 	}
 	return ""
 }

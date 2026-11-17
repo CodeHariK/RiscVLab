@@ -110,7 +110,7 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 | `.` | `rvdbg` | `main.odin` (arguments, window, frame loop; native fullscreen in `window_mode_*.odin`), `input.odin` and `modal_input.odin` (buttons, keys, clicks) |
 | `state/` | `state` | The model, no drawing: the session (open, Reset / Prev / Next, the preview of Next), the timeline of steps, memory access tracking, the program list, source and line map, symbols, reading the program file |
 | `view/` | `view` | Everything on screen, plus the view state (`display_state.odin`: tabs, scrolls, searches, open windows; the global is `display`) |
-| `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, modal window frame, search box |
+| `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, tables (`table.odin`), the Markdown subset the docs use (`markdown.odin`), modal window frame, search box |
 | `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing, lookup, search |
 
 `view/` in more detail. Everything shown is a tab (`tab_*.odin`); a panel is just a box holding a list of tabs, drawn by one generic proc. `window_` files are windows over everything.

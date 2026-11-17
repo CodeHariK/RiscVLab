@@ -27,17 +27,17 @@ Related: mhartid, fence
 Does: the 32 places inside the CPU where instructions take their operands and put their results. Each holds 64 bits on RV64. Instructions name them x0 to x31.
 
 How it works: the calling convention (the ABI) gives each one a name and a job, so separately written functions can work together:
-```
-x0       zero   always 0; writes are thrown away
-x1       ra     return address
-x2       sp     stack pointer
-x3, x4   gp tp  global pointer, thread pointer
-x5-x7    t0-t2  temporaries: a call may change them
-x8-x9    s0-s1  saved: a function must restore them before returning
-x10-x17  a0-a7  arguments and return values (a0, a1)
-x18-x27  s2-s11 saved
-x28-x31  t3-t6  temporaries
-```
+| Register | ABI name | Job |
+|---|---|---|
+| x0 | zero | always 0; writes are thrown away |
+| x1 | ra | return address |
+| x2 | sp | stack pointer |
+| x3, x4 | gp tp | global pointer, thread pointer |
+| x5-x7 | t0-t2 | temporaries: a call may change them |
+| x8-x9 | s0-s1 | saved: a function must restore them before returning |
+| x10-x17 | a0-a7 | arguments and return values (a0, a1) |
+| x18-x27 | s2-s11 | saved |
+| x28-x31 | t3-t6 | temporaries |
 
 For: a function that uses an s register saves it first (usually on the stack) and restores it before `ret`; t registers can be used freely but may be changed by any call.
 

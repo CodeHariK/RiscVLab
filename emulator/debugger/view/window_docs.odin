@@ -30,16 +30,8 @@ import state "../state"
 // Clicking an entry in the list pins that one instead, until "Follow next
 // instruction" is clicked.
 //
-// Body lines are drawn by kind, in two columns: section labels on the
-// left, everything else in the text column, so a section reads as one
-// block:
-//   "Does: ..."         a section label (Does, Becomes, How it works, ...)
-//                       and its first text
-//   "- ..." / "1. ..."  a bullet or numbered step, wrapped under itself
-//   ``` ... ```         a code block, in the code colour
-//   "*U-type, RV64I*"   the format line, dimmed
-//   anything else       more text of the current section
-// Backticks (Markdown code marks) are left out.
+// Entry bodies are Markdown, drawn by ui.markdown (ui/markdown.odin) with
+// the section labels below in a column of their own.
 
 DOCS_ENTRY_ID :: "DocsEntry" // + entry index
 DOCS_LESSON_ENTRY_ID :: "DocsLessonEntry" // + entry index, in the "This lesson" group
@@ -51,7 +43,6 @@ DOCS_LIST_WIDTH :: 420
 DOCS_LIST_ID :: "DocsList"
 DOCS_PAGE_ID :: "DocsPage"
 DOCS_LABEL_WIDTH :: 130 // fits "How it works"
-DOCS_MARKER_WIDTH :: 28 // "-" or "1." in front of a bullet or step
 
 doc_labels := [?]string{"Does", "Becomes", "How it works", "Fields", "For", "Pseudo", "Emulator", "Watch out", "Related", "Example"}
 
@@ -226,89 +217,7 @@ docs_entry :: proc(entry: reference.Entry, slot: u32) {
 	colors := ui.palette()
 	if clay.UI(clay.ID("DocsEntryShown", slot))({layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {top = 8, bottom = 16}, childGap = 3}}) {
 		clay.TextDynamic(reference.entry_heading(entry), ui.text_config(.Title, colors.title))
-		in_code := false
-		for line in entry.lines {
-			if strings.has_prefix(strings.trim_space(line), "```") {
-				in_code = !in_code
-				continue
-			}
-			if in_code {
-				docs_section_row("", "", line, colors.accent)
-			} else {
-				docs_line(line)
-			}
-		}
-	}
-}
-
-// One line outside a code block: a section label with its first text, a
-// bullet or numbered step, the format line, a blank line, or more text of
-// the section.
-@(private)
-docs_line :: proc(line: string) {
-	colors := ui.palette()
-	if strings.trim_space(line) == "" {
-		if clay.UI()({layout = {sizing = {height = clay.SizingFixed(6)}}}) {}
-		return
-	}
-	text, _ := strings.remove_all(line, "`", context.temp_allocator)
-	if strings.has_prefix(text, "*") && strings.has_suffix(text, "*") && len(text) > 1 {
-		clay.TextDynamic(text[1:len(text) - 1], ui.text_config(.Code_Small, colors.text_dim))
-		return
-	}
-	for label in doc_labels {
-		if strings.has_prefix(text, label) && strings.has_prefix(text[len(label):], ":") {
-			if clay.UI()({layout = {sizing = {height = clay.SizingFixed(4)}}}) {}
-			docs_section_row(label, "", strings.trim_space(text[len(label) + 1:]), colors.text)
-			return
-		}
-	}
-	if strings.has_prefix(text, "- ") {
-		docs_section_row("", "-", text[2:], colors.text)
-		return
-	}
-	if marker, rest, numbered := numbered_step(text); numbered {
-		docs_section_row("", marker, rest, colors.text)
-		return
-	}
-	docs_section_row("", "", text, colors.text)
-}
-
-// "1. text" -> ("1.", "text", true).
-@(private)
-numbered_step :: proc(text: string) -> (marker: string, rest: string, ok: bool) {
-	digits := 0
-	for digits < len(text) && text[digits] >= '0' && text[digits] <= '9' {
-		digits += 1
-	}
-	if digits == 0 || !strings.has_prefix(text[digits:], ". ") {
-		return "", "", false
-	}
-	return text[:digits + 1], text[digits + 2:], true
-}
-
-// A row in the label column layout: the section label (or nothing), then
-// an optional bullet / step marker, then the text, which wraps within its
-// own column so continued lines stay lined up.
-@(private)
-docs_section_row :: proc(label: string, marker: string, text: string, color: clay.Color) {
-	colors := ui.palette()
-	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = 8}}) {
-		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(DOCS_LABEL_WIDTH)}}}) {
-			if label != "" {
-				clay.TextDynamic(label, ui.text_config(.Code_Small, colors.accent))
-			}
-		}
-		if marker != "" {
-			if clay.UI()({layout = {sizing = {width = clay.SizingFixed(DOCS_MARKER_WIDTH)}}}) {
-				clay.TextDynamic(marker, ui.text_config(.Code_Small, colors.text_dim))
-			}
-		}
-		if text != "" {
-			if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {
-				clay.TextDynamic(text, ui.text_config(.Code_Small, color))
-			}
-		}
+		ui.markdown(fmt.tprintf("DocsEntry%d", slot), entry.lines, doc_labels[:], DOCS_LABEL_WIDTH)
 	}
 }
 

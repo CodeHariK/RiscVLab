@@ -142,17 +142,17 @@ Fields:
 - Exception code (the other bits): which one.
 
 How it works: the exception codes the emulator raises today:
-```
-0x0  Instruction_Address_Misaligned    jump to an address not a multiple of 4
-0x1  Instruction_Access_Fault          pc outside memory
-0x2  Illegal_Instruction               not a valid instruction, or a CSR not allowed
-0x3  Breakpoint                        ebreak
-0x5  Load_Access_Fault                 load from outside memory
-0x7  Store_Access_Fault                store to outside memory
-0x8  Ecall_From_U_Mode                 ecall in user mode
-0x9  Ecall_From_S_Mode                 ecall in supervisor mode
-0xb  Ecall_From_M_Mode                 ecall in machine mode
-```
+| Code | Cause | When |
+|---|---|---|
+| 0x0 | Instruction_Address_Misaligned | jump to an address not a multiple of 4 |
+| 0x1 | Instruction_Access_Fault | pc outside memory |
+| 0x2 | Illegal_Instruction | not a valid instruction, or a CSR not allowed |
+| 0x3 | Breakpoint | ebreak |
+| 0x5 | Load_Access_Fault | load from outside memory |
+| 0x7 | Store_Access_Fault | store to outside memory |
+| 0x8 | Ecall_From_U_Mode | ecall in user mode |
+| 0x9 | Ecall_From_S_Mode | ecall in supervisor mode |
+| 0xb | Ecall_From_M_Mode | ecall in machine mode |
 Page faults (0xc, 0xd, 0xf) come with paging, and interrupts (bit 63 set) with the timer.
 
 For: the first thing a handler does is read mcause and decide what to do: a system call, a fault to report, a timer tick.

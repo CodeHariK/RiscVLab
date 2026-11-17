@@ -22,28 +22,23 @@ tab_elf :: proc(session: ^state.Session) {
 			tohost = fmt.tprintf("0x%x (value %s)", address, value_text(value))
 		}
 
-		program_line("format", format)
-		program_line("entry", fmt.tprintf("0x%x", program.entry))
-		program_line(
-			"code",
-			fmt.tprintf("0x%x - 0x%x (%d instructions)", program.code_start, program.code_end, instruction_count),
-		)
 		data := "none"
 		if program.data_end > program.data_start {
 			data = fmt.tprintf("0x%x - 0x%x (%d bytes)", program.data_start, program.data_end, program.data_end - program.data_start)
 		}
-		program_line("data", data)
-		program_line("tohost", tohost)
+		rows := [?]ui.Table_Row {
+			program_line("format", format),
+			program_line("entry", fmt.tprintf("0x%x", program.entry)),
+			program_line("code", fmt.tprintf("0x%x - 0x%x (%d instructions)", program.code_start, program.code_end, instruction_count)),
+			program_line("data", data),
+			program_line("tohost", tohost),
+		}
+		ui.table(clay.ID("ElfTable"), rows[:], tab_table())
 	}
 }
 
+// A label (dimmed) and its value.
 @(private)
-program_line :: proc(label: string, value: string) {
-	colors := ui.palette()
-	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}}}) {
-		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(80)}}}) {
-			clay.TextDynamic(label, ui.text_config(.Code_Small, colors.text_dim))
-		}
-		clay.TextDynamic(value, ui.text_config(.Code_Small, colors.text))
-	}
+program_line :: proc(label: string, value: string) -> ui.Table_Row {
+	return {cells = ui.cells({text = label, color = ui.palette().text_dim}, {text = value})}
 }

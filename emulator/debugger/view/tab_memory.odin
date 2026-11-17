@@ -48,31 +48,25 @@ tab_memory :: proc(session: ^state.Session) {
 		changed = {.Store, record.memory_address, record.memory_size}
 	}
 	focus, reason := memory_focus(session, access, changed)
-	clay.TextDynamic(reason, ui.text_config(.Code_Small, colors.text_dim))
+	wrapped_text(reason, ui.text_config(.Code_Small, colors.text_dim))
 
 	row_bytes := u64(WORDS_PER_ROW * 4) if display.memory_layout == .Words else 8
+	cell_size: u64 = 4 if display.memory_layout == .Words else 1
 	first := first_row_address(focus, row_bytes)
+	rows := make([dynamic]ui.Table_Row, 0, 2 * MEMORY_ROWS, context.temp_allocator)
 	for row in 0 ..< MEMORY_ROWS {
 		row_address := first + u64(row) * row_bytes
 		if names := state.symbol_names_in(session, row_address, row_address + row_bytes, true); names != "" {
-			if clay.UI(clay.ID("MemoryLabel", u32(row)))({layout = {padding = {6, 6, 4, 0}}}) {
-				clay.TextDynamic(names, ui.text_config(.Code_Small, colors.accent))
-			}
+			append(&rows, ui.Table_Row{cells = ui.cells({text = names}), color = colors.accent, span = true})
 		}
-		if clay.UI(clay.ID("MemoryRow", u32(row)))({layout = {padding = {6, 6, 1, 1}, childGap = 8}}) {
-			clay.TextDynamic(fmt.tprintf("%08x", row_address), ui.text_config(.Code_Small, colors.text_dim))
-			switch display.memory_layout {
-			case .Words:
-				for column in 0 ..< WORDS_PER_ROW {
-					memory_cell(session, row_address + u64(column) * 4, 4, access, changed, u32(row * WORDS_PER_ROW + column))
-				}
-			case .Bytes:
-				for column in 0 ..< 8 {
-					memory_cell(session, row_address + u64(column), 1, access, changed, u32(row * 8 + column))
-				}
-			}
+		cells := make([]ui.Table_Cell, 1 + row_bytes / cell_size, context.temp_allocator)
+		cells[0] = {text = fmt.tprintf("%08x", row_address), color = colors.text_dim}
+		for column in 0 ..< row_bytes / cell_size {
+			cells[1 + column] = memory_cell(session, row_address + column * cell_size, cell_size, access, changed)
 		}
+		append(&rows, ui.Table_Row{cells = cells})
 	}
+	ui.table(clay.ID("MemoryTable"), rows[:], tab_table())
 }
 
 // A few rows before the focus, but never starting below RAM when the
@@ -125,7 +119,7 @@ memory_focus :: proc(session: ^state.Session, access: state.Memory_Access, chang
 // One word (size 4) or byte (size 1) in hex, "--" outside memory,
 // coloured if the next access or the last change overlaps it.
 @(private)
-memory_cell :: proc(session: ^state.Session, address: u64, size: u64, access: state.Memory_Access, changed: state.Memory_Access, id: u32) {
+memory_cell :: proc(session: ^state.Session, address: u64, size: u64, access: state.Memory_Access, changed: state.Memory_Access) -> ui.Table_Cell {
 	colors := ui.palette()
 	value, in_ram := rv.bus_load(&session.machine.bus, address, size)
 	text := "--------" if size == 4 else "--"
@@ -146,9 +140,7 @@ memory_cell :: proc(session: ^state.Session, address: u64, size: u64, access: st
 	if changed.kind != .None && overlaps(address, size, changed) {
 		background = colors.changed
 	}
-	if clay.UI(clay.ID("MemoryCell", id))({backgroundColor = background, cornerRadius = clay.CornerRadiusAll(2)}) {
-		clay.TextDynamic(text, ui.text_config(.Code_Small, color))
-	}
+	return {text = text, color = color, background = background}
 }
 
 // True if [address, address + size) and the access's range share a byte.

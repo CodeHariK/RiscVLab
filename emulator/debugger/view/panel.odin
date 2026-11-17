@@ -145,3 +145,31 @@ draw_tab :: proc(session: ^state.Session, tab: Tab) {
 		tab_elf(session)
 	}
 }
+
+// The width of the tab area being drawn (last frame), if it has one yet.
+tab_area_width :: proc() -> (f32, bool) {
+	area := clay.GetElementData(current_tab_area)
+	return area.boundingBox.width, area.found
+}
+
+// Text that wraps at the edge of the tab area. A tab area clips, and in
+// Clay a clipping element lets its children be as wide as they like, so
+// text inside it only wraps in a box given the area's width (last frame).
+@(private)
+wrapped_text :: proc(text: string, config: clay.TextElementConfig) {
+	sizing := clay.Sizing{width = clay.SizingGrow()}
+	if width, found := tab_area_width(); found {
+		sizing.width = clay.SizingFixed(width)
+	}
+	if clay.UI()({layout = {sizing = sizing}}) {
+		clay.TextDynamic(text, config)
+	}
+}
+
+// How the tabs draw tables: a list (no lines) as wide as the tab area.
+@(private)
+tab_table :: proc() -> ui.Table_Options {
+	options := ui.TABLE_LIST
+	options.width, _ = tab_area_width()
+	return options
+}

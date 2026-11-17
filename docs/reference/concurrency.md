@@ -11,14 +11,13 @@ counter), 17 (a spinlock) and 18 (lr / sc and compare-and-swap). Same format as 
 Does: a race condition is a bug where the result depends on the timing of two harts (or of a hart and an interrupt) using the same memory.
 
 How it works: count = count + 1 is three instructions, `lw`, `addi`, `sw`. If two harts run them at the same time, both can read the old value before either writes:
-```
-hart 0              hart 1              count
-lw   t0, 0(a0)                          5
-                    lw   t0, 0(a0)      5
-addi t0, t0, 1      addi t0, t0, 1      5
-sw   t0, 0(a0)                          6
-                    sw   t0, 0(a0)      6    (should be 7)
-```
+| hart 0 | hart 1 | count |
+|---|---|---|
+| lw t0, 0(a0) | | 5 |
+| | lw t0, 0(a0) | 5 |
+| addi t0, t0, 1 | addi t0, t0, 1 | 5 |
+| sw t0, 0(a0) | | 6 |
+| | sw t0, 0(a0) | 6 (should be 7) |
 One update is lost. It only happens when the timing is just wrong, so it appears rarely and randomly.
 
 For: recognising when you need an atomic instruction or a lock: whenever data is written by one hart (or handler) and read or written by another.

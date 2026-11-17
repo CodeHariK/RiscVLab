@@ -22,13 +22,11 @@ How it works: a trap differs from a function call in three ways.
 3. The door must be locked. If a user program could write mtvec, it could point traps at its own code and give itself kernel power. So mtvec, mstatus and the rest are privileged CSRs: only more privileged code can change them. That is why this state lives in CSRs, not in ordinary registers or memory.
 
 The kinds of traps:
-```
-Faults            an instruction can't complete     illegal instruction, access fault,
-                  (at that instruction)             misaligned jump, page faults (later)
-Deliberate traps  an instruction meant to trap      ecall (system call), ebreak (debugger)
-Interrupts        something outside the program     timer, a device, another hart
-                  (between any two instructions)    (coming with the timer)
-```
+| Kind | Cause | Examples |
+|---|---|---|
+| Faults | an instruction can't complete (at that instruction) | illegal instruction, access fault, misaligned jump, page faults (later) |
+| Deliberate traps | an instruction meant to trap | ecall (system call), ebreak (debugger) |
+| Interrupts | something outside the program (between any two instructions) | timer, a device, another hart (coming with the timer) |
 Faults and deliberate traps are exceptions: mcause bit 63 is 0. Interrupts set bit 63.
 
 For: an OS like xv6 needs every kind.
@@ -106,12 +104,11 @@ handler:
 Does: a handler must undo everything the trap did, not only go back to the right address. `mret` does all of it in one instruction; a plain jump does not.
 
 How it works: what the trap changed, and what each way back restores:
-```
-                           trap entry         jr mepc+4      mret
-pc                         -> mtvec           restored       restored (= mepc)
-mstatus.MIE (interrupts)   -> 0               stays 0        = MPIE (as before)
-privilege level            -> machine         stays machine  = MPP (as before)
-```
+| | trap entry | jr mepc+4 | mret |
+|---|---|---|---|
+| pc | -> mtvec | restored | restored (= mepc) |
+| mstatus.MIE (interrupts) | -> 0 | stays 0 | = MPIE (as before) |
+| privilege level | -> machine | stays machine | = MPP (as before) |
 So the handler first sets mepc to where it should return (for `ecall`, mepc + 4), then ends with `mret`.
 
 For: a correct handler.

@@ -39,12 +39,6 @@ visible_lines :: proc(line_height: int) -> int {
 	return max(3, int(area.boundingBox.height) / line_height)
 }
 
-// The width of the tab area being drawn (last frame), if it has one yet.
-tab_area_width :: proc() -> (f32, bool) {
-	area := clay.GetElementData(current_tab_area)
-	return area.boundingBox.width, area.found
-}
-
 // The code tab under the mouse, if any (the wheel scrolls it).
 code_tab_under_pointer :: proc(session: ^state.Session) -> (Tab, bool) {
 	for panel in Panel {
@@ -58,3 +52,4 @@ code_tab_under_pointer :: proc(session: ^state.Session) -> (Tab, bool) {
 	}
 	return .Source, false
 }
+

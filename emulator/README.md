@@ -24,7 +24,14 @@ make debug-ui                                              # opens the first les
 make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
-The **Programs** tab lists the lessons (`tests/programs/lessons/`), the test programs and, if built, the official riscv-tests; click one to open it. Controls: **Reset** reloads the program and starts over; **Prev** / **Next** (buttons, or the left / right arrow keys) undo or run one instruction. The layout is three columns (Code, Registers, the side panel) above Encoding and Explanation side by side. On the right, **Theme** switches between light and dark. Drag the gaps between panels to resize them, and drag a panel by the `::` grip in its header onto another panel to swap the two. The code panel has a **Source** tab (the program's `.s` file with its comments, current line highlighted; programs are assembled with `-g` and the build writes an address → line map next to each one) a **Disassembly** tab (with symbol labels) and a **Steps** tab (every step taken so far, one line each with what it changed). The window also shows the current instruction's encoding (its 32 bits split into colour-coded fields: opcode, registers, funct, immediate pieces), the **Registers** column (tags show which registers the next instruction reads as rs1 / rs2 and writes as rd; the last one written is highlighted), a side panel with **Programs**, **CSRs** (privilege level and CSRs, with what the last step changed highlighted), **Memory** (a dump around the address the next load / store uses, or what the last step wrote, or the stack; as 32-bit words or as bytes) and **ELF** (what the loader found) tabs that scroll with the mouse wheel, and a plain-language line for what the next instruction will do and what the last one changed. Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
+- **Controls:** **Reset** reloads the program; **Prev** / **Next** (or the left / right arrow keys) undo or run one instruction. **Programs** (P or ~) opens the program list, **Docs** (D) the reference docs; both windows have a search box and close with Esc. **Theme** switches light / dark.
+- **Code panel:** **Source** (the `.s` file with its comments; programs are assembled with `-g` and the build writes an address -> line map), **Disassembly** (with symbol labels) and **Steps** (every step so far, newest first; Compact or Detailed with every stage of each instruction).
+- **Registers:** the pc and x0..x31; tags show what the next instruction reads (rs1 / rs2) and writes (rd), and the last change is highlighted.
+- **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps) and **ELF** (what the loader found).
+- **Encoding:** the next instruction's 32 bits as colour-coded fields, then what it reads, computes and writes.
+- **Layout:** drag the gaps between panels to resize them, and a panel's `::` grip onto another to swap them.
+
+Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
 
 Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-objdump`; on macOS: `brew install riscv64-elf-binutils`).
 
@@ -96,28 +103,33 @@ No file access and no printing, so it compiles for any target.
 
 ### `debugger/` (package `rvdbg`): the step debugger
 
+The debugger links the core, `loader` and `disasm` into its own program and calls them directly. Two sub-packages hold the parts that know nothing about RISC-V:
+
+| Folder | Package | What it is |
+|---|---|---|
+| `ui/` | `ui` | Generic UI on raylib + Clay: the Clay renderer, theme (palettes, text styles), embedded fonts, settings, buttons and tabs, the modal window frame, the search box |
+| `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing entries, lookup by name, search |
+
+The debugger itself:
+
 | File | Responsibility |
 |---|---|
-| `main.odin` | Window, Clay setup, frame loop |
-| `session.odin` | The machine being debugged, opening a program, and the Reset / Prev / Next actions |
-| `timeline.odin` | The Steps tab: a record of every step and its one-line summary |
-| `symbols.odin` | Symbol names for the code and memory views |
-| `source.odin` | Loads a program's source and its address → line map (`.lines`) for the Source tab |
-| `catalog.odin` | The Programs list: finds lessons, test programs and riscv-tests and reads their titles |
-| `input.odin` | Buttons and arrow keys -> session actions |
-| `panel_layout.odin` | The three-column layout: resizing (dividers) and rearranging (drag a panel's grip onto another) |
-| `layout.odin` | The Clay layout: toolbar, code, encoding strip, side panel (Registers / Program tabs), explanation |
-| `memory_view.odin` | The Memory tab: words or bytes around the address being used, accessed / changed parts coloured |
-| `csr_view.odin` | What the CSRs tab lists and how it reads each value |
-| `encoding.odin` | Splits an instruction into colour-coded fields for the Encoding strip; which registers it reads / writes |
-| `explain.odin` | Plain-language text for the next / last instruction and the status |
-| `theme.odin` | Light and dark palettes, text styles (font + size), spacing |
-| `settings.odin` | Theme setting, switched from the toolbar |
-| `view.odin` | Which side-panel tab (Programs / CSRs / Memory / ELF) and code tab are showing |
-| `fonts.odin` | Loads the embedded font at each text size |
-| `fonts/` | JetBrains Mono Medium, embedded at compile time; licence in `fonts/README.md` |
+| `main.odin` | Arguments, window (native fullscreen on macOS: `window_mode_*.odin`), Clay setup, frame loop |
+| `session.odin` | The machine being debugged: open, Reset / Prev / Next, and the preview of what Next will do |
+| `timeline.odin` | Every step taken: what it read and changed, and its one-line summary |
+| `step_detail.odin` | The stages of one step (fetch, decode, read, execute, memory, write); `step_execute.odin` writes the execute stage |
+| `instruction_text.odin`, `explain.odin`, `number_format.odin` | Words for instructions, the status line, and hex-with-decimal numbers |
+| `layout.odin` | The Clay layout: toolbar, code panel, registers, side panel, encoding |
+| `panel_layout.odin` | Resizing (dividers) and rearranging (drag a panel's grip onto another) the panels |
+| `steps_view.odin` | The Steps tab, Compact and Detailed |
+| `memory_view.odin`, `stack_view.odin`, `csr_view.odin` | The Memory, Stack and CSRs tabs |
+| `encoding.odin`, `field_colors.odin` | An instruction as colour-coded fields, and the field colours per theme |
+| `source.odin`, `symbols.odin` | The program's source and address -> line map, and its symbol names |
+| `catalog.odin`, `programs_modal.odin` | The program list (lessons, test programs, riscv-tests) and the Programs window |
+| `docs_view.odin` | The Docs window: follows the next instruction, the lesson's own entries (`# Docs:` line), search |
+| `input.odin`, `modal_input.odin` | Buttons, keys and clicks; the windows' keys |
+| `view.odin` | Which tabs and windows are showing, scroll positions, searches |
 | `program_file.odin` | Reads the program from disk |
-| `clay_renderer_raylib.odin` | Clay's raylib renderer, copied from the Clay examples |
 
 ### `unit_tests/` (package `rv_unit_tests`)
 

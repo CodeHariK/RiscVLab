@@ -1,6 +1,6 @@
-package rvdbg
+package ui
 
-import clay "../vendor/clay-odin"
+import clay "../../vendor/clay-odin"
 import rl "vendor:raylib"
 
 // The frame shared by the Programs and Docs windows: the rest of the
@@ -11,11 +11,13 @@ import rl "vendor:raylib"
 MODAL_MARGIN :: 48 // space left around the window
 MODAL_OVERLAY_COLOR :: clay.Color{20, 10, 40, 110}
 
-Modal_Content :: #type proc(session: ^Session)
+// Draws the window's content; `data` is whatever the caller passed to
+// modal_window (the debugger passes its session).
+Modal_Content :: #type proc(data: rawptr)
 
 // `header` (may be nil) adds buttons after the title; `close_id` is the
-// Close button's id, checked in input.odin.
-modal_window :: proc(session: ^Session, id: string, title: string, close_id: string, header: proc(), content: Modal_Content) {
+// Close button's id, which the caller checks for clicks.
+modal_window :: proc(id: string, title: string, close_id: string, header: proc(), content: Modal_Content, data: rawptr) {
 	colors := palette()
 	if clay.UI(clay.ID(id, 0))({
 		layout = {
@@ -44,7 +46,7 @@ modal_window :: proc(session: ^Session, id: string, title: string, close_id: str
 				if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
 				modal_button(close_id, "Close (Esc)")
 			}
-			content(session)
+			content(data)
 		}
 	}
 }

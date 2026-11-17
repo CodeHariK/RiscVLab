@@ -6,6 +6,7 @@ import clay "../vendor/clay-odin"
 import rv "../core"
 import disasm "../disasm"
 import rl "vendor:raylib"
+import ui "ui"
 
 // The debugger window, described with Clay:
 //
@@ -31,14 +32,14 @@ CODE_PANEL_OVERHEAD :: 76 // tabs, panel padding and border
 CODE_LINES_DEFAULT :: 20 // first frame, before the panel has a size
 
 build_layout :: proc(session: ^Session, frame_time: f32) -> clay.ClayArray(clay.RenderCommand) {
-	colors := palette()
+	colors := ui.palette()
 	clay.BeginLayout()
 	if clay.UI(clay.ID("Root"))({
 		layout = {
 			sizing = {clay.SizingGrow(), clay.SizingGrow()},
 			layoutDirection = .TopToBottom,
-			padding = clay.PaddingAll(PANEL_GAP),
-			childGap = PANEL_GAP,
+			padding = clay.PaddingAll(ui.PANEL_GAP),
+			childGap = ui.PANEL_GAP,
 		},
 		backgroundColor = colors.background,
 	}) {
@@ -95,14 +96,14 @@ panel_area :: proc(session: ^Session) {
 // dragged, the slot under the mouse is outlined as the drop target.
 @(private = "file")
 slot :: proc(session: ^Session, slot: Slot, sizing: clay.Sizing) {
-	colors := palette()
+	colors := ui.palette()
 	outline: clay.BorderElementConfig
 	if dragged, dragging := panel_layout.dragging_panel.?; dragging && clay.PointerOver(slot_id(slot)) {
 		if source, shown := slot_of(dragged).?; shown && source != slot {
 			outline = {colors.accent, clay.BorderOutside(4)}
 		}
 	}
-	if clay.UI(slot_id(slot))({layout = {sizing = sizing}, border = outline, cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS)}) {
+	if clay.UI(slot_id(slot))({layout = {sizing = sizing}, border = outline, cornerRadius = clay.CornerRadiusAll(ui.CORNER_RADIUS)}) {
 		switch panel_in(slot) {
 		case .Code:
 			code_panel(session)
@@ -120,7 +121,7 @@ slot :: proc(session: ^Session, slot: Slot, sizing: clay.Sizing) {
 // dragging.
 @(private = "file")
 divider :: proc(divider: Divider) {
-	colors := palette()
+	colors := ui.palette()
 	vertical := divider.kind == .Column_Edge || divider.kind == .Bottom_Edge
 	sizing := clay.Sizing{clay.SizingGrow(), clay.SizingFixed(DIVIDER_THICKNESS)}
 	bar := clay.Sizing{clay.SizingGrow(), clay.SizingFixed(4)}
@@ -154,42 +155,42 @@ registers_panel :: proc(session: ^Session) {
 // The handle a panel is dragged by: "::" at the start of its header.
 @(private = "file")
 panel_grip :: proc(panel: Panel) {
-	colors := palette()
+	colors := ui.palette()
 	color := colors.title if clay.PointerOver(grip_id(panel)) else colors.text_dim
 	if clay.UI(grip_id(panel))({layout = {padding = {2, 8, 2, 2}, childAlignment = {y = .Center}}}) {
-		clay.TextDynamic("::", text_config(.Title, color))
+		clay.TextDynamic("::", ui.text_config(.Title, color))
 	}
 }
 
 // A panel's header: its grip and its title.
 @(private = "file")
 panel_header :: proc(panel: Panel, title: string) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI()({layout = {padding = {bottom = 6}, childAlignment = {y = .Center}}}) {
 		panel_grip(panel)
-		clay.TextDynamic(title, text_config(.Title, colors.title))
+		clay.TextDynamic(title, ui.text_config(.Title, colors.title))
 	}
 }
 
 // Follows the mouse while a panel is dragged.
 @(private = "file")
 drag_label :: proc(panel: Panel) {
-	colors := palette()
+	colors := ui.palette()
 	mouse := rl.GetMousePosition()
 	if clay.UI(clay.ID("DragLabel"))({
 		layout = {padding = {10, 10, 6, 6}},
 		floating = {attachTo = .Root, offset = {mouse.x + 16, mouse.y + 16}, zIndex = 100},
 		backgroundColor = colors.panel,
-		border = {colors.accent, clay.BorderOutside(BORDER_WIDTH)},
-		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
+		border = {colors.accent, clay.BorderOutside(ui.BORDER_WIDTH)},
+		cornerRadius = clay.CornerRadiusAll(ui.CORNER_RADIUS),
 	}) {
-		clay.TextDynamic(fmt.tprintf("Move %s: drop it on another panel to swap", panel_names[panel]), text_config(.Text, colors.text))
+		clay.TextDynamic(fmt.tprintf("Move %s: drop it on another panel to swap", panel_names[panel]), ui.text_config(.Text, colors.text))
 	}
 }
 
 @(private = "file")
 toolbar :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI(clay.ID("Toolbar"))({
 		layout = {
 			sizing = {width = clay.SizingGrow()},
@@ -197,38 +198,23 @@ toolbar :: proc(session: ^Session) {
 			childAlignment = {y = .Center},
 		},
 	}) {
-		button(BUTTON_ID_RESET, "Reset")
-		button(BUTTON_ID_PREV, "< Prev")
-		button(BUTTON_ID_NEXT, "Next >")
+		ui.button(BUTTON_ID_RESET, "Reset")
+		ui.button(BUTTON_ID_PREV, "< Prev")
+		ui.button(BUTTON_ID_NEXT, "Next >")
 
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(16)}}}) {}
 		cpu := &session.machine.cpu
 		info := fmt.tprintf("%s    step %d    pc 0x%x", session.program_name, cpu.instret, cpu.pc)
-		clay.TextDynamic(info, text_config(.Code, colors.text_dim))
+		clay.TextDynamic(info, ui.text_config(.Code, colors.text_dim))
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(24)}}}) {}
 		ended := session.stopped != nil || session.exited != nil
-		clay.TextDynamic(explain_status(session), text_config(.Text, colors.stopped if ended else colors.text))
+		clay.TextDynamic(explain_status(session), ui.text_config(.Text, colors.stopped if ended else colors.text))
 
 		// Settings, pushed to the right edge.
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
-		button(BUTTON_ID_PROGRAMS, "Programs (~ / P)")
-		button(BUTTON_ID_DOCS, "Docs (D)")
-		button(BUTTON_ID_THEME, settings_theme_label())
-	}
-}
-
-@(private = "file")
-button :: proc(id: string, label: string) {
-	colors := palette()
-	element_id := clay.ID(id)
-	hovered := clay.PointerOver(element_id)
-	if clay.UI(element_id)({
-		layout = {padding = {16, 16, 6, 6}},
-		backgroundColor = colors.button_hover if hovered else colors.button,
-		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
-		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
-	}) {
-		clay.TextDynamic(label, text_config(.Text, colors.button_text))
+		ui.button(BUTTON_ID_PROGRAMS, "Programs (~ / P)")
+		ui.button(BUTTON_ID_DOCS, "Docs (D)")
+		ui.button(BUTTON_ID_THEME, ui.settings_theme_label())
 	}
 }
 
@@ -238,17 +224,17 @@ button :: proc(id: string, label: string) {
 // scroll), which would stop the inner area from being sized to the panel.
 @(private = "file")
 panel_style :: proc(sizing: clay.Sizing, clip := true) -> clay.ElementDeclaration {
-	colors := palette()
+	colors := ui.palette()
 	return clay.ElementDeclaration {
 		layout = {
 			sizing = sizing,
 			layoutDirection = .TopToBottom,
-			padding = clay.PaddingAll(PANEL_PADDING),
+			padding = clay.PaddingAll(ui.PANEL_PADDING),
 			childGap = 2,
 		},
 		backgroundColor = colors.panel,
-		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
-		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
+		cornerRadius = clay.CornerRadiusAll(ui.CORNER_RADIUS),
+		border = {colors.border, clay.BorderOutside(ui.BORDER_WIDTH)},
 		clip = {horizontal = clip, vertical = clip},
 	}
 }
@@ -266,10 +252,10 @@ code_panel :: proc(session: ^Session) {
 		if clay.UI(clay.ID("CodeTabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
 			panel_grip(.Code)
 			if session.has_source {
-				tab(TAB_ID_SOURCE, "Source", shown == .Source)
+				ui.tab(TAB_ID_SOURCE, "Source", shown == .Source)
 			}
-			tab(TAB_ID_DISASSEMBLY, "Disassembly", shown == .Disassembly)
-			tab(TAB_ID_STEPS, "Steps", shown == .Steps)
+			ui.tab(TAB_ID_DISASSEMBLY, "Disassembly", shown == .Disassembly)
+			ui.tab(TAB_ID_STEPS, "Steps", shown == .Steps)
 		}
 		switch shown {
 		case .Source:
@@ -286,13 +272,13 @@ code_panel :: proc(session: ^Session) {
 // code, and comments in a dimmer colour.
 @(private = "file")
 source_view :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	source := &session.source
 	current, known := source_line_at(source, session.machine.cpu.pc)
 	if !known {
 		clay.TextDynamic(
 			fmt.tprintf("pc 0x%x has no source line (see the Disassembly tab)", session.machine.cpu.pc),
-			text_config(.Text, colors.text_dim),
+			ui.text_config(.Text, colors.text_dim),
 		)
 		return
 	}
@@ -306,7 +292,7 @@ source_view :: proc(session: ^Session) {
 	// a long comment continues below itself, lined up with its start.
 	width := clay.SizingGrow()
 	if panel := clay.GetElementData(clay.ID("CodePanel")); panel.found {
-		width = clay.SizingFixed(max(0, panel.boundingBox.width - 2 * PANEL_PADDING - 2 * BORDER_WIDTH))
+		width = clay.SizingFixed(max(0, panel.boundingBox.width - 2 * ui.PANEL_PADDING - 2 * ui.BORDER_WIDTH))
 	}
 	for number in first ..< min(first + lines, total + 1) {
 		text := source.lines[number - 1]
@@ -314,22 +300,22 @@ source_view :: proc(session: ^Session) {
 		is_current := number == current
 		if clay.UI(clay.ID("SourceLine", u32(number - first)))({
 			layout = {sizing = {width = width}, padding = {6, 6, 2, 2}},
-			backgroundColor = colors.current_line if is_current else COLOR_NONE,
+			backgroundColor = colors.current_line if is_current else ui.COLOR_NONE,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
 			// The line number and the code keep their width; only the
 			// comment (or a long line without one) wraps.
 			marker := ">" if is_current else " "
-			clay.TextDynamic(fmt.tprintf("%s%4d  ", marker, number), no_wrap(text_config(.Code_Small, colors.text_dim)))
+			clay.TextDynamic(fmt.tprintf("%s%4d  ", marker, number), no_wrap(ui.text_config(.Code_Small, colors.text_dim)))
 			if code != "" {
-				config := text_config(.Code_Small, colors.text)
+				config := ui.text_config(.Code_Small, colors.text)
 				if comment != "" {
 					config = no_wrap(config)
 				}
 				clay.TextDynamic(code, config)
 			}
 			if comment != "" {
-				clay.TextDynamic(comment, text_config(.Code_Small, colors.accent))
+				clay.TextDynamic(comment, ui.text_config(.Code_Small, colors.accent))
 			}
 		}
 	}
@@ -355,7 +341,7 @@ split_comment :: proc(line: string) -> (code: string, comment: string) {
 // Disassembly of the instructions around the PC, current one highlighted.
 @(private = "file")
 disassembly_view :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	lines := visible_lines(CODE_LINE_HEIGHT)
 	pc := session.machine.cpu.pc
 	code_start, end := session_code_range(session)
@@ -377,7 +363,7 @@ disassembly_view :: proc(session: ^Session) {
 		}
 		if label := symbol_names_at(session, address); label != "" {
 			if clay.UI(clay.ID("CodeLabel", u32(line)))({layout = {padding = {6, 6, 4, 0}}}) {
-				clay.TextDynamic(fmt.tprintf("%s:", label), text_config(.Code, colors.title))
+				clay.TextDynamic(fmt.tprintf("%s:", label), ui.text_config(.Code, colors.title))
 			}
 			drawn += 1
 		}
@@ -391,13 +377,13 @@ disassembly_view :: proc(session: ^Session) {
 			instruction,
 			disasm.disassemble(buffer[:], address, instruction),
 		)
-		highlight := colors.current_line if address == pc else COLOR_NONE
+		highlight := colors.current_line if address == pc else ui.COLOR_NONE
 		if clay.UI(clay.ID("CodeLine", u32(line)))({
 			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}},
 			backgroundColor = highlight,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
-			clay.TextDynamic(text, text_config(.Code, colors.text))
+			clay.TextDynamic(text, ui.text_config(.Code, colors.text))
 		}
 	}
 }
@@ -406,14 +392,14 @@ disassembly_view :: proc(session: ^Session) {
 // (see encoding.odin), each with its name and meaning underneath.
 @(private = "file")
 encoding_panel :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI(clay.ID("EncodingPanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()})) {
 		panel_header(.Encoding, "Encoding")
 
 		pc := session.machine.cpu.pc
 		raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
 		if !ok {
-			clay.TextDynamic("pc is outside memory", text_config(.Text, colors.text_dim))
+			clay.TextDynamic("pc is outside memory", ui.text_config(.Text, colors.text_dim))
 			return
 		}
 		instruction := u32(raw)
@@ -424,7 +410,7 @@ encoding_panel :: proc(session: ^Session) {
 				encoding_field(instruction, field, u32(index))
 			}
 		}
-		clay.TextDynamic(encoding_summary(pc, instruction, encoding), text_config(.Text, colors.text))
+		clay.TextDynamic(encoding_summary(pc, instruction, encoding), ui.text_config(.Text, colors.text))
 		instruction_effect(session)
 	}
 }
@@ -434,7 +420,7 @@ encoding_panel :: proc(session: ^Session) {
 // All its stages, and those of every earlier step, are in Steps -> Detailed.
 @(private = "file")
 instruction_effect :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	entry, has_preview := session.preview.?
 	if !has_preview {
 		return
@@ -452,11 +438,11 @@ instruction_effect :: proc(session: ^Session) {
 // One field as a small column: bits (in the field's colour), name, meaning.
 @(private = "file")
 encoding_field :: proc(instruction: u32, field: Encoding_Field, index: u32) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI(clay.ID("EncodingField", index))({layout = {layoutDirection = .TopToBottom, childGap = 2}}) {
-		clay.TextDynamic(field_bits_text(instruction, field), text_config(.Code, colors.fields[field.kind]))
-		clay.TextDynamic(field.label, text_config(.Code_Small, colors.fields[field.kind]))
-		clay.TextDynamic(field_value_text(instruction, field), text_config(.Code_Small, colors.text_dim))
+		clay.TextDynamic(field_bits_text(instruction, field), ui.text_config(.Code, field_color(field.kind)))
+		clay.TextDynamic(field.label, ui.text_config(.Code_Small, field_color(field.kind)))
+		clay.TextDynamic(field_value_text(instruction, field), ui.text_config(.Code_Small, colors.text_dim))
 	}
 }
 
@@ -500,10 +486,10 @@ side_panel :: proc(session: ^Session) {
 	if clay.UI(clay.ID("SidePanel"))(panel_style({clay.SizingGrow(), clay.SizingGrow()}, clip = false)) {
 		if clay.UI(clay.ID("Tabs"))({layout = {childGap = 8, padding = {bottom = 8}, childAlignment = {y = .Center}}}) {
 			panel_grip(.Side)
-			tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
-			tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
-			tab(TAB_ID_STACK, "Stack", view.side_tab == .Stack)
-			tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
+			ui.tab(TAB_ID_CSRS, "CSRs", view.side_tab == .Csrs)
+			ui.tab(TAB_ID_MEMORY, "Memory", view.side_tab == .Memory)
+			ui.tab(TAB_ID_STACK, "Stack", view.side_tab == .Stack)
+			ui.tab(TAB_ID_ELF, "ELF", view.side_tab == .Elf)
 		}
 		if clay.UI(clay.ID("SideContent"))({
 			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
@@ -520,26 +506,6 @@ side_panel :: proc(session: ^Session) {
 				program_info(session)
 			}
 		}
-	}
-}
-
-// A tab button (also used by the Memory tab's Words / Bytes switch).
-tab :: proc(id: string, label: string, selected: bool) {
-	colors := palette()
-	element_id := clay.ID(id)
-	background := colors.button
-	if selected {
-		background = colors.current_line
-	} else if clay.PointerOver(element_id) {
-		background = colors.button_hover
-	}
-	if clay.UI(element_id)({
-		layout = {padding = {10, 10, 5, 5}},
-		backgroundColor = background,
-		cornerRadius = clay.CornerRadiusAll(CORNER_RADIUS),
-		border = {colors.border, clay.BorderOutside(BORDER_WIDTH)},
-	}) {
-		clay.TextDynamic(label, text_config(.Text, colors.button_text if selected else colors.text_dim))
 	}
 }
 
@@ -573,12 +539,12 @@ program_info :: proc(session: ^Session) {
 
 @(private = "file")
 program_line :: proc(label: string, value: string) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}}}) {
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(80)}}}) {
-			clay.TextDynamic(label, text_config(.Code_Small, colors.text_dim))
+			clay.TextDynamic(label, ui.text_config(.Code_Small, colors.text_dim))
 		}
-		clay.TextDynamic(value, text_config(.Code_Small, colors.text))
+		clay.TextDynamic(value, ui.text_config(.Code_Small, colors.text))
 	}
 }
 
@@ -586,12 +552,12 @@ program_line :: proc(label: string, value: string) {
 // with whatever the last step changed highlighted.
 @(private = "file")
 csr_list :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	cpu := &session.machine.cpu
 
 	privilege_text := fmt.tprintf("%-9s %v", "privilege", cpu.privilege)
 	if clay.UI(clay.ID("PrivilegeLine"))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 6}}}) {
-		clay.TextDynamic(privilege_text, text_config(.Code_Small, colors.text))
+		clay.TextDynamic(privilege_text, ui.text_config(.Code_Small, colors.text))
 	}
 
 	for address, index in csr_view_order {
@@ -601,14 +567,14 @@ csr_list :: proc(session: ^Session) {
 		//             MIE=0 MPIE=1 MPP=Machine
 		text := fmt.tprintf("%-9s 0x%03x 0x%016x", disasm.csr_name(address), address, value)
 		meaning := fmt.tprintf("%-9s %s", "", csr_meaning(cpu, address, value))
-		highlight := colors.changed if csr_changed_by_last_step(session, address) else COLOR_NONE
+		highlight := colors.changed if csr_changed_by_last_step(session, address) else ui.COLOR_NONE
 		if clay.UI(clay.ID("CsrLine", u32(index)))({
 			layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {6, 6, 2, 2}},
 			backgroundColor = highlight,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
-			clay.TextDynamic(text, text_config(.Code_Small, colors.text))
-			clay.TextDynamic(meaning, text_config(.Code_Small, colors.text_dim))
+			clay.TextDynamic(text, ui.text_config(.Code_Small, colors.text))
+			clay.TextDynamic(meaning, ui.text_config(.Code_Small, colors.text_dim))
 		}
 	}
 }
@@ -618,7 +584,7 @@ csr_list :: proc(session: ^Session) {
 // Encoding strip's colours; the register the last step wrote is marked.
 @(private = "file")
 register_list :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	cpu := &session.machine.cpu
 	changed_index := -1
 	if record, has_record := session.last_step.?; has_record && record.register_changed {
@@ -630,7 +596,7 @@ register_list :: proc(session: ^Session) {
 	// it just moves on by 4 (or jumps) after every instruction.
 	if clay.UI(clay.ID("PcLine"))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 4}}}) {
 		register_use_tag(.None)
-		clay.TextDynamic(fmt.tprintf("%-3s %-4s %s", "pc", "", register_value_text(cpu.pc)), text_config(.Code_Small, colors.accent))
+		clay.TextDynamic(fmt.tprintf("%-3s %-4s %s", "pc", "", register_value_text(cpu.pc)), ui.text_config(.Code_Small, colors.accent))
 	}
 
 	for index in 0 ..< rv.REGISTER_COUNT {
@@ -640,14 +606,14 @@ register_list :: proc(session: ^Session) {
 		if fetched {
 			use = register_use(u32(next_instruction), u32(index))
 		}
-		highlight := colors.changed if index == changed_index else COLOR_NONE
+		highlight := colors.changed if index == changed_index else ui.COLOR_NONE
 		if clay.UI(clay.ID("RegisterLine", u32(index)))({
 			layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 1, 1}},
 			backgroundColor = highlight,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
 			register_use_tag(use)
-			clay.TextDynamic(text, text_config(.Code_Small, colors.text))
+			clay.TextDynamic(text, ui.text_config(.Code_Small, colors.text))
 		}
 	}
 }
@@ -655,31 +621,31 @@ register_list :: proc(session: ^Session) {
 // "rs1" / "rs2" / "rd" in the field's colour, or blank, in a fixed width.
 @(private = "file")
 register_use_tag :: proc(use: Register_Use) {
-	colors := palette()
+	colors := ui.palette()
 	label, color := "", colors.text
 	switch use {
 	case .Read_Rs1:
-		label, color = "rs1", colors.fields[.Rs1]
+		label, color = "rs1", field_color(.Rs1)
 	case .Read_Rs2:
-		label, color = "rs2", colors.fields[.Rs2]
+		label, color = "rs2", field_color(.Rs2)
 	case .Write_Rd:
-		label, color = "rd", colors.fields[.Rd]
+		label, color = "rd", field_color(.Rd)
 	case .None:
 	}
 	if clay.UI()({layout = {sizing = {width = clay.SizingFixed(36)}}}) {
 		if label != "" {
-			clay.TextDynamic(label, text_config(.Code_Small, color))
+			clay.TextDynamic(label, ui.text_config(.Code_Small, color))
 		}
 	}
 }
 
 @(private = "file")
 detail_line :: proc(label: string, text: string, color: clay.Color) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = 10, padding = {top = 2, bottom = 2}}}) {
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(80)}}}) {
-			clay.TextDynamic(label, text_config(.Text, colors.accent))
+			clay.TextDynamic(label, ui.text_config(.Text, colors.accent))
 		}
-		clay.TextDynamic(text, text_config(.Text, color))
+		clay.TextDynamic(text, ui.text_config(.Text, color))
 	}
 }

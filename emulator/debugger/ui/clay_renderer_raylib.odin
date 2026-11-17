@@ -7,9 +7,9 @@
 //   - text positions are rounded to whole pixels (marked "RiscVOdin"), so
 //     glyphs line up with the screen's pixels and stay sharp
 
-package rvdbg
+package ui
 
-import clay "../vendor/clay-odin"
+import clay "../../vendor/clay-odin"
 import "base:runtime"
 import "core:math"
 import "core:strings"

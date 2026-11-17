@@ -2,6 +2,7 @@ package rvdbg
 
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
+import ui "ui"
 
 // Keys and clicks for the Programs and Docs windows (programs_modal.odin,
 // docs_view.odin). With no window open, P, ~ (the key left of 1) or the
@@ -43,14 +44,14 @@ handle_windows :: proc(session: ^Session) -> bool {
 @(private = "file")
 open_programs_window :: proc() {
 	view.programs_open = true
-	search_discard_typed()
+	ui.search_discard_typed()
 	view.programs_list_scroll.restore_pending = true
 }
 
 @(private = "file")
 open_docs_window :: proc() {
 	view.docs_open = true
-	search_discard_typed()
+	ui.search_discard_typed()
 	view.docs_list_scroll.restore_pending = true
 	view.docs_page_scroll.restore_pending = true
 }
@@ -66,7 +67,7 @@ handle_programs_window :: proc(session: ^Session) {
 		view.programs_open = false
 		return
 	}
-	if search_type(search) {
+	if ui.search_type(search) {
 		view.program_cursor = 0
 		view.programs_scroll_pending = true
 	}
@@ -121,7 +122,7 @@ handle_docs_window :: proc(session: ^Session) {
 	}
 	// Typing shows the best match; clearing the search goes back to
 	// following the next instruction.
-	if search_type(search) {
+	if ui.search_type(search) {
 		view.docs_pinned = -1
 		if search.length > 0 {
 			if matches := docs_filtered(); len(matches) > 0 {

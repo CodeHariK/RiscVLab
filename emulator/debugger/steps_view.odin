@@ -5,6 +5,7 @@ import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
 import disasm "../disasm"
+import ui "ui"
 
 // The Steps tab of the code panel, in one of two modes (switch at the top):
 //
@@ -27,8 +28,8 @@ STAGE_LABEL_WIDTH :: 80
 
 steps_view :: proc(session: ^Session) {
 	if clay.UI(clay.ID("StepsMode"))({layout = {childGap = 8, padding = {bottom = 6}}}) {
-		tab(TAB_ID_STEPS_COMPACT, "Compact", !view.steps_detailed)
-		tab(TAB_ID_STEPS_DETAILED, "Detailed", view.steps_detailed)
+		ui.tab(TAB_ID_STEPS_COMPACT, "Compact", !view.steps_detailed)
+		ui.tab(TAB_ID_STEPS_DETAILED, "Detailed", view.steps_detailed)
 	}
 	if view.steps_detailed {
 		detailed_steps(session)
@@ -41,7 +42,7 @@ steps_view :: proc(session: ^Session) {
 // counts as one).
 @(private = "file")
 compact_steps :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	count := len(session.timeline)
 	lines := count + 1 // the coming step, then every step run
 	shown := visible_lines(SOURCE_LINE_HEIGHT) - 2 // the mode switch is about two lines
@@ -55,13 +56,13 @@ compact_steps :: proc(session: ^Session) {
 			backgroundColor = colors.current_line,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
-			clay.TextDynamic(next_step_text(session, count + 1), text_config(.Code_Small, colors.text))
+			clay.TextDynamic(next_step_text(session, count + 1), ui.text_config(.Code_Small, colors.text))
 		}
 		row += 1
 	}
 	for index := count - 1 - max(0, skip - 1); index >= 0 && row < shown; index -= 1 {
 		if clay.UI(clay.ID("StepLine", u32(row)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
-			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), text_config(.Code_Small, colors.text))
+			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), ui.text_config(.Code_Small, colors.text))
 		}
 		row += 1
 	}
@@ -115,9 +116,9 @@ detailed_steps :: proc(session: ^Session) {
 next_step_block :: proc(session: ^Session, number: int) {
 	entry, has_preview := session.preview.?
 	if !has_preview {
-		colors := palette()
+		colors := ui.palette()
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
-			clay.TextDynamic(next_step_text(session, number), text_config(.Code_Small, colors.text))
+			clay.TextDynamic(next_step_text(session, number), ui.text_config(.Code_Small, colors.text))
 		}
 		return
 	}
@@ -127,10 +128,10 @@ next_step_block :: proc(session: ^Session, number: int) {
 // One step: a heading line, then its source line and stages.
 @(private = "file")
 step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming: bool) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI()({
 		layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {6, 6, 4, 6}, childGap = 1},
-		backgroundColor = colors.current_line if coming else COLOR_NONE,
+		backgroundColor = colors.current_line if coming else ui.COLOR_NONE,
 		cornerRadius = clay.CornerRadiusAll(3),
 	}) {
 		buffer: [disasm.BUFFER_SIZE]u8
@@ -138,7 +139,7 @@ step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming
 		marker := ">" if coming else "#"
 		note := "  (next: press Next to run it)" if coming else ""
 		heading := fmt.tprintf("%s%-4d %08x  %s%s", marker, number, entry.pc, text, note)
-		clay.TextDynamic(heading, text_config(.Code_Small, colors.text))
+		clay.TextDynamic(heading, ui.text_config(.Code_Small, colors.text))
 
 		if source := source_text_at(session, entry.pc); source != "" {
 			stage_row("source", source, colors.accent)
@@ -154,12 +155,12 @@ step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming
 
 @(private = "file")
 stage_row :: proc(label: string, text: string, color: clay.Color) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, padding = {left = 24}, childGap = 8}}) {
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(STAGE_LABEL_WIDTH)}}}) {
-			clay.TextDynamic(label, text_config(.Code_Small, colors.text_dim))
+			clay.TextDynamic(label, ui.text_config(.Code_Small, colors.text_dim))
 		}
-		clay.TextDynamic(text, text_config(.Code_Small, color))
+		clay.TextDynamic(text, ui.text_config(.Code_Small, color))
 	}
 }
 

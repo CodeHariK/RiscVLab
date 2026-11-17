@@ -1,4 +1,4 @@
-package rvdbg
+package ui
 
 import rl "vendor:raylib"
 

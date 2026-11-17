@@ -1,7 +1,7 @@
-package rvdbg
+package ui
 
 import "core:strings"
-import clay "../vendor/clay-odin"
+import clay "../../vendor/clay-odin"
 import rl "vendor:raylib"
 
 // The search box of the Programs and Docs windows. While a window is open

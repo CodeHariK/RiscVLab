@@ -1,6 +1,6 @@
-package rvdbg
+package ui
 
-import clay "../vendor/clay-odin"
+import clay "../../vendor/clay-odin"
 
 // Look of the debugger: palettes, text styles and spacing. The current
 // palette depends on `settings` (settings.odin). Layout code asks
@@ -33,8 +33,6 @@ Palette :: struct {
 	current_line: clay.Color, // the instruction at the PC
 	changed:      clay.Color, // the register the last step wrote
 	stopped:      clay.Color, // status text once the program has stopped
-	// Encoding strip: one colour per kind of field.
-	fields:       [Field_Kind]clay.Color,
 }
 
 COLOR_NONE :: clay.Color{0, 0, 0, 0}
@@ -54,16 +52,6 @@ LIGHT_PALETTE :: Palette {
 	current_line = {221, 207, 246, 255},
 	changed      = {196, 176, 240, 200},
 	stopped      = {196, 46, 92, 255},
-	fields       = {
-		.Opcode    = {40, 130, 60, 255}, // green
-		.Rd        = {30, 90, 190, 255}, // blue
-		.Rs1       = {150, 50, 160, 255}, // purple
-		.Rs2       = {190, 50, 110, 255}, // magenta
-		.Funct     = {200, 100, 20, 255}, // orange
-		.Immediate = {150, 110, 0, 255}, // gold
-		.Csr       = {0, 128, 128, 255}, // teal
-		.Unknown   = {118, 104, 145, 255},
-	},
 }
 
 // Dark: cool greys with the same warm accents.
@@ -81,16 +69,6 @@ DARK_PALETTE :: Palette {
 	current_line = {56, 76, 120, 255},
 	changed      = {110, 85, 30, 220},
 	stopped      = {255, 140, 90, 255},
-	fields       = {
-		.Opcode    = {120, 210, 130, 255},
-		.Rd        = {120, 170, 255, 255},
-		.Rs1       = {200, 150, 255, 255},
-		.Rs2       = {255, 140, 200, 255},
-		.Funct     = {255, 170, 90, 255},
-		.Immediate = {240, 210, 100, 255},
-		.Csr       = {100, 220, 210, 255},
-		.Unknown   = {130, 136, 148, 255},
-	},
 }
 
 palette :: proc() -> Palette {

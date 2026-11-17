@@ -1,4 +1,5 @@
 package rvdbg
+import ui "ui"
 
 // UI state that isn't a setting: which tab the side panel shows and
 // which listed program is open.
@@ -38,20 +39,20 @@ View_State :: struct {
 	// in its list, or -1 to follow the next instruction.
 	docs_open:        bool,
 	docs_pinned:      int,
-	docs_search:      Search_Field,
+	docs_search:      ui.Search_Field,
 	// Set by Up / Down: scroll the list to the chosen entry (next frame).
 	docs_scroll_pending: bool,
-	docs_list_scroll: Saved_Scroll,
-	docs_page_scroll: Saved_Scroll,
+	docs_list_scroll: ui.Saved_Scroll,
+	docs_page_scroll: ui.Saved_Scroll,
 	// The Programs window (programs_modal.odin): open or not, its search,
 	// and the chosen row (a position in the filtered list). Both windows
 	// keep their search, choice and scroll positions while closed, so they
 	// reopen where they were left.
 	programs_open:    bool,
-	programs_search:  Search_Field,
+	programs_search:  ui.Search_Field,
 	program_cursor:   int,
 	programs_scroll_pending: bool,
-	programs_list_scroll: Saved_Scroll,
+	programs_list_scroll: ui.Saved_Scroll,
 	// The catalog entry currently open, or -1 (a file not in the list).
 	selected_program: int,
 }

@@ -7,6 +7,8 @@ import "core:os"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
+import ui "ui"
+import reference "reference"
 
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
@@ -29,8 +31,8 @@ run :: proc() -> int {
 	}
 
 	reset_panel_layout()
-	docs_load()
-	defer docs_destroy()
+	reference.load()
+	defer reference.destroy()
 	if tests_root != "" {
 		catalog_load(tests_root)
 	}
@@ -55,14 +57,14 @@ run :: proc() -> int {
 	defer free(clay_memory)
 
 	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE, .MSAA_4X_HINT})
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "RiscVOdin debugger")
+	rl.InitWindow(ui.WINDOW_WIDTH, ui.WINDOW_HEIGHT, "RiscVOdin debugger")
 	defer rl.CloseWindow()
 	start_full_screen() // window_mode_darwin.odin / window_mode_other.odin
 	rl.SetTargetFPS(60)
 	// Esc closes the Docs window; it should not quit the debugger (raylib's
 	// default).
 	rl.SetExitKey(.KEY_NULL)
-	load_fonts()
+	ui.load_fonts()
 
 	// Redraw only when something happens. With event waiting on, the end of
 	// a frame (rl.EndDrawing) sleeps until there is input: a mouse move,
@@ -95,7 +97,7 @@ run :: proc() -> int {
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)
-		clay_raylib_render(&render_commands)
+		ui.clay_raylib_render(&render_commands)
 		rl.EndDrawing()
 	}
 	return 0
@@ -110,8 +112,8 @@ init_clay :: proc() -> rawptr {
 	size := clay.MinMemorySize()
 	memory := make([^]u8, size)
 	arena := clay.CreateArenaWithCapacityAndMemory(c.size_t(size), memory)
-	clay.Initialize(arena, {WINDOW_WIDTH, WINDOW_HEIGHT}, {handler = clay_error})
-	clay.SetMeasureTextFunction(measure_text, nil)
+	clay.Initialize(arena, {ui.WINDOW_WIDTH, ui.WINDOW_HEIGHT}, {handler = clay_error})
+	clay.SetMeasureTextFunction(ui.measure_text, nil)
 	return memory
 }
 

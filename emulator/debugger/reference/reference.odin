@@ -1,8 +1,9 @@
-package rvdbg
+package reference
 
 import "core:strings"
+import ui "../ui"
 
-// The reference docs shown in the Docs window (docs_view.odin), read from
+// The reference docs shown in the Docs window (../docs_view.odin), read from
 // docs/reference/*.md and embedded in the binary, so the same text reads
 // well on GitHub and in the debugger.
 //
@@ -15,24 +16,24 @@ import "core:strings"
 // the mnemonic exactly as the disassembler prints it.
 
 @(rodata)
-embedded_instruction_docs := #load("../../docs/reference/instructions.md", string)
+embedded_instruction_docs := #load("../../../docs/reference/instructions.md", string)
 @(rodata)
-embedded_pseudo_docs := #load("../../docs/reference/pseudo-instructions.md", string)
+embedded_pseudo_docs := #load("../../../docs/reference/pseudo-instructions.md", string)
 @(rodata)
-embedded_directive_docs := #load("../../docs/reference/directives.md", string)
+embedded_directive_docs := #load("../../../docs/reference/directives.md", string)
 @(rodata)
-embedded_csr_docs := #load("../../docs/reference/csrs.md", string)
+embedded_csr_docs := #load("../../../docs/reference/csrs.md", string)
 @(rodata)
-embedded_trap_docs := #load("../../docs/reference/traps.md", string)
+embedded_trap_docs := #load("../../../docs/reference/traps.md", string)
 @(rodata)
-embedded_concurrency_docs := #load("../../docs/reference/concurrency.md", string)
+embedded_concurrency_docs := #load("../../../docs/reference/concurrency.md", string)
 @(rodata)
-embedded_elf_docs := #load("../../docs/reference/elf.md", string)
+embedded_elf_docs := #load("../../../docs/reference/elf.md", string)
 @(rodata)
-embedded_term_docs := #load("../../docs/reference/terms.md", string)
+embedded_term_docs := #load("../../../docs/reference/terms.md", string)
 
 // Which file an entry comes from; the Docs window's list is grouped by it.
-Doc_Group :: enum {
+Group :: enum {
 	Instructions,
 	Pseudo_Instructions,
 	Directives,
@@ -43,7 +44,7 @@ Doc_Group :: enum {
 	Terms,
 }
 
-doc_group_names := [Doc_Group]string {
+group_names := [Group]string {
 	.Instructions        = "Instructions",
 	.Pseudo_Instructions = "Pseudo-instructions",
 	.Directives          = "Assembler directives",
@@ -54,47 +55,44 @@ doc_group_names := [Doc_Group]string {
 	.Terms               = "Terms",
 }
 
-Doc_Entry :: struct {
-	group: Doc_Group,
+Entry :: struct {
+	group: Group,
 	names: []string, // e.g. {"lb", "lh", ...}; point into the embedded text
 	title: string, // "Load from memory"
 	lines: []string, // the body, without trailing blank lines
-	// Heading and body in lower case, for the search (search.odin).
+	// Heading and body in lower case, for the search (ui/search.odin).
 	search_heading: string,
 	search_body: string,
 }
 
-Docs :: struct {
-	entries: [dynamic]Doc_Entry,
-}
-
-docs: Docs
+// Every entry, in file order (load fills it).
+entries: [dynamic]Entry
 
 // Splits the embedded files into entries. Called once at startup.
-docs_load :: proc() {
-	docs_add_file(embedded_instruction_docs, .Instructions)
-	docs_add_file(embedded_pseudo_docs, .Pseudo_Instructions)
-	docs_add_file(embedded_directive_docs, .Directives)
-	docs_add_file(embedded_csr_docs, .Csrs)
-	docs_add_file(embedded_trap_docs, .Traps)
-	docs_add_file(embedded_concurrency_docs, .Concurrency)
-	docs_add_file(embedded_elf_docs, .Elf)
-	docs_add_file(embedded_term_docs, .Terms)
+load :: proc() {
+	add_file(embedded_instruction_docs, .Instructions)
+	add_file(embedded_pseudo_docs, .Pseudo_Instructions)
+	add_file(embedded_directive_docs, .Directives)
+	add_file(embedded_csr_docs, .Csrs)
+	add_file(embedded_trap_docs, .Traps)
+	add_file(embedded_concurrency_docs, .Concurrency)
+	add_file(embedded_elf_docs, .Elf)
+	add_file(embedded_term_docs, .Terms)
 }
 
-docs_destroy :: proc() {
-	for entry in docs.entries {
+destroy :: proc() {
+	for entry in entries {
 		delete(entry.names)
 		delete(entry.lines)
 		delete(entry.search_heading)
 		delete(entry.search_body)
 	}
-	delete(docs.entries)
+	delete(entries)
 }
 
 // The entry covering `name` (e.g. "lw"), or -1.
-docs_find :: proc(name: string) -> int {
-	for entry, index in docs.entries {
+find :: proc(name: string) -> int {
+	for entry, index in entries {
 		for entry_name in entry.names {
 			if entry_name == name {
 				return index
@@ -104,22 +102,21 @@ docs_find :: proc(name: string) -> int {
 	return -1
 }
 
-// Entry indices that match the docs search: entries whose heading matches
+// Entry indices that match `query` (a search box's text): entries whose heading matches
 // first, then those where only the body does. All of them, in order, when
 // the search is empty.
-docs_filtered :: proc() -> []int {
-	query := search_text(&view.docs_search)
+filter :: proc(query: string) -> []int {
 	matches := make([dynamic]int, context.temp_allocator)
-	for entry, index in docs.entries {
-		if search_matches(query, entry.search_heading) {
+	for entry, index in entries {
+		if ui.search_matches(query, entry.search_heading) {
 			append(&matches, index)
 		}
 	}
 	if query == "" {
 		return matches[:]
 	}
-	for entry, index in docs.entries {
-		if !search_matches(query, entry.search_heading) && search_matches(query, entry.search_body) {
+	for entry, index in entries {
+		if !ui.search_matches(query, entry.search_heading) && ui.search_matches(query, entry.search_body) {
 			append(&matches, index)
 		}
 	}
@@ -127,12 +124,12 @@ docs_filtered :: proc() -> []int {
 }
 
 // "lb lh lw ... - Load from memory": the entry's heading, for lists.
-docs_heading :: proc(entry: Doc_Entry) -> string {
+entry_heading :: proc(entry: Entry) -> string {
 	return strings.concatenate({strings.join(entry.names, " ", context.temp_allocator), " - ", entry.title}, context.temp_allocator)
 }
 
 @(private = "file")
-docs_add_file :: proc(text: string, group: Doc_Group) {
+add_file :: proc(text: string, group: Group) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
 
@@ -140,32 +137,32 @@ docs_add_file :: proc(text: string, group: Doc_Group) {
 	body: [dynamic]string
 	for line in lines {
 		if strings.has_prefix(line, "## ") {
-			docs_finish_entry(current, &body)
-			current = docs_start_entry(line[3:], group)
+			finish_entry(current, &body)
+			current = start_entry(line[3:], group)
 			continue
 		}
 		if current >= 0 {
 			append(&body, line)
 		}
 	}
-	docs_finish_entry(current, &body)
+	finish_entry(current, &body)
 	delete(body)
 }
 
 @(private = "file")
-docs_start_entry :: proc(heading: string, group: Doc_Group) -> int {
+start_entry :: proc(heading: string, group: Group) -> int {
 	names_part, title := heading, ""
 	if dash := strings.index(heading, " - "); dash >= 0 {
 		names_part, title = heading[:dash], heading[dash + 3:]
 	}
-	append(&docs.entries, Doc_Entry{group = group, names = strings.fields(names_part), title = title})
-	return len(docs.entries) - 1
+	append(&entries, Entry{group = group, names = strings.fields(names_part), title = title})
+	return len(entries) - 1
 }
 
 // Gives the entry its body (trailing blank lines dropped) and empties
 // `body` for the next one.
 @(private = "file")
-docs_finish_entry :: proc(index: int, body: ^[dynamic]string) {
+finish_entry :: proc(index: int, body: ^[dynamic]string) {
 	if index < 0 {
 		return
 	}
@@ -179,7 +176,7 @@ docs_finish_entry :: proc(index: int, body: ^[dynamic]string) {
 	}
 	lines := make([]string, end - start)
 	copy(lines, body[start:end])
-	entry := &docs.entries[index]
+	entry := &entries[index]
 	entry.lines = lines
 	heading := strings.join({strings.join(entry.names, " ", context.temp_allocator), entry.title}, " ", context.temp_allocator)
 	entry.search_heading = strings.to_lower(heading)

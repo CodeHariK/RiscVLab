@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import ui "ui"
 
 // The Memory tab: a dump of memory around the interesting address, which
 // is (in order of preference):
@@ -69,10 +70,10 @@ next_memory_access :: proc(session: ^Session) -> Memory_Access {
 }
 
 memory_list :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI(clay.ID("MemoryLayoutTabs"))({layout = {childGap = 8, padding = {bottom = 6}}}) {
-		tab(TAB_ID_MEMORY_WORDS, "Words", view.memory_layout == .Words)
-		tab(TAB_ID_MEMORY_BYTES, "Bytes", view.memory_layout == .Bytes)
+		ui.tab(TAB_ID_MEMORY_WORDS, "Words", view.memory_layout == .Words)
+		ui.tab(TAB_ID_MEMORY_BYTES, "Bytes", view.memory_layout == .Bytes)
 	}
 
 	access := next_memory_access(session)
@@ -81,7 +82,7 @@ memory_list :: proc(session: ^Session) {
 		changed = {.Store, record.memory_address, record.memory_size}
 	}
 	focus, reason := memory_focus(session, access, changed)
-	clay.TextDynamic(reason, text_config(.Code_Small, colors.text_dim))
+	clay.TextDynamic(reason, ui.text_config(.Code_Small, colors.text_dim))
 
 	row_bytes := u64(WORDS_PER_ROW * 4) if view.memory_layout == .Words else 8
 	first := first_row_address(focus, row_bytes)
@@ -89,11 +90,11 @@ memory_list :: proc(session: ^Session) {
 		row_address := first + u64(row) * row_bytes
 		if names := symbol_names_in(session, row_address, row_address + row_bytes, true); names != "" {
 			if clay.UI(clay.ID("MemoryLabel", u32(row)))({layout = {padding = {6, 6, 4, 0}}}) {
-				clay.TextDynamic(names, text_config(.Code_Small, colors.accent))
+				clay.TextDynamic(names, ui.text_config(.Code_Small, colors.accent))
 			}
 		}
 		if clay.UI(clay.ID("MemoryRow", u32(row)))({layout = {padding = {6, 6, 1, 1}, childGap = 8}}) {
-			clay.TextDynamic(fmt.tprintf("%08x", row_address), text_config(.Code_Small, colors.text_dim))
+			clay.TextDynamic(fmt.tprintf("%08x", row_address), ui.text_config(.Code_Small, colors.text_dim))
 			switch view.memory_layout {
 			case .Words:
 				for column in 0 ..< WORDS_PER_ROW {
@@ -159,7 +160,7 @@ memory_focus :: proc(session: ^Session, access: Memory_Access, changed: Memory_A
 // coloured if the next access or the last change overlaps it.
 @(private = "file")
 memory_cell :: proc(session: ^Session, address: u64, size: u64, access: Memory_Access, changed: Memory_Access, id: u32) {
-	colors := palette()
+	colors := ui.palette()
 	value, in_ram := rv.bus_load(&session.machine.bus, address, size)
 	text := "--------" if size == 4 else "--"
 	if in_ram {
@@ -167,20 +168,20 @@ memory_cell :: proc(session: ^Session, address: u64, size: u64, access: Memory_A
 	}
 
 	color := colors.text
-	background := COLOR_NONE
+	background := ui.COLOR_NONE
 	instruction := Memory_Access{.Load, session.machine.cpu.pc, 4}
 	if overlaps(address, size, instruction) {
 		background = colors.current_line
 	}
 	if access.kind != .None && overlaps(address, size, access) {
-		color = colors.fields[.Rs1] if access.kind == .Load else colors.fields[.Rd]
+		color = field_color(.Rs1) if access.kind == .Load else field_color(.Rd)
 		background = colors.current_line
 	}
 	if changed.kind != .None && overlaps(address, size, changed) {
 		background = colors.changed
 	}
 	if clay.UI(clay.ID("MemoryCell", id))({backgroundColor = background, cornerRadius = clay.CornerRadiusAll(2)}) {
-		clay.TextDynamic(text, text_config(.Code_Small, color))
+		clay.TextDynamic(text, ui.text_config(.Code_Small, color))
 	}
 }
 

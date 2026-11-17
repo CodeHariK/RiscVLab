@@ -2,6 +2,7 @@ package rvdbg
 
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
+import ui "ui"
 
 // The debugger's only controls:
 //   Reset  (button)                     reload the program, back to the first instruction
@@ -69,7 +70,7 @@ handle_input :: proc(session: ^Session) {
 		}
 	}
 	if button_clicked(BUTTON_ID_THEME) {
-		settings_next_theme()
+		ui.settings_next_theme()
 	}
 	if button_clicked(TAB_ID_SOURCE) {
 		view.code_tab = .Source

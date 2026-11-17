@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import ui "ui"
 
 // The Stack tab: the words from just below sp up to the top of the stack,
 // newest (lowest address) first, one 8-byte word per row.
@@ -39,12 +40,12 @@ Stack_Frame :: struct {
 }
 
 stack_view :: proc(session: ^Session) {
-	colors := palette()
+	colors := ui.palette()
 	sp := rv.reg_read(&session.machine.cpu, STACK_SP)
 	if _, in_ram := rv.bus_load(&session.machine.bus, sp - 1, 1); !in_ram || sp == 0 {
 		clay.TextDynamic(
 			fmt.tprintf("sp = 0x%x does not point into RAM yet: programs set it up first, e.g. la sp, stack_top (lesson 09).", sp),
-			text_config(.Code_Small, colors.text_dim),
+			ui.text_config(.Code_Small, colors.text_dim),
 		)
 		return
 	}
@@ -53,12 +54,12 @@ stack_view :: proc(session: ^Session) {
 	top := stack_top(session, sp, frames)
 	used := top - sp if top > sp else 0
 	// Two short lines: the side panel doesn't wrap text.
-	clay.TextDynamic(fmt.tprintf("sp = 0x%x, top = 0x%x", sp, top), text_config(.Code_Small, colors.text_dim))
+	clay.TextDynamic(fmt.tprintf("sp = 0x%x, top = 0x%x", sp, top), ui.text_config(.Code_Small, colors.text_dim))
 	usage := fmt.tprintf("%s bytes in use, %d frame(s)", value_text(used), len(frames))
 	if reserved, ok := symbol_address(session, "stack"); ok && reserved < top {
 		usage = fmt.tprintf("%s, %s bytes reserved", usage, value_text(top - reserved))
 	}
-	clay.TextDynamic(usage, text_config(.Code_Small, colors.text_dim))
+	clay.TextDynamic(usage, ui.text_config(.Code_Small, colors.text_dim))
 
 	access := next_memory_access(session)
 	changed: Memory_Access
@@ -76,9 +77,9 @@ stack_view :: proc(session: ^Session) {
 		row += 1
 	}
 	if top > sp && (top - first) / STACK_WORD > STACK_MAX_ROWS {
-		clay.TextDynamic(fmt.tprintf("... %d more words up to the top", (top - first) / STACK_WORD - STACK_MAX_ROWS), text_config(.Code_Small, colors.text_dim))
+		clay.TextDynamic(fmt.tprintf("... %d more words up to the top", (top - first) / STACK_WORD - STACK_MAX_ROWS), ui.text_config(.Code_Small, colors.text_dim))
 	}
-	clay.TextDynamic(fmt.tprintf("%08x  top of the stack", top), text_config(.Code_Small, colors.accent))
+	clay.TextDynamic(fmt.tprintf("%08x  top of the stack", top), ui.text_config(.Code_Small, colors.accent))
 }
 
 // The frames still in use, oldest first, from every change to sp so far.
@@ -128,20 +129,20 @@ frame_starting_at :: proc(frames: []Stack_Frame, address: u64) -> (Stack_Frame, 
 // "frame of sum+0x4: 0x10 bytes": where the step that made it was.
 @(private = "file")
 frame_heading :: proc(session: ^Session, frame: Stack_Frame, row: int) {
-	colors := palette()
+	colors := ui.palette()
 	if clay.UI(clay.ID("StackFrame", u32(row)))({layout = {padding = {6, 6, 6, 0}}}) {
 		place := symbol_place(session, frame.made_at)
 		if place == "" {
 			place = fmt.tprintf("0x%x", frame.made_at)
 		}
 		text := fmt.tprintf("frame made at %s: %s bytes", place, value_text(frame.high - frame.low))
-		clay.TextDynamic(text, text_config(.Code_Small, colors.accent))
+		clay.TextDynamic(text, ui.text_config(.Code_Small, colors.accent))
 	}
 }
 
 @(private = "file")
 stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Memory_Access, changed: Memory_Access, row: int) {
-	colors := palette()
+	colors := ui.palette()
 	value, _ := rv.bus_load(&session.machine.bus, address, STACK_WORD)
 	free := address < sp
 
@@ -159,9 +160,9 @@ stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Me
 
 	color := colors.text_dim if free else colors.text
 	word := Memory_Access{.Load, address, STACK_WORD}
-	background := COLOR_NONE
+	background := ui.COLOR_NONE
 	if access.kind != .None && overlaps_access(word, access) {
-		color = colors.fields[.Rs1] if access.kind == .Load else colors.fields[.Rd]
+		color = field_color(.Rs1) if access.kind == .Load else field_color(.Rd)
 		background = colors.current_line
 	}
 	if changed.kind != .None && overlaps_access(word, changed) {
@@ -172,7 +173,7 @@ stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Me
 		backgroundColor = background,
 		cornerRadius = clay.CornerRadiusAll(2),
 	}) {
-		clay.TextDynamic(text, text_config(.Code_Small, color))
+		clay.TextDynamic(text, ui.text_config(.Code_Small, color))
 	}
 }
 

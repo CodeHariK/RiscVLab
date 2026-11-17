@@ -2,6 +2,7 @@ package rvdbg
 
 import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
+import ui "ui"
 
 // The panel layout: resizing and rearranging the panels.
 //
@@ -90,7 +91,7 @@ panel_layout: Panel_Layout
 SPLIT_MIN :: 0.12
 SPLIT_MAX :: 0.85
 
-DIVIDER_THICKNESS :: PANEL_GAP
+DIVIDER_THICKNESS :: ui.PANEL_GAP
 
 // The starting layout:
 //

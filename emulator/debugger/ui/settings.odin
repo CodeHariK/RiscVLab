@@ -1,4 +1,4 @@
-package rvdbg
+package ui
 
 // User-adjustable look, changed from the Theme button on the right of
 // the toolbar. Lives for the session only (not saved to disk yet).

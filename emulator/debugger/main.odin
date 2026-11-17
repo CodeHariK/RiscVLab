@@ -91,8 +91,8 @@ run :: proc() -> int {
 		// scroll momentum, so cap it.
 		frame_time := min(rl.GetFrameTime(), MAX_FRAME_TIME)
 		clay.SetLayoutDimensions({f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())})
-		clay.SetPointerState(transmute(clay.Vector2)rl.GetMousePosition(), rl.IsMouseButtonDown(.LEFT))
-		clay.UpdateScrollContainers(false, transmute(clay.Vector2)rl.GetMouseWheelMoveV(), frame_time)
+		clay.SetPointerState(rl.GetMousePosition(), rl.IsMouseButtonDown(.LEFT))
+		clay.UpdateScrollContainers(false, rl.GetMouseWheelMoveV(), frame_time)
 
 		handle_input(&session)
 		render_commands := view.build_layout(&session, frame_time)

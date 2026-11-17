@@ -71,6 +71,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu.undo = Undo_Record {
 		pc        = cpu.pc,
 		instret   = cpu.instret,
+		cycle     = cpu.cycle,
 		privilege = cpu.privilege,
 	}
 	machine.last_trap = nil
@@ -123,6 +124,7 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	}
 	machine.cpu.pc = record.pc
 	machine.cpu.instret = record.instret
+	machine.cpu.cycle = record.cycle
 	machine.cpu.privilege = record.privilege
 	machine.cpu.last_write = {}
 	machine.last_trap = nil

@@ -84,6 +84,23 @@ undo_restores_the_csr :: proc(t: ^testing.T) {
 }
 
 @(test)
+counter_write_is_not_counted_by_its_own_instruction :: proc(t: ^testing.T) {
+	// csrw minstret, x6: the next instruction must read exactly x6, not
+	// x6 + 1. mcycle, not written, still counts the csrw.
+	machine := machine_with(csr_instruction(rv.ZICSR_CSRRW, 0, 6, rv.CSR_MINSTRET))
+	defer rv.machine_destroy(&machine)
+	machine.cpu.regs[6] = 100
+
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.instret, 100)
+	testing.expect_value(t, machine.cpu.cycle, 1)
+
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.instret, 0)
+	testing.expect_value(t, machine.cpu.cycle, 0)
+}
+
+@(test)
 undo_restores_mstatus_exactly :: proc(t: ^testing.T) {
 	// csrrsi zero, mstatus, 8 then undo: mstatus must be back to its reset
 	// value, bit for bit (lesson 13 found this: undo used to re-apply the

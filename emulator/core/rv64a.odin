@@ -96,16 +96,15 @@ exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 	}
 	reservation := cpu.reservation
 	holds := reservation.valid && reservation.address == address && reservation.size == size
-	// Pass or fail, the reservation is used up.
-	reservation_set(cpu, Reservation{})
-	if !holds {
-		reg_write(cpu, rd(instruction), 1)
-		return nil
-	}
-	if !amo_store(cpu, bus, address, size, reg_read(cpu, rs2(instruction))) {
+	// The store comes before anything else changes: if it faults, the step
+	// must have changed nothing (with no handler, the machine stops and
+	// nothing is recorded for undo).
+	if holds && !amo_store(cpu, bus, address, size, reg_read(cpu, rs2(instruction))) {
 		return trap_make(.Store_Access_Fault, address)
 	}
-	reg_write(cpu, rd(instruction), 0)
+	// Pass or fail, the reservation is used up.
+	reservation_set(cpu, Reservation{})
+	reg_write(cpu, rd(instruction), 0 if holds else 1)
 	return nil
 }
 

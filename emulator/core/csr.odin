@@ -58,8 +58,8 @@ MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64
 // for machine mode. (Supervisor bits come with supervisor mode.)
 MACHINE_INTERRUPT_BITS :: u64(1) << 3 | u64(1) << 7 | u64(1) << 11
 
-// The CSRs that need their own storage. Counters live in Cpu.instret,
-// and the read-only machine information CSRs are constants.
+// The CSRs that need their own storage. Counters live in Cpu.instret and
+// Cpu.cycle, and the read-only machine information CSRs are constants.
 Csr_File :: struct {
 	mstatus:  u64,
 	mie:      u64,
@@ -100,9 +100,9 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.mtval, true
 	case CSR_MIP:
 		return csr.mip, true
-	// One instruction per cycle in this emulator, so the cycle count is
-	// the instruction count.
-	case CSR_MCYCLE, CSR_MINSTRET, CSR_CYCLE, CSR_INSTRET:
+	case CSR_MCYCLE, CSR_CYCLE:
+		return cpu.cycle, true
+	case CSR_MINSTRET, CSR_INSTRET:
 		return cpu.instret, true
 	}
 	return 0, false
@@ -141,8 +141,12 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MIP:
 		// Pending bits are set by devices (timer, interrupt controller),
 		// none of which exist yet; software writes are ignored.
-	case CSR_MCYCLE, CSR_MINSTRET:
+	case CSR_MCYCLE:
+		cpu.cycle = value
+		cpu.cycle_written = true
+	case CSR_MINSTRET:
 		cpu.instret = value
+		cpu.instret_written = true
 	case:
 		return false
 	}
@@ -170,7 +174,9 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		csr.mtval = value
 	case CSR_MIP:
 		csr.mip = value
-	case CSR_MCYCLE, CSR_MINSTRET:
+	case CSR_MCYCLE:
+		cpu.cycle = value
+	case CSR_MINSTRET:
 		cpu.instret = value
 	}
 }

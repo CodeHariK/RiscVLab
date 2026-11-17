@@ -8,12 +8,13 @@ import rv "../core"
 //
 // Snapshots the machine, runs the program, then steps back until the
 // history is empty. Passes (exit 0) if every recorded step was undone
-// and registers, CSRs, privilege, PC, instret and all of RAM equal the
-// snapshot.
+// and registers, CSRs, privilege, the LR reservation, PC, the counters and
+// all of RAM equal the snapshot.
 check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 	start_regs := machine.cpu.regs
 	start_csr := machine.cpu.csr
 	start_privilege := machine.cpu.privilege
+	start_reservation := machine.cpu.reservation
 	start_pc := machine.cpu.pc
 	start_ram := slice.clone(machine.bus.ram)
 	defer delete(start_ram)
@@ -38,7 +39,9 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 		machine.cpu.csr == start_csr &&
 		machine.cpu.privilege == start_privilege &&
 		machine.cpu.pc == start_pc &&
+		machine.cpu.reservation == start_reservation &&
 		machine.cpu.instret == 0 &&
+		machine.cpu.cycle == 0 &&
 		slice.equal(machine.bus.ram, start_ram)
 
 	if all_undone && state_matches {

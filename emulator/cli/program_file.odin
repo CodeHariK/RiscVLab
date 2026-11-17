@@ -2,7 +2,6 @@ package rvemu
 
 import "core:fmt"
 import "core:os"
-import rv "../core"
 import loader "../loader"
 
 // Reads a program file from disk. The core only takes bytes, so file

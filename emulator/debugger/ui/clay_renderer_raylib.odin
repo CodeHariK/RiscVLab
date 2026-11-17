@@ -45,7 +45,7 @@ measure_text_unicode :: proc "c" (text: clay.StringSlice, config: ^clay.TextElem
 	// see `measure_text_ascii`
 	grapheme_count, _, _ := utf8.grapheme_count(text_str)
 
-	for letter, byte_idx in text_str {
+	for letter in text_str {
 		glyph_index := rl.GetGlyphIndex(font, letter)
 
 		glyph := font.glyphs[glyph_index]

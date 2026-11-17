@@ -65,13 +65,28 @@ plain_csrs_hold_any_value :: proc(t: ^testing.T) {
 }
 
 @(test)
-counters_follow_instret :: proc(t: ^testing.T) {
+counters_read_their_own_count :: proc(t: ^testing.T) {
 	cpu: rv.Cpu
 	cpu.instret = 42
+	cpu.cycle = 40
+	instret, _ := rv.csr_read(&cpu, rv.CSR_INSTRET)
 	cycle, _ := rv.csr_read(&cpu, rv.CSR_CYCLE)
-	testing.expect_value(t, cycle, 42)
+	testing.expect_value(t, instret, 42)
+	testing.expect_value(t, cycle, 40)
 	testing.expect(t, !rv.csr_write(&cpu, rv.CSR_INSTRET, 0), "instret is read-only")
+	testing.expect(t, !rv.csr_write(&cpu, rv.CSR_CYCLE, 0), "cycle is read-only")
+}
+
+@(test)
+writing_one_counter_leaves_the_other :: proc(t: ^testing.T) {
+	cpu: rv.Cpu
+	cpu.instret = 42
+	cpu.cycle = 42
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MINSTRET, 7))
+	testing.expect_value(t, cpu.instret, 7)
+	testing.expect_value(t, cpu.cycle, 42)
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MCYCLE, 9))
+	testing.expect_value(t, cpu.cycle, 9)
 	testing.expect_value(t, cpu.instret, 7)
 }
 

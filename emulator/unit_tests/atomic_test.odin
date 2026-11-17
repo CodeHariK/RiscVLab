@@ -65,6 +65,26 @@ sc_without_lr_fails :: proc(t: ^testing.T) {
 }
 
 @(test)
+faulting_sc_changes_nothing :: proc(t: ^testing.T) {
+	// LR, then an SC to an address outside RAM with no handler: the SC
+	// stops the machine, and must leave the reservation (and x5) alone,
+	// since a step that stops the machine isn't recorded for undo.
+	machine := machine_running(LR_D(), SC_D())
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine)
+	machine.cpu.reservation.address = 0x1000 // as if LR had reserved there
+	machine.cpu.regs[6] = 0x1000
+	before := machine.cpu.reservation
+	x5 := machine.cpu.regs[5]
+
+	trap, trapped := rv.machine_step(&machine).?
+	testing.expect(t, trapped)
+	testing.expect_value(t, trap.cause, rv.Trap_Cause.Store_Access_Fault)
+	testing.expect(t, machine.cpu.reservation == before)
+	testing.expect_value(t, machine.cpu.regs[5], x5)
+}
+
+@(test)
 second_sc_fails :: proc(t: ^testing.T) {
 	machine := machine_running(LR_D(), SC_D(), SC_D())
 	defer rv.machine_destroy(&machine)

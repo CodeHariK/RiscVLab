@@ -276,9 +276,11 @@ The m versions can be written; cycle and instret are read-only copies that user 
 
 For: measuring how long code takes.
 
-Emulator: one instruction per cycle, so all four read the same number, the step count shown in the toolbar.
+Emulator: one instruction per cycle, so all four read the same number, the step count shown in the toolbar, until a program writes mcycle or minstret. A write changes only that counter.
 
-Watch out: reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).
+Watch out:
+- reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).
+- a write takes effect after the writing instruction, so `csrw minstret, t0` makes the next read give exactly t0: the csrw itself isn't counted.
 
 Related: csr-addresses
 

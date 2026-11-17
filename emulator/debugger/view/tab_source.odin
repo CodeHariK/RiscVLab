@@ -3,8 +3,6 @@ package view
 import "core:fmt"
 import "core:strings"
 import clay "../../vendor/clay-odin"
-import rv "../../core"
-import disasm "../../disasm"
 import ui "../ui"
 import state "../state"
 

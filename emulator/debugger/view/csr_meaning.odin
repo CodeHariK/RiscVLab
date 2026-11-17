@@ -49,7 +49,7 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 	case rv.CSR_MISA:
 		return "RV64IMA"
 	case rv.CSR_MINSTRET:
-		return "instructions retired (= mcycle)"
+		return "instructions retired"
 	}
 	return value_text(value)
 }

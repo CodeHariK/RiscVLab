@@ -26,6 +26,14 @@ Cpu :: struct {
 	next_pc:    u64,
 	// Instructions completed without a trap: the `minstret` CSR.
 	instret:    u64,
+	// Clock cycles: the `mcycle` CSR. One instruction per cycle here, so
+	// it counts with instret, but a program can write each on its own.
+	cycle:      u64,
+	// Set when this step's CSR instruction wrote minstret / mcycle: the
+	// written value then stands, without the instruction's own count
+	// (cpu_step). Cleared at the start of each step.
+	instret_written: bool,
+	cycle_written:   bool,
 	// Control and status registers (csr.odin).
 	csr:        Csr_File,
 	// Current privilege level.

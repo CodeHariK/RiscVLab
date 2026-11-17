@@ -2,7 +2,7 @@ package rv
 
 // Undo history: what lets the debugger step backwards.
 //
-// Before an instruction runs, `machine_step` notes the PC and instret.
+// Before an instruction runs, `machine_step` notes the PC and the counters.
 // While it runs, `reg_write`, the store handler and the CSR instructions
 // note the old value of whatever they overwrite. An instruction changes at
 // most one register, one memory location (up to 8 bytes) and one CSR, so
@@ -16,6 +16,7 @@ Undo_Record :: struct {
 	// Where the step started (restored on undo).
 	pc:               u64,
 	instret:          u64,
+	cycle:            u64,
 	privilege:        Privilege,
 	// The register the step overwrote, if any.
 	register_old:     u64,
@@ -42,8 +43,8 @@ Undo_Record :: struct {
 	trap_mtval:       u64,
 }
 
-// Default number of steps that can be undone. Each record is 152 bytes,
-// so this is 38 MiB (taken from the OS only as it is used). When full, the oldest steps are forgotten.
+// Default number of steps that can be undone. Each record is about 160
+// bytes, so this is about 40 MiB (taken from the OS only as it is used). When full, the oldest steps are forgotten.
 HISTORY_CAPACITY_DEFAULT :: 256 * 1024
 
 // Fixed-size ring buffer of undo records, newest last.

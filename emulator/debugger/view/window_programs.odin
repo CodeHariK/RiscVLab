@@ -38,13 +38,13 @@ programs_filtered :: proc() -> []int {
 
 programs_modal :: proc(session: ^state.Session) {
 	if display.programs_open {
-		ui.modal_window("ProgramsWindow", "Programs", BUTTON_ID_PROGRAMS_CLOSE, nil, programs_content, session)
+		// The list needs nothing from the session (it reads state.catalog).
+		ui.modal_window("ProgramsWindow", "Programs", BUTTON_ID_PROGRAMS_CLOSE, nil, programs_content, nil)
 	}
 }
 
 @(private)
-programs_content :: proc(data: rawptr) {
-	session := (^state.Session)(data)
+programs_content :: proc(_: rawptr) {
 	colors := ui.palette()
 	ui.search_box("ProgramsSearch", &display.programs_search, "Type to search programs")
 	ui.modal_hint("Up / Down to choose, Enter to open, Esc to close")

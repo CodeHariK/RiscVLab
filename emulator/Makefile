@@ -16,6 +16,8 @@
 # (raylib + Clay, from vendor/clay-odin).
 
 ODIN      ?= odin
+# -vet: unused imports and variables, shadowing and the like are errors.
+VET       := -vet
 BUILD_DIR := build
 BINARY    := $(BUILD_DIR)/rvemu
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
@@ -33,11 +35,11 @@ all: $(BINARY)
 
 $(BINARY): $(SOURCES)
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build cli -out:$(BINARY) -o:speed
+	$(ODIN) build cli -out:$(BINARY) -o:speed $(VET)
 
 debug: $(SOURCES)
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build cli -out:$(DEBUG_BIN) -debug
+	$(ODIN) build cli -out:$(DEBUG_BIN) -debug $(VET)
 
 run: $(BINARY)
 	./$(BINARY) $(PROGRAM) $(ARGS)
@@ -46,7 +48,7 @@ debugger: $(DEBUGGER)
 
 $(DEBUGGER): $(DEBUGGER_SOURCES)
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build debugger -out:$(DEBUGGER)
+	$(ODIN) build debugger -out:$(DEBUGGER) $(VET)
 
 debug-ui: $(DEBUGGER) programs
 	./$(DEBUGGER) --tests ../tests $(UI_PROGRAM)
@@ -64,7 +66,7 @@ FORMATS       := elf bin
 # Unit tests for core rules that no test program can reach yet.
 unit:
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) test unit_tests -out:$(BUILD_DIR)/unit_tests
+	$(ODIN) test unit_tests -out:$(BUILD_DIR)/unit_tests $(VET)
 
 test: unit $(BINARY) programs
 	@for format in $(FORMATS); do \

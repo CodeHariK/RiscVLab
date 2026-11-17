@@ -23,6 +23,7 @@ Elf_Error :: enum {
 	Not_Risc_V,
 	Truncated,            // a header or segment points past the end of the file
 	Segment_Outside_Ram,  // a segment's address range isn't inside RAM
+	Entry_Misaligned,     // the entry point isn't a multiple of 4
 }
 
 Elf_Program :: struct {
@@ -68,6 +69,12 @@ is_elf :: proc(image: []u8) -> bool {
 // Copies the program's loadable segments into RAM and describes it.
 load_elf :: proc(bus: ^rv.Bus, image: []u8) -> (program: Elf_Program, error: Elf_Error) {
 	header := parse_header(image) or_return
+	// Instructions are 4 bytes (no C extension), and jumps, mepc and mtvec
+	// all keep the pc aligned: the entry point is the only way in for a
+	// misaligned pc, so it is refused here.
+	if header.entry & 0b11 != 0 {
+		return {}, .Entry_Misaligned
+	}
 
 	for index in 0 ..< u64(header.segment_count) {
 		segment := read_segment(image, header, index) or_return

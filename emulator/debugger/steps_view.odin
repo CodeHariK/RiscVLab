@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import disasm "../disasm"
 
 // The Steps tab of the code panel, in one of two modes (switch at the top):
 //
@@ -81,8 +82,8 @@ next_step_text :: proc(session: ^Session, number: int) -> string {
 	if !ok {
 		return fmt.tprintf("next: pc 0x%x is outside memory", pc)
 	}
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	text := rv.disassemble(buffer[:], pc, u32(raw))
+	buffer: [disasm.BUFFER_SIZE]u8
+	text := disasm.disassemble(buffer[:], pc, u32(raw))
 	return fmt.tprintf(">%-4d %08x  %-24s (next: press Next to run it)", number, pc, text)
 }
 
@@ -132,8 +133,8 @@ step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming
 		backgroundColor = colors.current_line if coming else COLOR_NONE,
 		cornerRadius = clay.CornerRadiusAll(3),
 	}) {
-		buffer: [rv.DISASM_BUFFER_SIZE]u8
-		text := rv.disassemble(buffer[:], entry.pc, entry.instruction)
+		buffer: [disasm.BUFFER_SIZE]u8
+		text := disasm.disassemble(buffer[:], entry.pc, entry.instruction)
 		marker := ">" if coming else "#"
 		note := "  (next: press Next to run it)" if coming else ""
 		heading := fmt.tprintf("%s%-4d %08x  %s%s", marker, number, entry.pc, text, note)

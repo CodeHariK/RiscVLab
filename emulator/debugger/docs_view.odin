@@ -5,6 +5,7 @@ import "core:slice"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import disasm "../disasm"
 
 // The Docs window: what instructions, pseudo-instructions and directives
 // are for, in plain words (docs.odin, from docs/reference/). It opens over
@@ -150,7 +151,7 @@ next_csr_name :: proc(session: ^Session) -> string {
 	if !ok || rv.opcode(instruction) != rv.OPCODE_SYSTEM || rv.funct3(instruction) == 0 {
 		return ""
 	}
-	return rv.csr_name(rv.csr_address(instruction))
+	return disasm.csr_name(rv.csr_address(instruction))
 }
 
 // The cause of the trap the next instruction will raise, as named in
@@ -201,8 +202,8 @@ next_mnemonic :: proc(session: ^Session) -> string {
 	if !ok {
 		return ""
 	}
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	text := rv.disassemble(buffer[:], pc, u32(raw))
+	buffer: [disasm.BUFFER_SIZE]u8
+	text := disasm.disassemble(buffer[:], pc, u32(raw))
 	// Atomics carry their ordering bits in the name (amoswap.w.aq); the
 	// docs list them without.
 	mnemonic := first_word(text)

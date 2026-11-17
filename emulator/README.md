@@ -2,7 +2,7 @@
 
 RISC-V (RV64) emulator in Odin, modelled on QEMU's `virt` machine so it can eventually boot xv6.
 
-**Current state:** RV64I + Zicsr, one hart in machine mode, RAM only. Traps enter the handler at `mtvec`; while no handler is set up (`mtvec` = 0) a trap stops the machine, so simple programs end with `ebreak`.
+**Current state:** RV64IMA + Zicsr + Zifencei (what xv6 needs), one hart in machine mode, RAM only. Traps enter the handler at `mtvec`; while no handler is set up (`mtvec` = 0) a trap stops the machine, so simple programs end with `ebreak`.
 
 Docs: [architecture](../docs/emulator/architecture.md) and [supported instructions](../docs/emulator/instructions.md).
 
@@ -13,7 +13,7 @@ make                 # release build -> build/rvemu
 make debug           # debug build   -> build/rvemu-debug
 make test            # unit tests, test programs, undo self-test, disassembler diff
 make unit            # unit tests only (unit_tests/)
-make riscv-tests     # the official rv64ui tests (run ../tests/riscv-tests/fetch.sh once first)
+make riscv-tests     # the official rv64ui, rv64um and rv64ua tests (run ../tests/riscv-tests/fetch.sh once first)
 make run PROGRAM=../tests/programs/build/sum.bin ARGS=--trace
 ```
 
@@ -40,7 +40,15 @@ rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 
 ## Source layout
 
-The emulator is split into a **core** and **front ends**, so the same core can drive the command-line runner, the debugger UI, and later a WebAssembly build.
+The emulator is split into a **core** and **front ends**, so the same core can drive the command-line runner, the debugger UI, and later a WebAssembly build. Each folder is an Odin package; the tools around the core (loading programs, disassembling) have their own, and depend on the core but not the other way round:
+
+```
+core      the CPU and the machine                         (package rv)
+loader    ELF / raw program loading      -> uses core     (package loader)
+disasm    instruction bits to text       -> uses core     (package disasm)
+cli       command-line runner            -> uses all three
+debugger  step debugger                  -> uses all three
+```
 
 ### `core/` (package `rv`): the emulator itself
 
@@ -49,15 +57,12 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
-| `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the current undo record |
+| `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the LR / SC reservation, the current undo record |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
-| `csr_names.odin` | CSR names for the disassembler and debugger |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing (RAM for now) |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
-| `program.odin` | Loads a program (ELF or raw) and sets the PC: `machine_load_program` |
-| `elf.odin` | ELF64 loader: segments, entry point, symbol lookup (`tohost`), symbol list for the debugger |
-| `image.odin` | Copies a raw binary into RAM |
+| `zeroed_pages.odin` | RAM and undo history mapped straight from the OS (`zeroed_pages_wasm.odin` for WebAssembly) |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
 | `priv_trap.odin` | Trap entry: save `mepc` / `mcause` / `mtval`, update `mstatus`, jump to `mtvec`; privilege levels |
@@ -70,8 +75,24 @@ No file access and no printing, so it compiles for any target.
 | `rv64i_alu.odin` | OP-IMM and OP (64-bit arithmetic) |
 | `rv64i_alu_word.odin` | OP-IMM-32 and OP-32 (the *W instructions) |
 | `rv64i_system.odin` | FENCE, ECALL, EBREAK |
-| `disasm.odin` | Instruction bits to assembly text (objdump format) |
+| `rv64m.odin` | M extension: multiply and divide |
+| `rv64a.odin` | A extension: LR / SC and the AMOs |
+
+### `loader/` (package `loader`): putting a program in memory
+
+| File | Responsibility |
+|---|---|
+| `program.odin` | Loads a program (ELF or raw) and sets the PC: `loader.load_program` |
+| `elf.odin` | ELF64 loader: segments, entry point, symbol lookup (`tohost`), symbol list for the debugger |
+| `image.odin` | Copies a raw binary into RAM |
+
+### `disasm/` (package `disasm`): instructions as text
+
+| File | Responsibility |
+|---|---|
+| `disasm.odin` | Instruction bits to assembly text, matching `objdump -M no-aliases`: `disasm.disassemble` |
 | `register_names.odin` | ABI register names (`zero`, `ra`, `sp`, ...) |
+| `csr_names.odin` | CSR names, for the disassembler and the debugger |
 
 ### `debugger/` (package `rvdbg`): the step debugger
 
@@ -100,7 +121,7 @@ No file access and no printing, so it compiles for any target.
 
 ### `unit_tests/` (package `rv_unit_tests`)
 
-Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR read / write rules; `zicsr_test.odin`: CSR instructions that trap, and undo). Run with `make unit`.
+Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 
@@ -116,7 +137,4 @@ Unit tests for core rules no test program can reach yet (`csr_test.odin`: CSR re
 
 ## Next milestones
 
-- Supervisor and user modes: `sstatus` / `stvec` / `sepc` / ..., trap delegation (`medeleg`), `sret`
-- M and A extensions (with their riscv-tests: rv64um, rv64ua)
-- Sv39 virtual memory, then the devices (UART, CLINT, PLIC, virtio)
-- Debugger: memory view, symbols in the code view
+See [TODO.md](../TODO.md).

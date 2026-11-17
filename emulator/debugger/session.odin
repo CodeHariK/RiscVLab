@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import "core:path/filepath"
 import rv "../core"
+import loader "../loader"
 
 // One debugging session: the machine plus what the UI needs to know
 // about it. All changes to the machine during debugging go through the
@@ -12,13 +13,13 @@ Session :: struct {
 	// The program's bytes, kept so Reset can reload a fresh copy.
 	image:        []u8,
 	// Where the program starts and where its code is (from the loader).
-	program:      rv.Program,
+	program:      loader.Program,
 	// The program's source and line table, if the build made one.
 	source:       Source_Map,
 	has_source:   bool,
 	// Labels and variables from the ELF symbol table, sorted by address
 	// (names point into `image`).
-	symbols:      []rv.Symbol,
+	symbols:      []loader.Symbol,
 	// The most recent load or store, so the Memory tab can stay on the data
 	// a program is working with. `access_trail` holds its value before each
 	// Next, so Prev can put it back.
@@ -51,7 +52,7 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 	}
 	// Check it loads before replacing the current program.
 	probe := rv.machine_create(rv.RAM_SIZE_DEFAULT, 0)
-	_, error := rv.machine_load_program(&probe, image)
+	_, error := loader.load_program(&probe, image)
 	rv.machine_destroy(&probe)
 	if error != nil {
 		fmt.eprintfln("error: cannot load %s: %v", path, error)
@@ -62,7 +63,7 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 	delete(session.symbols)
 	delete(session.image)
 	session.image = image
-	session.symbols = rv.elf_symbols(image)
+	session.symbols = loader.elf_symbols(image)
 	session.program_name = filepath.base(path)
 	source_destroy(&session.source)
 	session.source, session.has_source = source_load(path)
@@ -85,7 +86,7 @@ session_reset :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
 	// session_open checked that the program loads, so it loads again here.
-	session.program, _ = rv.machine_load_program(&session.machine, session.image)
+	session.program, _ = loader.load_program(&session.machine, session.image)
 	session.stopped = nil
 	session.exited = nil
 	session.last_step = nil

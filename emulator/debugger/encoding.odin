@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import "core:strings"
 import rv "../core"
+import disasm "../disasm"
 
 // Splits an instruction into its encoding fields (opcode, rd, rs1, rs2,
 // funct3/funct7, immediate pieces) for the Encoding strip, following the
@@ -131,9 +132,9 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 	case .Opcode:
 		return fmt.tprintf("%s (0x%02x)", opcode_name(value), value)
 	case .Rd, .Rs1, .Rs2:
-		return fmt.tprintf("%s (x%d)", rv.register_name(value), value)
+		return fmt.tprintf("%s (x%d)", disasm.register_name(value), value)
 	case .Csr:
-		if name := rv.csr_name(value); name != "" {
+		if name := disasm.csr_name(value); name != "" {
 			return name
 		}
 		return "not implemented"
@@ -152,7 +153,7 @@ encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> strin
 		return fmt.tprintf("I-type: imm = %s (12 bits, sign-extended)", signed_text(i64(rv.imm_i(instruction))))
 	case "I-type (CSR)":
 		address := rv.csr_address(instruction)
-		name := rv.csr_name(address)
+		name := disasm.csr_name(address)
 		return fmt.tprintf("I-type (CSR): csr = 0x%03x (%s)", address, name if name != "" else "not implemented")
 	case "I-type (shift)":
 		return fmt.tprintf("I-type (shift): shift amount = %s", value_text(u64((instruction >> 20) & 0x3F)))

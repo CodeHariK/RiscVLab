@@ -3,6 +3,7 @@ package rvemu
 import "core:fmt"
 import "core:os"
 import rv "../core"
+import loader "../loader"
 
 // Reads a program file from disk. The core only takes bytes, so file
 // access lives here in the front end.
@@ -15,6 +16,6 @@ read_program :: proc(path: string) -> (image: []u8, ok: bool) {
 	return data, true
 }
 
-print_load_error :: proc(path: string, error: rv.Load_Error) {
+print_load_error :: proc(path: string, error: loader.Load_Error) {
 	fmt.eprintfln("error: cannot load %s: %v", path, error)
 }

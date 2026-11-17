@@ -1,4 +1,6 @@
-package rv
+package loader
+
+import rv "../core"
 
 // Minimal ELF64 loader for bare-metal RISC-V executables (what riscv-tests,
 // our test programs and later xv6's kernel are).
@@ -64,7 +66,7 @@ is_elf :: proc(image: []u8) -> bool {
 }
 
 // Copies the program's loadable segments into RAM and describes it.
-load_elf :: proc(bus: ^Bus, image: []u8) -> (program: Elf_Program, error: Elf_Error) {
+load_elf :: proc(bus: ^rv.Bus, image: []u8) -> (program: Elf_Program, error: Elf_Error) {
 	header := parse_header(image) or_return
 
 	for index in 0 ..< u64(header.segment_count) {
@@ -165,11 +167,11 @@ read_segment :: proc(image: []u8, header: Elf_Header, index: u64) -> (segment: E
 }
 
 @(private = "file")
-load_segment :: proc(bus: ^Bus, image: []u8, segment: Elf_Segment) -> Elf_Error {
+load_segment :: proc(bus: ^rv.Bus, image: []u8, segment: Elf_Segment) -> Elf_Error {
 	if segment.file_size > segment.memory_size || !in_bounds(image, segment.file_offset, segment.file_size) {
 		return .Truncated
 	}
-	destination, inside_ram := bus_ram_slice(bus, segment.address, segment.memory_size)
+	destination, inside_ram := rv.bus_ram_slice(bus, segment.address, segment.memory_size)
 	if !inside_ram {
 		return .Segment_Outside_Ram
 	}

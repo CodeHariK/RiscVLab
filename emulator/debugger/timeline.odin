@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import "core:strings"
 import rv "../core"
+import disasm "../disasm"
 
 // The Steps view: one line for every step taken so far, newest last.
 //
@@ -98,8 +99,8 @@ timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs
 // The step's line: number, address, disassembly, and what it did.
 // `coming` marks the preview of the step Next will run (">" for "#").
 timeline_text :: proc(number: int, entry: Timeline_Entry, coming := false) -> string {
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	text := rv.disassemble(buffer[:], entry.pc, entry.instruction)
+	buffer: [disasm.BUFFER_SIZE]u8
+	text := disasm.disassemble(buffer[:], entry.pc, entry.instruction)
 	marker := ">" if coming else "#"
 	return fmt.tprintf("%s%-4d %08x  %-24s %s", marker, number, entry.pc, text, timeline_effect(entry))
 }
@@ -115,13 +116,13 @@ timeline_effect :: proc(entry: Timeline_Entry) -> string {
 	builder := strings.builder_make(context.temp_allocator)
 	record := entry.record
 	if record.register_changed {
-		append_part(&builder, fmt.tprintf("%s <- %s", rv.register_name(record.register_index), value_text(entry.register_new)))
+		append_part(&builder, fmt.tprintf("%s <- %s", disasm.register_name(record.register_index), value_text(entry.register_new)))
 	}
 	if record.memory_changed {
 		append_part(&builder, fmt.tprintf("mem[0x%x] <- %s", record.memory_address, value_text(entry.memory_new)))
 	}
 	if record.csr_changed {
-		append_part(&builder, fmt.tprintf("%s <- %s", rv.csr_name(record.csr_address), value_text(entry.csr_new)))
+		append_part(&builder, fmt.tprintf("%s <- %s", disasm.csr_name(record.csr_address), value_text(entry.csr_new)))
 	}
 	if entry.next_pc != entry.pc + rv.INSTRUCTION_SIZE {
 		append_part(&builder, fmt.tprintf("jumped to 0x%x", entry.next_pc))

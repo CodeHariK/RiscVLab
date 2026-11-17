@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import "core:strings"
 import rv "../core"
+import disasm "../disasm"
 
 // The execute stage of the detailed step view (step_detail.odin): the
 // arithmetic, address or decision the instruction made, written with the
@@ -16,8 +17,8 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 	mnemonic := step_mnemonic(entry)
 	pc := entry.pc
 	a, b := entry.rs1_value, entry.rs2_value
-	s1 := rv.register_name(rv.rs1(instruction))
-	s2 := rv.register_name(rv.rs2(instruction))
+	s1 := disasm.register_name(rv.rs1(instruction))
+	s2 := disasm.register_name(rv.rs2(instruction))
 	result := result_text(entry)
 
 	switch rv.opcode(instruction) {
@@ -123,7 +124,7 @@ atomic_execute_text :: proc(session: ^Session, entry: Timeline_Entry, mnemonic: 
 	case rv.AMO_SC:
 		reservation := entry.reservation
 		if !reservation.valid {
-			return fmt.tprintf("no reservation (no LR since the last SC or trap): fail, %s = 1", rv.register_name(rv.rd(instruction)))
+			return fmt.tprintf("no reservation (no LR since the last SC or trap): fail, %s = 1", disasm.register_name(rv.rd(instruction)))
 		}
 		if reservation.address != address || reservation.size != size {
 			return fmt.tprintf("the reservation is for 0x%x, not 0x%x: fail, rd = 1", reservation.address, address)
@@ -189,7 +190,7 @@ arithmetic_text :: proc(mnemonic: string, s1: string, a: u64, operand: string, r
 @(private = "file")
 csr_execute_text :: proc(entry: Timeline_Entry, mnemonic: string, s1: string) -> string {
 	instruction := entry.instruction
-	csr := rv.csr_name(rv.csr_address(instruction))
+	csr := disasm.csr_name(rv.csr_address(instruction))
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf("CSR 0x%03x is not implemented: raises %v", rv.csr_address(instruction), trap.cause)
 	}

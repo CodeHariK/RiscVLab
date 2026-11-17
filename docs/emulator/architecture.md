@@ -1,7 +1,7 @@
 # Emulator architecture
 
 How RiscVOdin is put together, and how a single instruction flows through it.
-Source lives in `emulator/core/` (the emulator, package `rv`) and `emulator/cli/` (the command-line front end). Each file has one responsibility; see the tables in `emulator/README.md`.
+Source lives in `emulator/core/` (the emulator, package `rv`), with `emulator/loader/` (program loading) and `emulator/disasm/` (the disassembler) around it, and the front ends `emulator/cli/` and `emulator/debugger/`. Each file has one responsibility; see the tables in `emulator/README.md`.
 
 ## The pieces
 
@@ -78,7 +78,7 @@ The core never reads files or prints. Front ends read the program (from disk, or
 2. If the opcode is new, add an `OPCODE_*` constant and a `case` in `execute` (`execute.odin`).
 3. Add the logic to the handler for its group, or a new `rv64<ext>_<group>.odin` file for a new extension.
 4. If it changes state other than one register and one memory location, extend `Undo_Record` (`history.odin`) and `machine_step_back`.
-5. Add its text form to `disasm.odin`.
+5. Add its text form to `disasm/disasm.odin`.
 6. Add a check to a test program in `tests/programs/` and run `make test` (this also checks undo and the disassembler).
 7. Add a row to [instructions.md](instructions.md).
 
@@ -86,7 +86,7 @@ The core never reads files or prints. Front ends read the program (from disk, or
 
 | Milestone | Change to this design |
 |---|---|
-| ELF loading (done) | `elf.odin` / `program.odin` load ELF segments and set the PC to the entry point |
+| ELF loading (done) | `loader/elf.odin` / `loader/program.odin` load ELF segments and set the PC to the entry point |
 | riscv-tests | The machine watches the `tohost` address for the pass/fail result |
 | Zicsr + machine traps (done) | `Cpu` has CSRs and a privilege level; traps jump to `mtvec`; undo records trap entry |
 | Supervisor / user mode | `stvec` / `sepc` / ..., delegation (`medeleg`), `sret` |

@@ -1,4 +1,6 @@
-package rv
+package loader
+
+import rv "../core"
 
 // Loading a program, whatever its format. Front ends pass the file's bytes
 // and get back where to start and what range holds the code.
@@ -35,7 +37,7 @@ Raw_Load_Error :: enum {
 }
 
 // Loads the program into the machine's RAM and points the PC at its entry.
-machine_load_program :: proc(machine: ^Machine, image: []u8) -> (program: Program, error: Load_Error) {
+load_program :: proc(machine: ^rv.Machine, image: []u8) -> (program: Program, error: Load_Error) {
 	if is_elf(image) {
 		elf, elf_error := load_elf(&machine.bus, image)
 		if elf_error != .None {
@@ -56,9 +58,9 @@ machine_load_program :: proc(machine: ^Machine, image: []u8) -> (program: Progra
 		}
 		program = Program {
 			format     = .Raw,
-			entry      = RAM_BASE,
-			code_start = RAM_BASE,
-			code_end   = RAM_BASE + u64(len(image)),
+			entry      = rv.RAM_BASE,
+			code_start = rv.RAM_BASE,
+			code_end   = rv.RAM_BASE + u64(len(image)),
 		}
 	}
 	machine.cpu.pc = program.entry

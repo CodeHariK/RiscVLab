@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import clay "../vendor/clay-odin"
 import rv "../core"
+import disasm "../disasm"
 import rl "vendor:raylib"
 
 // The debugger window, described with Clay:
@@ -367,7 +368,7 @@ disassembly_view :: proc(session: ^Session) {
 
 	// Symbol labels (e.g. "test_2:") take a line of their own, so count
 	// lines drawn rather than instructions.
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
+	buffer: [disasm.BUFFER_SIZE]u8
 	drawn := 0
 	for line := 0; drawn < lines; line += 1 {
 		address := first + u64(line) * rv.INSTRUCTION_SIZE
@@ -388,7 +389,7 @@ disassembly_view :: proc(session: ^Session) {
 			">" if address == pc else " ",
 			address,
 			instruction,
-			rv.disassemble(buffer[:], address, instruction),
+			disasm.disassemble(buffer[:], address, instruction),
 		)
 		highlight := colors.current_line if address == pc else COLOR_NONE
 		if clay.UI(clay.ID("CodeLine", u32(line)))({
@@ -598,7 +599,7 @@ csr_list :: proc(session: ^Session) {
 		// Two lines per CSR, so the panel doesn't need to be wide:
 		//   mstatus   0x300 0x0000000000001880
 		//             MIE=0 MPIE=1 MPP=Machine
-		text := fmt.tprintf("%-9s 0x%03x 0x%016x", rv.csr_name(address), address, value)
+		text := fmt.tprintf("%-9s 0x%03x 0x%016x", disasm.csr_name(address), address, value)
 		meaning := fmt.tprintf("%-9s %s", "", csr_meaning(cpu, address, value))
 		highlight := colors.changed if csr_changed_by_last_step(session, address) else COLOR_NONE
 		if clay.UI(clay.ID("CsrLine", u32(index)))({
@@ -634,7 +635,7 @@ register_list :: proc(session: ^Session) {
 
 	for index in 0 ..< rv.REGISTER_COUNT {
 		value := cpu.regs[index]
-		text := fmt.tprintf("x%-2d %-4s %s", index, rv.register_name(u32(index)), register_value_text(value))
+		text := fmt.tprintf("x%-2d %-4s %s", index, disasm.register_name(u32(index)), register_value_text(value))
 		use := Register_Use.None
 		if fetched {
 			use = register_use(u32(next_instruction), u32(index))

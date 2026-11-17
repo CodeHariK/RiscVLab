@@ -14,7 +14,7 @@ Machine :: struct {
 	// the debugger; the step itself reports success).
 	last_trap: Maybe(Trap),
 	// Address of the program's `tohost` variable, if it has one (set by
-	// machine_load_program). See machine_host_exit.
+	// loader.load_program). See machine_host_exit.
 	tohost:    Maybe(u64),
 }
 

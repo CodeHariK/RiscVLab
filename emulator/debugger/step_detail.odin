@@ -3,6 +3,7 @@ package rvdbg
 import "core:fmt"
 import "core:strings"
 import rv "../core"
+import disasm "../disasm"
 
 // The detailed view of one step: what each part of the CPU did and why,
 // with every value that led to it.
@@ -55,8 +56,8 @@ step_detail :: proc(session: ^Session, entry: Timeline_Entry) -> Step_Detail {
 
 // The instruction's mnemonic, e.g. "lw".
 step_mnemonic :: proc(entry: Timeline_Entry) -> string {
-	buffer: [rv.DISASM_BUFFER_SIZE]u8
-	text := rv.disassemble(buffer[:], entry.pc, entry.instruction)
+	buffer: [disasm.BUFFER_SIZE]u8
+	text := disasm.disassemble(buffer[:], entry.pc, entry.instruction)
 	return strings.clone(first_word(text), context.temp_allocator)
 }
 
@@ -84,9 +85,9 @@ decode_text :: proc(entry: Timeline_Entry) -> string {
 		part: string
 		#partial switch field.kind {
 		case .Rd, .Rs1, .Rs2:
-			part = fmt.tprintf("%s %s (x%d)", field.label, rv.register_name(value), value)
+			part = fmt.tprintf("%s %s (x%d)", field.label, disasm.register_name(value), value)
 		case .Csr:
-			part = fmt.tprintf("csr %s (0x%03x)", rv.csr_name(value), value)
+			part = fmt.tprintf("csr %s (0x%03x)", disasm.csr_name(value), value)
 		case:
 			continue
 		}
@@ -138,11 +139,11 @@ read_text :: proc(entry: Timeline_Entry) -> string {
 		part: string
 		#partial switch field.kind {
 		case .Rs1:
-			part = fmt.tprintf("%s = %s", rv.register_name(rv.rs1(instruction)), value_text(entry.rs1_value))
+			part = fmt.tprintf("%s = %s", disasm.register_name(rv.rs1(instruction)), value_text(entry.rs1_value))
 		case .Rs2:
-			part = fmt.tprintf("%s = %s", rv.register_name(rv.rs2(instruction)), value_text(entry.rs2_value))
+			part = fmt.tprintf("%s = %s", disasm.register_name(rv.rs2(instruction)), value_text(entry.rs2_value))
 		case .Csr:
-			part = fmt.tprintf("%s = %s", rv.csr_name(rv.csr_address(instruction)), value_text(entry.csr_value))
+			part = fmt.tprintf("%s = %s", disasm.csr_name(rv.csr_address(instruction)), value_text(entry.csr_value))
 		case:
 			continue
 		}
@@ -185,7 +186,7 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 		return fmt.tprintf(
 			"store the low %d bytes of %s @ 0x%x%s: %s -> %s",
 			size,
-			rv.register_name(rv.rs2(instruction)),
+			disasm.register_name(rv.rs2(instruction)),
 			record.memory_address,
 			symbol_label(session, record.memory_address),
 			value_text(record.memory_old),
@@ -256,7 +257,7 @@ write_text :: proc(entry: Timeline_Entry) -> string {
 			&builder,
 			fmt.tprintf(
 				"%s: %s -> %s",
-				rv.register_name(record.register_index),
+				disasm.register_name(record.register_index),
 				value_text(record.register_old),
 				value_text(entry.register_new),
 			),
@@ -267,7 +268,7 @@ write_text :: proc(entry: Timeline_Entry) -> string {
 	if record.csr_changed {
 		append_part(
 			&builder,
-			fmt.tprintf("%s: %s -> %s", rv.csr_name(record.csr_address), value_text(record.csr_old), value_text(entry.csr_new)),
+			fmt.tprintf("%s: %s -> %s", disasm.csr_name(record.csr_address), value_text(record.csr_old), value_text(entry.csr_new)),
 		)
 	}
 	if strings.builder_len(builder) == 0 && !record.memory_changed {

@@ -5,12 +5,13 @@
 #   make test         unit tests, then build the test programs, run them, check undo and the disassembler
 #   make unit         unit tests only (unit_tests/, `odin test`)
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
-#   make riscv-tests  build and run the official rv64ui tests (run ../tests/riscv-tests/fetch.sh once first)
+#   make riscv-tests  build and run the official rv64ui, rv64um and rv64ua tests (run ../tests/riscv-tests/fetch.sh once first)
 #   make debugger     build the step debugger -> build/rvdbg
 #   make debug-ui     open the debugger with the lessons and tests listed
 #                     (UI_PROGRAM=path/to/program to open a specific one)
 #
-# Source: core/ is the emulator itself (package rv, no file or console I/O);
+# Source: core/ is the emulator itself (package rv, no file or console I/O),
+# loader/ loads programs and disasm/ turns instructions into text;
 # cli/ is the command-line front end; debugger/ is the step debugger
 # (raylib + Clay, from vendor/clay-odin).
 
@@ -18,9 +19,9 @@ ODIN      ?= odin
 BUILD_DIR := build
 BINARY    := $(BUILD_DIR)/rvemu
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
-SOURCES   := $(wildcard core/*.odin cli/*.odin)
+SOURCES   := $(wildcard core/*.odin loader/*.odin disasm/*.odin cli/*.odin)
 DEBUGGER  := $(BUILD_DIR)/rvdbg
-DEBUGGER_SOURCES := $(wildcard core/*.odin debugger/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/fonts/*.ttf ../docs/reference/*.md)
+DEBUGGER_SOURCES := $(wildcard core/*.odin loader/*.odin disasm/*.odin debugger/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/fonts/*.ttf ../docs/reference/*.md)
 
 PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build

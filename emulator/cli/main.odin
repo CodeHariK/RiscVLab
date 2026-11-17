@@ -2,6 +2,7 @@ package rvemu
 
 import "core:os"
 import rv "../core"
+import loader "../loader"
 
 // rvemu: command-line front end for the RiscVOdin core.
 // Runs a program (ELF executable or raw binary) and reports how it stopped;
@@ -30,7 +31,7 @@ run :: proc() -> int {
 	machine := rv.machine_create(rv.RAM_SIZE_DEFAULT, history_capacity)
 	defer rv.machine_destroy(&machine)
 
-	program, load_error := rv.machine_load_program(&machine, image)
+	program, load_error := loader.load_program(&machine, image)
 	if load_error != nil {
 		print_load_error(options.program_path, load_error)
 		return 1

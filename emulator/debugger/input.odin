@@ -11,7 +11,8 @@ import state "state"
 //   Prev   (button or left arrow)       undo one instruction
 //   Next   (button or right arrow)      run one instruction
 // Holding an arrow key repeats it. The Theme button on the right of the
-// toolbar switches between light and dark (see settings.odin), and the
+// toolbar switches between light and dark (see settings.odin), Reset
+// layout puts the panels back where they started, and the
 // panels' tabs pick what each shows (view/panel.odin). The Programs (P) and
 // Docs (D) buttons open their windows, which have their own keys
 // (modal_input.odin). The mouse wheel scrolls the side panel (handled by
@@ -31,7 +32,12 @@ handle_input :: proc(session: ^state.Session) {
 	}
 
 	// Dragging a divider or a panel (panel_layout.odin) takes the mouse.
-	if view.handle_panel_input() {
+	dragging := view.handle_panel_input()
+	if view.panel_layout_changed {
+		view.panel_layout_changed = false
+		settings_save(session)
+	}
+	if dragging {
 		return
 	}
 	if button_clicked(view.BUTTON_ID_RESET) {
@@ -56,30 +62,46 @@ handle_input :: proc(session: ^state.Session) {
 			view.display.code_scroll -= rl.GetMouseWheelMove() * CODE_SCROLL_LINES_PER_NOTCH
 		}
 	}
+	// The rest change what settings_file.odin keeps: save after each.
+	changed := false
 	if button_clicked(view.BUTTON_ID_THEME) {
 		ui.settings_next_theme()
+		changed = true
+	}
+	if button_clicked(view.BUTTON_ID_RESET_LAYOUT) {
+		view.reset_panel_layout()
+		view.display.selected_tab = view.DEFAULT_SELECTED_TABS
+		changed = true
 	}
 	// A tab button selects that tab in its panel.
 	for panel in view.Panel {
 		for tab in view.panel_tabs[panel] {
 			if button_clicked(view.tab_ids[tab]) {
 				view.display.selected_tab[panel] = tab
+				changed = true
 			}
 		}
 	}
 	if button_clicked(view.TAB_ID_STEPS_COMPACT) {
 		view.display.steps_detailed = false
 		view.display.code_scroll = 0
+		changed = true
 	}
 	if button_clicked(view.TAB_ID_STEPS_DETAILED) {
 		view.display.steps_detailed = true
 		view.display.code_scroll = 0
+		changed = true
 	}
 	if button_clicked(view.TAB_ID_MEMORY_WORDS) {
 		view.display.memory_layout = .Words
+		changed = true
 	}
 	if button_clicked(view.TAB_ID_MEMORY_BYTES) {
 		view.display.memory_layout = .Bytes
+		changed = true
+	}
+	if changed {
+		settings_save(session)
 	}
 }
 

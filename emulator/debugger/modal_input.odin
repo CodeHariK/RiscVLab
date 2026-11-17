@@ -113,6 +113,7 @@ open_program :: proc(session: ^state.Session, index: int) {
 	view.display.code_scroll = 0
 	view.docs_show_lesson(session)
 	view.display.programs_open = false
+	settings_save(session)
 }
 
 @(private = "file")

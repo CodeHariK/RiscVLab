@@ -29,7 +29,8 @@ make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 - **Registers:** the pc and x0..x31; tags show what the next instruction reads (rs1 / rs2) and writes (rd), and the last change is highlighted.
 - **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps), **ELF** (what the loader found) and **Devices** (the UART's registers, decoded).
 - **Encoding:** the next instruction's 32 bits as colour-coded fields, then what it reads, computes and writes. Next to it, **Console** shows what the program printed through the UART.
-- **Layout:** drag the gaps between panels to resize them, and a panel's `::` grip onto another to swap them.
+- **Layout:** drag the gaps between panels to resize them, and a panel's `::` grip onto another to swap them; **Reset layout** puts them back.
+- **Remembered:** theme, layout, each panel's tab, the Steps and Memory modes and the last program are saved to `~/Library/Application Support/RiscVLab/rvdbg.json` (macOS; `~/.config/RiscVLab/` elsewhere) whenever they change, and restored at startup.
 
 Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
 
@@ -117,7 +118,7 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 
 | Folder | Package | What it is |
 |---|---|---|
-| `.` | `rvdbg` | `main.odin` (arguments, window, frame loop; native fullscreen in `window_mode_*.odin`), `input.odin` and `modal_input.odin` (buttons, keys, clicks) |
+| `.` | `rvdbg` | `main.odin` (arguments, window, frame loop; native fullscreen in `window_mode_*.odin`), `input.odin` and `modal_input.odin` (buttons, keys, clicks), `settings_file.odin` (saving and restoring the settings, as JSON) |
 | `state/` | `state` | The model, no drawing: the session (open, Reset / Prev / Next, the preview of Next), the timeline of steps, memory access tracking, the program list, source and line map, symbols, reading the program file |
 | `view/` | `view` | Everything on screen, plus the view state (`display_state.odin`: tabs, scrolls, searches, open windows; the global is `display`) |
 | `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, tables (`table.odin`), the Markdown subset the docs use (`markdown.odin`), modal window frame, search box |

@@ -49,8 +49,17 @@ View_State :: struct {
 
 display := View_State {
 	memory_layout    = .Words,
-	selected_tab     = {.Code = .Source, .Registers = .Registers, .Side = .Csrs, .Encoding = .Encoding, .Console = .Console},
+	selected_tab     = DEFAULT_SELECTED_TABS,
 	selected_program = -1,
 	program_failed   = -1,
 	docs_pinned      = -1,
+}
+
+// The tab each panel starts on.
+DEFAULT_SELECTED_TABS :: [Panel]Tab {
+	.Code      = .Source,
+	.Registers = .Registers,
+	.Side      = .Csrs,
+	.Encoding  = .Encoding,
+	.Console   = .Console,
 }

@@ -89,6 +89,10 @@ Panel_Layout :: struct {
 
 panel_layout: Panel_Layout
 
+// Set when a drag (of a divider or a panel) ends, so the caller can save
+// the layout; the caller clears it.
+panel_layout_changed: bool
+
 // Splits stay between these, so no panel can be squeezed away entirely.
 SPLIT_MIN :: 0.12
 SPLIT_MAX :: 0.85
@@ -236,6 +240,7 @@ handle_panel_input :: proc() -> bool {
 			drag_divider(layout.dragging_divider)
 		} else {
 			layout.dragging_divider = {}
+			panel_layout_changed = true
 		}
 	}
 
@@ -244,6 +249,7 @@ handle_panel_input :: proc() -> bool {
 		if target, over := hovered_slot().?; over && shown {
 			a, b := panel_pointer(source), panel_pointer(target)
 			a^, b^ = b^, a^
+			panel_layout_changed = true
 		}
 		layout.dragging_panel = nil
 	}
@@ -318,4 +324,76 @@ update_cursor :: proc() {
 		over_grip = over_grip || clay.PointerOver(grip_id(panel))
 	}
 	rl.SetMouseCursor(.RESIZE_ALL if over_grip || layout.dragging_panel != nil else .DEFAULT)
+}
+
+// ---------------------------------------------------------------- saving
+
+// The part of the layout worth keeping between runs (not the drag in
+// progress). Saved by the debugger's settings file (settings_file.odin).
+Saved_Layout :: struct {
+	columns:      [MAX_COLUMNS]Column,
+	column_count: int,
+	bottom:       [2]Panel,
+	bottom_count: int,
+	bottom_split: f32,
+	main_height:  f32,
+}
+
+layout_to_save :: proc() -> Saved_Layout {
+	layout := &panel_layout
+	return {
+		columns      = layout.columns,
+		column_count = layout.column_count,
+		bottom       = layout.bottom,
+		bottom_count = layout.bottom_count,
+		bottom_split = layout.bottom_split,
+		main_height  = layout.main_height,
+	}
+}
+
+// Uses a saved layout if it makes sense: 1 to 3 columns, 1 or 2 bottom
+// panels, and every panel shown exactly once (a layout saved before a
+// panel was added fails this). Sizes are clamped as dragging clamps them.
+// Returns false, changing nothing, otherwise.
+layout_apply :: proc(saved: Saved_Layout) -> bool {
+	saved := saved // addressable, to slice its arrays
+	if saved.column_count < 1 || saved.column_count > MAX_COLUMNS || saved.bottom_count < 1 || saved.bottom_count > 2 {
+		return false
+	}
+	seen: [Panel]int
+	for column in saved.columns[:saved.column_count] {
+		seen[column.top] += 1
+		if column.has_bottom {
+			seen[column.bottom] += 1
+		}
+	}
+	for panel in saved.bottom[:saved.bottom_count] {
+		seen[panel] += 1
+	}
+	for count in seen {
+		if count != 1 {
+			return false
+		}
+	}
+	// The columns before the last share the row; leave the last its room.
+	widths: f32 = 0
+	for column in saved.columns[:saved.column_count - 1] {
+		widths += clamp(column.width, SPLIT_MIN, SPLIT_MAX)
+	}
+	if widths > 1 - SPLIT_MIN {
+		return false
+	}
+
+	layout := &panel_layout
+	layout.columns = saved.columns
+	for &column in layout.columns {
+		column.width = clamp(column.width, SPLIT_MIN, SPLIT_MAX)
+		column.split = clamp(column.split, SPLIT_MIN, SPLIT_MAX)
+	}
+	layout.column_count = saved.column_count
+	layout.bottom = saved.bottom
+	layout.bottom_count = saved.bottom_count
+	layout.bottom_split = clamp(saved.bottom_split, SPLIT_MIN, SPLIT_MAX)
+	layout.main_height = clamp(saved.main_height, SPLIT_MIN, SPLIT_MAX)
+	return true
 }

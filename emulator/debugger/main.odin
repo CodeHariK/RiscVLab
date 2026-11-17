@@ -33,10 +33,16 @@ run :: proc() -> int {
 	}
 
 	view.reset_panel_layout()
+	last_program := settings_load() // settings_file.odin
 	reference.load()
 	defer reference.destroy()
 	if tests_root != "" {
 		state.catalog_load(tests_root)
+	}
+	// No program named: reopen the last one if it is still in the list,
+	// otherwise offer the list with the first one open.
+	if program_path == "" && last_program != "" && state.catalog_find(last_program) >= 0 {
+		program_path = last_program
 	}
 	if program_path == "" && len(state.catalog.entries) > 0 {
 		program_path = state.catalog.entries[0].path
@@ -102,6 +108,7 @@ run :: proc() -> int {
 		ui.clay_raylib_render(&render_commands)
 		rl.EndDrawing()
 	}
+	settings_save(&session)
 	return 0
 }
 

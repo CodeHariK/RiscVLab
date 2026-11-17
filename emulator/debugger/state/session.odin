@@ -2,6 +2,7 @@ package state
 
 import "core:fmt"
 import "core:path/filepath"
+import "core:strings"
 import rv "../../core"
 import devices "../../devices"
 import loader "../../loader"
@@ -37,6 +38,8 @@ Session :: struct {
 	// `access_trail`): timeline[i] is step number timeline_dropped + i + 1.
 	timeline_dropped: int,
 	program_name: string,
+	// The file it was opened from (saved, to reopen it next time).
+	program_path: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
 	// program). Next does nothing while stopped; Prev clears it.
 	stopped:      Maybe(rv.Trap),
@@ -73,7 +76,9 @@ session_open :: proc(session: ^Session, path: string) -> bool {
 	delete(session.image)
 	session.image = image
 	session.symbols = loader.elf_symbols(image)
-	session.program_name = filepath.base(path)
+	delete(session.program_path)
+	session.program_path = strings.clone(path)
+	session.program_name = filepath.base(session.program_path)
 	source_destroy(&session.source)
 	session.source, session.has_source = source_load(path)
 	session_reset(session)
@@ -86,6 +91,7 @@ session_destroy :: proc(session: ^Session) {
 	delete(session.image)
 	delete(session.access_trail)
 	delete(session.timeline)
+	delete(session.program_path)
 	source_destroy(&session.source)
 }
 

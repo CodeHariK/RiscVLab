@@ -183,6 +183,7 @@ toolbar :: proc(session: ^state.Session) {
 		if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
 		ui.button(BUTTON_ID_PROGRAMS, "Programs (~ / P)")
 		ui.button(BUTTON_ID_DOCS, "Docs (D)")
+		ui.button(BUTTON_ID_RESET_LAYOUT, "Reset layout")
 		ui.button(BUTTON_ID_THEME, ui.settings_theme_label())
 	}
 }

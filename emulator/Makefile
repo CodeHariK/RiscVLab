@@ -21,9 +21,9 @@ VET       := -vet
 BUILD_DIR := build
 BINARY    := $(BUILD_DIR)/rvemu
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
-SOURCES   := $(wildcard core/*.odin loader/*.odin disasm/*.odin cli/*.odin)
+SOURCES   := $(wildcard core/*.odin devices/*.odin loader/*.odin disasm/*.odin cli/*.odin)
 DEBUGGER  := $(BUILD_DIR)/rvdbg
-DEBUGGER_SOURCES := $(wildcard core/*.odin loader/*.odin disasm/*.odin debugger/*.odin debugger/state/*.odin debugger/view/*.odin debugger/ui/*.odin debugger/reference/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/ui/fonts/*.ttf ../docs/reference/*.md)
+DEBUGGER_SOURCES := $(wildcard core/*.odin devices/*.odin loader/*.odin disasm/*.odin debugger/*.odin debugger/state/*.odin debugger/view/*.odin debugger/ui/*.odin debugger/reference/*.odin vendor/clay-odin/*.odin) $(wildcard debugger/ui/fonts/*.ttf ../docs/reference/*.md)
 
 PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build

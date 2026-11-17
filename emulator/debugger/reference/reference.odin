@@ -30,6 +30,8 @@ embedded_concurrency_docs := #load("../../../docs/reference/concurrency.md", str
 @(rodata)
 embedded_elf_docs := #load("../../../docs/reference/elf.md", string)
 @(rodata)
+embedded_device_docs := #load("../../../docs/reference/devices.md", string)
+@(rodata)
 embedded_term_docs := #load("../../../docs/reference/terms.md", string)
 
 // Which file an entry comes from; the Docs window's list is grouped by it.
@@ -41,6 +43,7 @@ Group :: enum {
 	Traps,
 	Concurrency,
 	Elf,
+	Devices,
 	Terms,
 }
 
@@ -52,6 +55,7 @@ group_names := [Group]string {
 	.Traps               = "Traps and privilege",
 	.Concurrency         = "Atomics, locks, ordering",
 	.Elf                 = "ELF and memory",
+	.Devices             = "Devices",
 	.Terms               = "Terms",
 }
 
@@ -77,6 +81,7 @@ load :: proc() {
 	add_file(embedded_trap_docs, .Traps)
 	add_file(embedded_concurrency_docs, .Concurrency)
 	add_file(embedded_elf_docs, .Elf)
+	add_file(embedded_device_docs, .Devices)
 	add_file(embedded_term_docs, .Terms)
 }
 

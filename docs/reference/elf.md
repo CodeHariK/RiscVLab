@@ -92,14 +92,14 @@ How it works:
 | 0x00001000 | boot ROM on QEMU | no |
 | 0x02000000 | CLINT: timer and software interrupts | coming |
 | 0x0c000000 | PLIC: device interrupt controller | coming |
-| 0x10000000 | UART: serial port, for printing | coming |
+| 0x10000000 | UART: serial port, for printing (see uart) | yes |
 | 0x10001000 | virtio disk | coming |
 | 0x80000000-0x87ffffff | RAM, 128 MiB: programs are loaded here | yes |
 Anything else is empty: a load or store there raises an access fault.
 
-For: devices are used with ordinary loads and stores to their addresses ("memory-mapped I/O"); the bus decides whether an address means RAM or a device.
+For: devices are used with ordinary loads and stores to their addresses (memory-mapped I/O, see mmio); the bus decides whether an address means RAM or a device.
 
-Related: link.ld, Load_Access_Fault Store_Access_Fault, segment
+Related: link.ld, Load_Access_Fault Store_Access_Fault, segment, mmio, uart
 
 ## raw-binary - Raw binary files (.bin)
 

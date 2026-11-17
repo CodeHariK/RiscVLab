@@ -67,6 +67,15 @@ bus_load :: proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, ok: bool) {
 	return value, true
 }
 
+// Reads like bus_load, but only to look: the debugger's views, the old
+// bytes saved for undo, the tohost check. For RAM the two are the same.
+// They will differ for devices whose reads change them (reading a UART's
+// receive register takes the byte out of it): bus_load is what a load
+// instruction does, bus_peek must leave the device as it was.
+bus_peek :: proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, ok: bool) {
+	return bus_load(bus, addr, size)
+}
+
 // Writes the low `size` bytes (1, 2, 4 or 8) of `value`, little-endian.
 bus_store :: proc(bus: ^Bus, addr: u64, size: u64, value: u64) -> bool {
 	offset, ok := ram_offset(bus, addr, size)

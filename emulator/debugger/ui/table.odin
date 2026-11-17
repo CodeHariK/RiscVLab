@@ -38,6 +38,10 @@ Table_Options :: struct {
 	style:     Font_Style,
 	padding_x: u16, // inside each cell, left and right
 	padding_y: u16,
+	// Text each column must always fit, whatever its cells hold right now,
+	// so a column that is sometimes empty doesn't come and go (the
+	// Registers tab's rs1 / rs2 / rd tags). Shorter than the columns is fine.
+	min_columns: []string,
 	// The space the table has, if the caller knows it; 0: the table's own
 	// width last frame. Inside an element that clips sideways, pass it:
 	// there a box can grow past its parent and never shrink back.
@@ -55,9 +59,6 @@ table :: proc(id: clay.ElementId, rows: []Table_Row, options := TABLE_LIST) {
 	}
 	colors := palette()
 	widths := table_column_widths(rows, options)
-	if len(widths) == 0 {
-		return
-	}
 	last := len(widths) - 1
 	gap: u16 = TABLE_LINE_WIDTH if options.lines else 0
 
@@ -157,7 +158,23 @@ table_column_widths :: proc(rows: []Table_Row, options: Table_Options) -> []f32 
 			columns = max(columns, len(row.cells))
 		}
 	}
+	// Only span rows: one column, as wide as the widest of them.
+	if columns == 0 {
+		width: f32 = 0
+		for row in rows {
+			if len(row.cells) > 0 {
+				width = max(width, text_width(row.cells[0].text, options.style) + 2 * f32(options.padding_x) + 1)
+			}
+		}
+		widths := make([]f32, 1, context.temp_allocator)
+		widths[0] = width
+		return widths
+	}
+	columns = max(columns, len(options.min_columns))
 	widths := make([]f32, columns, context.temp_allocator)
+	for text, column in options.min_columns {
+		widths[column] = text_width(text, options.style) + 2 * f32(options.padding_x) + 1
+	}
 	for row in rows {
 		if row.span {
 			continue

@@ -27,7 +27,7 @@ tab_registers :: proc(session: ^state.Session) {
 	if record, has_record := session.last_step.?; has_record && record.register_changed {
 		changed_index = int(record.register_index)
 	}
-	next_instruction, fetched := rv.bus_load(&session.machine.bus, cpu.pc, 4)
+	next_instruction, fetched := rv.bus_peek(&session.machine.bus, cpu.pc, 4)
 
 	rows := make([dynamic]ui.Table_Row, 0, rv.REGISTER_COUNT + 1, context.temp_allocator)
 	// The pc is not one of x0-x31: no instruction names it as rd/rs1/rs2,
@@ -49,7 +49,11 @@ tab_registers :: proc(session: ^state.Session) {
 			background = colors.changed if index == changed_index else ui.COLOR_NONE,
 		})
 	}
-	ui.table(clay.ID("RegisterTable"), rows[:], tab_table())
+	// The tag column keeps its width when no register has a tag, so the
+	// names don't shift from step to step.
+	options := tab_table()
+	options.min_columns = {"rs1"}
+	ui.table(clay.ID("RegisterTable"), rows[:], options)
 }
 
 // "rs1" / "rs2" / "rd" in the field's colour, or nothing.

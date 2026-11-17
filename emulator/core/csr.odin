@@ -9,10 +9,11 @@ package rv
 //   bits 11:10  11 = read-only, anything else = read/write
 //   bits 9:8    lowest privilege level that may access it (3 = machine)
 //
-// The hart always runs in machine mode for now, so only the read-only
-// rule is enforced. Reading or writing a CSR that isn't implemented, or
-// writing a read-only one, is illegal: the CSR instructions (next step)
-// turn that into an Illegal_Instruction trap.
+// Both rules are enforced: accessing a CSR from a lower privilege level
+// than its bits 9:8 allow (csr_allowed), reading or writing a CSR that
+// isn't implemented, or writing a read-only one, is illegal: the CSR
+// instructions (zicsr.odin) turn that into an Illegal_Instruction trap.
+// (The hart only runs in machine mode so far, which may access them all.)
 //
 // Many CSRs are "WARL" (write any value, read legal value): fields that
 // don't exist or can't hold the written value are fixed up on write.
@@ -69,6 +70,13 @@ Csr_File :: struct {
 	mcause:   u64,
 	mtval:    u64,
 	mip:      u64,
+}
+
+// True if the current privilege level may access the CSR: bits 9:8 of
+// its address are the lowest level allowed (0 user, 1 supervisor,
+// 3 machine).
+csr_allowed :: proc(cpu: ^Cpu, address: u32) -> bool {
+	return u32(cpu.privilege) >= (address >> 8) & 0b11
 }
 
 // True if the address is in a read-only range (bits 11:10 = 11).

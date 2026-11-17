@@ -57,13 +57,13 @@ compact_steps :: proc(session: ^state.Session) {
 			backgroundColor = colors.current_line,
 			cornerRadius = clay.CornerRadiusAll(3),
 		}) {
-			clay.TextDynamic(next_step_text(session, count + 1), ui.text_config(.Code_Small, colors.text))
+			clay.TextDynamic(next_step_text(session, session.timeline_dropped + count + 1), ui.text_config(.Code_Small, colors.text))
 		}
 		row += 1
 	}
 	for index := count - 1 - max(0, skip - 1); index >= 0 && row < shown; index -= 1 {
 		if clay.UI(clay.ID("StepLine", u32(row)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
-			clay.TextDynamic(timeline_text(index + 1, session.timeline[index]), ui.text_config(.Code_Small, colors.text))
+			clay.TextDynamic(timeline_text(session.timeline_dropped + index + 1, session.timeline[index]), ui.text_config(.Code_Small, colors.text))
 		}
 		row += 1
 	}
@@ -80,7 +80,7 @@ next_step_text :: proc(session: ^state.Session, number: int) -> string {
 		return timeline_text(number, entry, coming = true)
 	}
 	pc := session.machine.cpu.pc
-	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
+	raw, ok := rv.bus_peek(&session.machine.bus, pc, 4)
 	if !ok {
 		return fmt.tprintf("next: pc 0x%x is outside memory", pc)
 	}
@@ -103,11 +103,11 @@ detailed_steps :: proc(session: ^state.Session) {
 
 	block := 0
 	if skip == 0 {
-		next_step_block(session, count + 1)
+		next_step_block(session, session.timeline_dropped + count + 1)
 		block += 1
 	}
 	for index := count - 1 - max(0, skip - 1); index >= 0 && block < shown; index -= 1 {
-		step_block(session, index + 1, session.timeline[index], false)
+		step_block(session, session.timeline_dropped + index + 1, session.timeline[index], false)
 		block += 1
 	}
 }

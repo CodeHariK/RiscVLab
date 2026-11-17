@@ -9,7 +9,8 @@ import rv "../core"
 // Snapshots the machine, runs the program, then steps back until the
 // history is empty. Passes (exit 0) if every recorded step was undone
 // and registers, CSRs, privilege, the LR reservation, PC, the counters and
-// all of RAM equal the snapshot.
+// all of RAM equal the snapshot. A run longer than the history holds
+// can't be checked, and fails with a message saying so.
 check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 	start_regs := machine.cpu.regs
 	start_csr := machine.cpu.csr
@@ -26,6 +27,17 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 	recorded := result.steps
 	if result.reason == .Breakpoint || result.reason == .Trap {
 		recorded -= 1
+	}
+	// Every step must still be in the history to be undone.
+	capacity := u64(len(machine.history.records))
+	if recorded > capacity {
+		fmt.printfln(
+			"undo check FAILED: the program ran %d steps, but the history holds only the last %d (use --max-steps %d or less)",
+			recorded,
+			capacity,
+			capacity,
+		)
+		return 1
 	}
 
 	undone: u64 = 0

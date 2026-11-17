@@ -84,6 +84,32 @@ history_push :: proc(history: ^History, record: Undo_Record) {
 	history.count = min(history.count + 1, capacity)
 }
 
+// For a step that is undone straight away (the debugger's preview of
+// Next): when the history is full, pushing that step overwrites the
+// oldest record, and undoing it doesn't bring that back. Save it before
+// the step and put it back after the undo, and the history is exactly as
+// it was.
+History_Oldest :: struct {
+	record: Undo_Record,
+	full:   bool,
+}
+
+history_save_oldest :: proc(history: ^History) -> History_Oldest {
+	if !history_is_enabled(history) || history.count < len(history.records) {
+		return {}
+	}
+	// Full: the next slot to write is the oldest record.
+	return {record = history.records[history.next], full = true}
+}
+
+history_restore_oldest :: proc(history: ^History, saved: History_Oldest) {
+	if !saved.full {
+		return
+	}
+	history.records[history.next] = saved.record
+	history.count = len(history.records)
+}
+
 // Removes and returns the newest record; ok = false when empty.
 history_pop :: proc(history: ^History) -> (record: Undo_Record, ok: bool) {
 	if history.count == 0 {

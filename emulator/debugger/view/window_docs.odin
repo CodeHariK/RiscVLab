@@ -141,7 +141,7 @@ docs_content :: proc(session: ^state.Session) {
 // CSR instruction.
 @(private)
 next_csr_name :: proc(session: ^state.Session) -> string {
-	raw, ok := rv.bus_load(&session.machine.bus, session.machine.cpu.pc, 4)
+	raw, ok := rv.bus_peek(&session.machine.bus, session.machine.cpu.pc, 4)
 	instruction := u32(raw)
 	if !ok || rv.opcode(instruction) != rv.OPCODE_SYSTEM || rv.funct3(instruction) == 0 {
 		return ""
@@ -193,7 +193,7 @@ source_word :: proc(session: ^state.Session) -> string {
 @(private)
 next_mnemonic :: proc(session: ^state.Session) -> string {
 	pc := session.machine.cpu.pc
-	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
+	raw, ok := rv.bus_peek(&session.machine.bus, pc, 4)
 	if !ok {
 		return ""
 	}

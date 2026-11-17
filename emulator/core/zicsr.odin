@@ -18,8 +18,8 @@ package rv
 //   - CSRRS / CSRRC with rs1 = x0 (or the I forms with uimm = 0) don't
 //     write it, so they can read a read-only CSR. This is `csrr`.
 //
-// Accessing a CSR that doesn't exist, or writing a read-only one, raises
-// Illegal_Instruction and changes nothing.
+// Accessing a CSR that doesn't exist or needs more privilege, or writing
+// a read-only one, raises Illegal_Instruction and changes nothing.
 
 ZICSR_CSRRW :: 0b001
 ZICSR_CSRRS :: 0b010
@@ -38,6 +38,11 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	address := csr_address(instruction)
 	destination := rd(instruction)
 	source_index := rs1(instruction)
+
+	// Too little privilege for this CSR: illegal, read or write.
+	if !csr_allowed(cpu, address) {
+		return illegal_instruction(instruction)
+	}
 
 	// The value to write: a register, or the rs1 field itself as a 5-bit
 	// unsigned immediate for the I forms (funct3 bit 2 set).

@@ -164,7 +164,7 @@ unsigned_value :: proc(value: u64, size: u64) -> u64 {
 // Stores and records the old bytes for undo, as exec_store does.
 @(private = "file")
 amo_store :: proc(cpu: ^Cpu, bus: ^Bus, address: u64, size: u64, value: u64) -> bool {
-	old_value, readable := bus_load(bus, address, size)
+	old_value, readable := bus_peek(bus, address, size)
 	if !readable || !bus_store(bus, address, size, value) {
 		return false
 	}

@@ -21,7 +21,7 @@ Memory_Access :: struct {
 // The load or store the instruction at the PC is about to do, if any.
 next_memory_access :: proc(session: ^Session) -> Memory_Access {
 	cpu := &session.machine.cpu
-	raw, ok := rv.bus_load(&session.machine.bus, cpu.pc, 4)
+	raw, ok := rv.bus_peek(&session.machine.bus, cpu.pc, 4)
 	if !ok {
 		return {}
 	}

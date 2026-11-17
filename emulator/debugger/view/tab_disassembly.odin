@@ -39,7 +39,7 @@ tab_disassembly :: proc(session: ^state.Session) {
 			drawn += 1
 		}
 		drawn += 1
-		raw, _ := rv.bus_load(&session.machine.bus, address, 4)
+		raw, _ := rv.bus_peek(&session.machine.bus, address, 4)
 		instruction := u32(raw)
 		text := fmt.tprintf(
 			"%s %08x  %08x  %s",

@@ -17,7 +17,7 @@ tab_elf :: proc(session: ^state.Session) {
 		instruction_count := (program.code_end - program.code_start) / rv.INSTRUCTION_SIZE
 		tohost := "not present"
 		if address, has_tohost := program.tohost.?; has_tohost {
-			value, _ := rv.bus_load(&session.machine.bus, address, 8)
+			value, _ := rv.bus_peek(&session.machine.bus, address, 8)
 			tohost = fmt.tprintf("0x%x (value %s)", address, value_text(value))
 		}
 

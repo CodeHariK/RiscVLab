@@ -101,6 +101,27 @@ counter_write_is_not_counted_by_its_own_instruction :: proc(t: ^testing.T) {
 }
 
 @(test)
+user_mode_cannot_touch_machine_csrs :: proc(t: ^testing.T) {
+	// csrr t0, mstatus (machine level: address bits 9:8 = 3) from user mode.
+	machine := machine_with(csr_instruction(rv.ZICSR_CSRRS, 5, 0, rv.CSR_MSTATUS))
+	defer rv.machine_destroy(&machine)
+	machine.cpu.privilege = .User
+
+	trap, trapped := rv.machine_step(&machine).?
+	testing.expect(t, trapped)
+	testing.expect_value(t, trap.cause, rv.Trap_Cause.Illegal_Instruction)
+}
+
+@(test)
+user_mode_can_read_the_user_counters :: proc(t: ^testing.T) {
+	// csrr t0, instret (user level: address bits 9:8 = 0).
+	machine := machine_with(csr_instruction(rv.ZICSR_CSRRS, 5, 0, rv.CSR_INSTRET))
+	defer rv.machine_destroy(&machine)
+	machine.cpu.privilege = .User
+	testing.expect(t, rv.machine_step(&machine) == nil)
+}
+
+@(test)
 undo_restores_mstatus_exactly :: proc(t: ^testing.T) {
 	// csrrsi zero, mstatus, 8 then undo: mstatus must be back to its reset
 	// value, bit for bit (lesson 13 found this: undo used to re-apply the

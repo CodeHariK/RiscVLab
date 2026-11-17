@@ -25,8 +25,13 @@ Session :: struct {
 	// Next, so Prev can put it back.
 	last_access:  Memory_Access,
 	access_trail: [dynamic]Memory_Access,
-	// Every step taken since Reset, for the Steps view (timeline.odin).
+	// Every step taken since Reset, for the Steps view (timeline.odin),
+	// newest last. Capped a little above the undo history's size: steps
+	// that old can't be stepped back to anyway (see timeline_trim).
 	timeline:     [dynamic]Timeline_Entry,
+	// How many of the oldest steps were dropped from `timeline` (and
+	// `access_trail`): timeline[i] is step number timeline_dropped + i + 1.
+	timeline_dropped: int,
 	program_name: string,
 	// Set when the last Next raised a trap with no handler (EBREAK ends a
 	// program). Next does nothing while stopped; Prev clears it.
@@ -93,6 +98,7 @@ session_reset :: proc(session: ^Session) {
 	session.last_access = {}
 	clear(&session.access_trail)
 	clear(&session.timeline)
+	session.timeline_dropped = 0
 	session_update_preview(session)
 }
 
@@ -103,7 +109,7 @@ session_next :: proc(session: ^Session) {
 	}
 	access := next_memory_access(session)
 	pc := session.machine.cpu.pc
-	instruction, _ := rv.bus_load(&session.machine.bus, pc, 4)
+	instruction, _ := rv.bus_peek(&session.machine.bus, pc, 4)
 	inputs := step_inputs_capture(session, u32(instruction))
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
@@ -115,6 +121,7 @@ session_next :: proc(session: ^Session) {
 	session.last_step = session.machine.cpu.undo
 	timeline_record(session, pc, u32(instruction), inputs)
 	append(&session.access_trail, session.last_access)
+	timeline_trim(session)
 	if access.kind != .None {
 		session.last_access = access
 	}
@@ -146,29 +153,50 @@ session_prev :: proc(session: ^Session) {
 	}
 }
 
+// Steps dropped at a time once the timeline is full: removing from the
+// front of an array moves everything after it, so do it rarely.
+TIMELINE_TRIM_CHUNK :: 4096
+
+// Keeps `timeline` and `access_trail` from growing for ever on a long
+// run. The undo history keeps only its newest steps, so entries older
+// than that can't be stepped back to; once there are a chunk more of them
+// than the history holds, the oldest chunk goes. (The Stack tab works out
+// frames from the timeline, so a frame made that long ago loses its
+// heading; its words are still shown.)
+@(private)
+timeline_trim :: proc(session: ^Session) {
+	limit := len(session.machine.history.records) + TIMELINE_TRIM_CHUNK
+	if len(session.timeline) <= limit {
+		return
+	}
+	remove_range(&session.timeline, 0, TIMELINE_TRIM_CHUNK)
+	remove_range(&session.access_trail, 0, min(TIMELINE_TRIM_CHUNK, len(session.access_trail)))
+	session.timeline_dropped += TIMELINE_TRIM_CHUNK
+}
+
 // Works out exactly what Next will do, so the Encoding panel and Steps view can show
 // every stage of the instruction (results included) before it runs: the
 // instruction is run and then undone straight away. Called after every
 // Reset, Next and Prev.
 //
-// Skipped when the program has ended, and when the undo history is full,
-// since running one more step would push its oldest step out for good.
+// Skipped when the program has ended. When the undo history is full, the
+// step would push its oldest record out: that one is saved first and put
+// back after the undo.
 session_update_preview :: proc(session: ^Session) {
 	session.preview = nil
 	if session.stopped != nil || session.exited != nil {
 		return
 	}
 	machine := &session.machine
-	if machine.history.count >= len(machine.history.records) {
-		return
-	}
 	pc := machine.cpu.pc
-	raw, fetched := rv.bus_load(&machine.bus, pc, 4)
+	raw, fetched := rv.bus_peek(&machine.bus, pc, 4)
 	if !fetched {
 		return
 	}
 	instruction := u32(raw)
 	inputs := step_inputs_capture(session, instruction)
+	oldest := rv.history_save_oldest(&machine.history)
+	defer rv.history_restore_oldest(&machine.history, oldest)
 	if trap, stops := rv.machine_step(machine).?; stops {
 		// No handler: the step changed nothing, so there is nothing to undo.
 		session.preview = Timeline_Entry {

@@ -11,7 +11,7 @@ import disasm "../disasm"
 // A trap taken into a handler prints "trap <cause> -> handler <address>".
 // Used as the machine_run observer.
 print_trace_line :: proc(machine: ^rv.Machine, pc: u64, result: rv.Step_Result) {
-	raw, _ := rv.bus_load(&machine.bus, pc, 4)
+	raw, _ := rv.bus_peek(&machine.bus, pc, 4)
 	instruction := u32(raw)
 	buffer: [disasm.BUFFER_SIZE]u8
 	text := disasm.disassemble(buffer[:], pc, instruction)

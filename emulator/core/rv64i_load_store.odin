@@ -44,9 +44,9 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	address := reg_read(cpu, rs1(instruction)) + imm_s(instruction)
 	size := u64(1) << kind
 
-	// Save the bytes about to be overwritten, for undo. (Reading first is
-	// safe for RAM; devices with read side effects will need care later.)
-	old_value, readable := bus_load(bus, address, size)
+	// Save the bytes about to be overwritten, for undo (a peek: it must not
+	// count as a read for a device).
+	old_value, readable := bus_peek(bus, address, size)
 	if !readable || !bus_store(bus, address, size, reg_read(cpu, rs2(instruction))) {
 		return trap_make(.Store_Access_Fault, address)
 	}

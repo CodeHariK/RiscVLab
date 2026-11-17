@@ -104,6 +104,8 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		return false
 	}
 	if record.memory_changed {
+		// Fine for RAM. A device register (a UART's transmit register)
+		// can't be "unwritten" like this: devices will need their own undo.
 		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old)
 	}
 	if record.register_changed {
@@ -167,7 +169,7 @@ machine_host_exit :: proc(machine: ^Machine) -> Maybe(u64) {
 	if !has_tohost {
 		return nil
 	}
-	value, _ := bus_load(&machine.bus, address, 8)
+	value, _ := bus_peek(&machine.bus, address, 8)
 	if value & 1 == 0 {
 		return nil
 	}

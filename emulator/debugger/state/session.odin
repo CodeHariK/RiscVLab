@@ -1,9 +1,9 @@
-package rvdbg
+package state
 
 import "core:fmt"
 import "core:path/filepath"
-import rv "../core"
-import loader "../loader"
+import rv "../../core"
+import loader "../../loader"
 
 // One debugging session: the machine plus what the UI needs to know
 // about it. All changes to the machine during debugging go through the

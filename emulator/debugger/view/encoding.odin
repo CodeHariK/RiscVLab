@@ -1,9 +1,9 @@
-package rvdbg
+package view
 
 import "core:fmt"
 import "core:strings"
-import rv "../core"
-import disasm "../disasm"
+import rv "../../core"
+import disasm "../../disasm"
 
 // Splits an instruction into its encoding fields (opcode, rd, rs1, rs2,
 // funct3/funct7, immediate pieces) for the Encoding strip, following the
@@ -173,21 +173,21 @@ encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> strin
 
 // ------------------------------------------------------------- builders
 
-@(private = "file")
+@(private)
 add_field :: proc(encoding: ^Encoding, high: u32, low: u32, label: string, kind: Field_Kind) {
 	encoding.fields[encoding.field_count] = Encoding_Field{high, low, label, kind}
 	encoding.field_count += 1
 }
 
 // rs2 [24:20], rs1 [19:15], funct3 [14:12]: the same place in R/S/B.
-@(private = "file")
+@(private)
 add_source_registers :: proc(encoding: ^Encoding) {
 	add_field(encoding, 24, 20, "rs2", .Rs2)
 	add_field(encoding, 19, 15, "rs1", .Rs1)
 	add_field(encoding, 14, 12, "funct3", .Funct)
 }
 
-@(private = "file")
+@(private)
 r_type :: proc(encoding: ^Encoding) {
 	encoding.format = "R-type"
 	add_field(encoding, 31, 25, "funct7", .Funct)
@@ -196,7 +196,7 @@ r_type :: proc(encoding: ^Encoding) {
 	add_field(encoding, 6, 0, "opcode", .Opcode)
 }
 
-@(private = "file")
+@(private)
 i_type :: proc(encoding: ^Encoding) {
 	encoding.format = "I-type"
 	add_field(encoding, 31, 20, "imm[11:0]", .Immediate)
@@ -208,7 +208,7 @@ i_type :: proc(encoding: ^Encoding) {
 
 // CSR instructions: I-type whose immediate is the CSR address; the
 // immediate forms (CSRRWI, ...) use the rs1 field as a 5-bit value.
-@(private = "file")
+@(private)
 csr_type :: proc(encoding: ^Encoding, immediate_form: bool) {
 	encoding.format = "I-type (CSR)"
 	add_field(encoding, 31, 20, "csr", .Csr)
@@ -224,7 +224,7 @@ csr_type :: proc(encoding: ^Encoding, immediate_form: bool) {
 
 // I-type whose immediate is really a shift type (funct6 / funct7) plus a
 // shift amount: `split` is the lowest bit of the shift-type field.
-@(private = "file")
+@(private)
 shift_immediate :: proc(encoding: ^Encoding, split: u32, type_label: string) {
 	encoding.format = "I-type (shift)"
 	add_field(encoding, 31, split, type_label, .Funct)

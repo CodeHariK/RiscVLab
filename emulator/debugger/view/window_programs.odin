@@ -1,11 +1,12 @@
-package rvdbg
+package view
 
 import "core:path/filepath"
 import "core:strings"
-import clay "../vendor/clay-odin"
-import ui "ui"
+import clay "../../vendor/clay-odin"
+import ui "../ui"
+import state "../state"
 
-// The Programs window: every program the debugger can open (catalog.odin),
+// The Programs window: every program the debugger can open (state.catalog.odin),
 // grouped, with its title and description. Open it with the Programs
 // button, the P key or ~ (the key left of 1).
 //
@@ -21,11 +22,11 @@ PROGRAM_LIST_ID :: "ProgramList"
 
 // Catalog indices that match the search, in catalog order.
 programs_filtered :: proc() -> []int {
-	query := ui.search_text(&view.programs_search)
+	query := ui.search_text(&display.programs_search)
 	matches := make([dynamic]int, context.temp_allocator)
-	for entry, index in catalog.entries {
+	for entry, index in state.catalog.entries {
 		text := strings.to_lower(
-			strings.join({entry.title, entry.description, filepath.base(entry.path), catalog_group_names[entry.group]}, " ", context.temp_allocator),
+			strings.join({entry.title, entry.description, filepath.base(entry.path), state.catalog_group_names[entry.group]}, " ", context.temp_allocator),
 			context.temp_allocator,
 		)
 		if ui.search_matches(query, text) {
@@ -35,26 +36,26 @@ programs_filtered :: proc() -> []int {
 	return matches[:]
 }
 
-programs_modal :: proc(session: ^Session) {
-	if view.programs_open {
+programs_modal :: proc(session: ^state.Session) {
+	if display.programs_open {
 		ui.modal_window("ProgramsWindow", "Programs", BUTTON_ID_PROGRAMS_CLOSE, nil, programs_content, session)
 	}
 }
 
-@(private = "file")
+@(private)
 programs_content :: proc(data: rawptr) {
-	session := (^Session)(data)
+	session := (^state.Session)(data)
 	colors := ui.palette()
-	ui.search_box("ProgramsSearch", &view.programs_search, "Type to search programs")
+	ui.search_box("ProgramsSearch", &display.programs_search, "Type to search programs")
 	ui.modal_hint("Up / Down to choose, Enter to open, Esc to close")
 
 	matches := programs_filtered()
-	view.program_cursor = clamp(view.program_cursor, 0, max(0, len(matches) - 1))
-	ui.scroll_keep(&view.programs_list_scroll, clay.ID(PROGRAM_LIST_ID))
-	if view.programs_scroll_pending && len(matches) > 0 {
-		row := clay.ID(PROGRAM_ROW_ID, u32(matches[view.program_cursor]))
+	display.program_cursor = clamp(display.program_cursor, 0, max(0, len(matches) - 1))
+	ui.scroll_keep(&display.programs_list_scroll, clay.ID(PROGRAM_LIST_ID))
+	if display.programs_scroll_pending && len(matches) > 0 {
+		row := clay.ID(PROGRAM_ROW_ID, u32(matches[display.program_cursor]))
 		if ui.scroll_into_view(clay.ID(PROGRAM_LIST_ID), row) {
-			view.programs_scroll_pending = false
+			display.programs_scroll_pending = false
 		}
 	}
 
@@ -62,7 +63,7 @@ programs_content :: proc(data: rawptr) {
 		layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
 		clip = {vertical = true, childOffset = clay.GetScrollOffset()},
 	}) {
-		if len(catalog.entries) == 0 {
+		if len(state.catalog.entries) == 0 {
 			clay.TextDynamic("No program list: start rvdbg with --tests <tests folder>.", ui.text_config(.Text, colors.text_dim))
 			return
 		}
@@ -71,22 +72,22 @@ programs_content :: proc(data: rawptr) {
 		}
 		previous_group := -1
 		for index, position in matches {
-			entry := catalog.entries[index]
+			entry := state.catalog.entries[index]
 			if int(entry.group) != previous_group {
 				previous_group = int(entry.group)
 				if clay.UI(clay.ID("ProgramGroup", u32(entry.group)))({layout = {padding = {4, 4, 10, 4}}}) {
-					clay.TextDynamic(catalog_group_names[entry.group], ui.text_config(.Title, colors.title))
+					clay.TextDynamic(state.catalog_group_names[entry.group], ui.text_config(.Title, colors.title))
 				}
 			}
-			program_row(index, entry, position == view.program_cursor)
+			program_row(index, entry, position == display.program_cursor)
 		}
 	}
 }
 
 // One program: title (marked if it is the one open) and description. The
 // chosen row has the current-line background.
-@(private = "file")
-program_row :: proc(index: int, entry: Catalog_Entry, chosen: bool) {
+@(private)
+program_row :: proc(index: int, entry: state.Catalog_Entry, chosen: bool) {
 	colors := ui.palette()
 	element_id := clay.ID(PROGRAM_ROW_ID, u32(index))
 	background := ui.COLOR_NONE
@@ -101,7 +102,7 @@ program_row :: proc(index: int, entry: Catalog_Entry, chosen: bool) {
 		cornerRadius = clay.CornerRadiusAll(4),
 	}) {
 		title := entry.title
-		if index == view.selected_program {
+		if index == display.selected_program {
 			title = strings.concatenate({title, "   (open)"}, context.temp_allocator)
 		}
 		clay.TextDynamic(title, ui.text_config(.Text, colors.text))

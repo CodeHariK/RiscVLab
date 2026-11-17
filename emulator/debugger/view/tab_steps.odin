@@ -1,11 +1,12 @@
-package rvdbg
+package view
 
 import "core:fmt"
 import "core:strings"
-import clay "../vendor/clay-odin"
-import rv "../core"
-import disasm "../disasm"
-import ui "ui"
+import clay "../../vendor/clay-odin"
+import rv "../../core"
+import disasm "../../disasm"
+import ui "../ui"
+import state "../state"
 
 // The Steps tab of the code panel, in one of two modes (switch at the top):
 //
@@ -26,28 +27,28 @@ TAB_ID_STEPS_DETAILED :: "StepsDetailedTab"
 // Width of the stage names ("execute", "next pc") in detailed mode.
 STAGE_LABEL_WIDTH :: 80
 
-steps_view :: proc(session: ^Session) {
+tab_steps :: proc(session: ^state.Session) {
 	if clay.UI(clay.ID("StepsMode"))({layout = {childGap = 8, padding = {bottom = 6}}}) {
-		ui.tab(TAB_ID_STEPS_COMPACT, "Compact", !view.steps_detailed)
-		ui.tab(TAB_ID_STEPS_DETAILED, "Detailed", view.steps_detailed)
+		ui.tab(TAB_ID_STEPS_COMPACT, "Compact", !display.steps_detailed)
+		ui.tab(TAB_ID_STEPS_DETAILED, "Detailed", display.steps_detailed)
 	}
-	if view.steps_detailed {
+	if display.steps_detailed {
 		detailed_steps(session)
 	} else {
 		compact_steps(session)
 	}
 }
 
-// Scrolling skips the newest `view.code_scroll` lines (the coming step
+// Scrolling skips the newest `display.code_scroll` lines (the coming step
 // counts as one).
-@(private = "file")
-compact_steps :: proc(session: ^Session) {
+@(private)
+compact_steps :: proc(session: ^state.Session) {
 	colors := ui.palette()
 	count := len(session.timeline)
 	lines := count + 1 // the coming step, then every step run
 	shown := visible_lines(SOURCE_LINE_HEIGHT) - 2 // the mode switch is about two lines
-	view.code_scroll = clamp(view.code_scroll, 0, f32(max(0, lines - shown)))
-	skip := int(view.code_scroll)
+	display.code_scroll = clamp(display.code_scroll, 0, f32(max(0, lines - shown)))
+	skip := int(display.code_scroll)
 
 	row := 0
 	if skip == 0 {
@@ -70,8 +71,8 @@ compact_steps :: proc(session: ^Session) {
 
 // The line for the instruction at the PC, not run yet: what it will do
 // (from the preview), or why there is nothing to run.
-@(private = "file")
-next_step_text :: proc(session: ^Session, number: int) -> string {
+@(private)
+next_step_text :: proc(session: ^state.Session, number: int) -> string {
 	if session.stopped != nil || session.exited != nil {
 		return "(program finished: press Prev to step back or Reset to run again)"
 	}
@@ -89,13 +90,13 @@ next_step_text :: proc(session: ^Session, number: int) -> string {
 }
 
 // Newest first: the coming step, then the steps already run. Scrolling
-// skips the newest `view.code_scroll` blocks (the coming one counts too).
-@(private = "file")
-detailed_steps :: proc(session: ^Session) {
+// skips the newest `display.code_scroll` blocks (the coming one counts too).
+@(private)
+detailed_steps :: proc(session: ^state.Session) {
 	count := len(session.timeline)
 	blocks := count + 1 // the coming step, or the "finished" line
-	view.code_scroll = clamp(view.code_scroll, 0, f32(blocks - 1))
-	skip := int(view.code_scroll)
+	display.code_scroll = clamp(display.code_scroll, 0, f32(blocks - 1))
+	skip := int(display.code_scroll)
 	// Every block is at least one line tall, so this many always fill the
 	// panel; the panel clips whatever doesn't fit.
 	shown := visible_lines(SOURCE_LINE_HEIGHT)
@@ -112,8 +113,8 @@ detailed_steps :: proc(session: ^Session) {
 }
 
 // The step Next will run, from the preview (session.preview).
-@(private = "file")
-next_step_block :: proc(session: ^Session, number: int) {
+@(private)
+next_step_block :: proc(session: ^state.Session, number: int) {
 	entry, has_preview := session.preview.?
 	if !has_preview {
 		colors := ui.palette()
@@ -126,8 +127,8 @@ next_step_block :: proc(session: ^Session, number: int) {
 }
 
 // One step: a heading line, then its source line and stages.
-@(private = "file")
-step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming: bool) {
+@(private)
+step_block :: proc(session: ^state.Session, number: int, entry: state.Timeline_Entry, coming: bool) {
 	colors := ui.palette()
 	if clay.UI()({
 		layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {6, 6, 4, 6}, childGap = 1},
@@ -153,7 +154,7 @@ step_block :: proc(session: ^Session, number: int, entry: Timeline_Entry, coming
 	}
 }
 
-@(private = "file")
+@(private)
 stage_row :: proc(label: string, text: string, color: clay.Color) {
 	colors := ui.palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, padding = {left = 24}, childGap = 8}}) {
@@ -165,12 +166,12 @@ stage_row :: proc(label: string, text: string, color: clay.Color) {
 }
 
 // "0022  lw t2, 0(t0)  # t2 = ..." for the source line of `address`, or "".
-@(private = "file")
-source_text_at :: proc(session: ^Session, address: u64) -> string {
+@(private)
+source_text_at :: proc(session: ^state.Session, address: u64) -> string {
 	if !session.has_source {
 		return ""
 	}
-	line, known := source_line_at(&session.source, address)
+	line, known := state.source_line_at(&session.source, address)
 	if !known || line < 1 || line > len(session.source.lines) {
 		return ""
 	}

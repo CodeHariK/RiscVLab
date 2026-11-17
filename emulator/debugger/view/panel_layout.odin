@@ -1,8 +1,8 @@
-package rvdbg
+package view
 
-import clay "../vendor/clay-odin"
+import clay "../../vendor/clay-odin"
 import rl "vendor:raylib"
-import ui "ui"
+import ui "../ui"
 
 // The panel layout: resizing and rearranging the panels.
 //
@@ -164,7 +164,7 @@ slot_of :: proc(panel: Panel) -> Maybe(Slot) {
 	return nil
 }
 
-@(private = "file")
+@(private)
 panel_pointer :: proc(slot: Slot) -> ^Panel {
 	if slot.column < 0 {
 		return &panel_layout.bottom[int(slot.lower)]
@@ -173,7 +173,7 @@ panel_pointer :: proc(slot: Slot) -> ^Panel {
 	return &column.bottom if slot.lower else &column.top
 }
 
-@(private = "file")
+@(private)
 all_slots :: proc() -> [dynamic]Slot {
 	slots := make([dynamic]Slot, context.temp_allocator)
 	for column, index in panel_layout.columns[:panel_layout.column_count] {
@@ -189,7 +189,7 @@ all_slots :: proc() -> [dynamic]Slot {
 	return slots
 }
 
-@(private = "file")
+@(private)
 all_dividers :: proc() -> [dynamic]Divider {
 	dividers := make([dynamic]Divider, context.temp_allocator)
 	for column, index in panel_layout.columns[:panel_layout.column_count] {
@@ -259,7 +259,7 @@ hovered_slot :: proc() -> Maybe(Slot) {
 	return nil
 }
 
-@(private = "file")
+@(private)
 drag_divider :: proc(divider: Divider) {
 	mouse := rl.GetMousePosition()
 	switch divider.kind {
@@ -280,7 +280,7 @@ drag_divider :: proc(divider: Divider) {
 	}
 }
 
-@(private = "file")
+@(private)
 split_fraction :: proc(position: f32, size: f32) -> f32 {
 	if size <= 0 {
 		return 0.5
@@ -290,7 +290,7 @@ split_fraction :: proc(position: f32, size: f32) -> f32 {
 
 // Resize arrows over (or while dragging) a divider, a move cursor over a
 // grip or while dragging a panel, the normal pointer otherwise.
-@(private = "file")
+@(private)
 update_cursor :: proc() {
 	layout := &panel_layout
 	divider := layout.dragging_divider

@@ -9,6 +9,8 @@ import clay "../vendor/clay-odin"
 import rl "vendor:raylib"
 import ui "ui"
 import reference "reference"
+import view "view"
+import state "state"
 
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
@@ -30,28 +32,28 @@ run :: proc() -> int {
 		return 2
 	}
 
-	reset_panel_layout()
+	view.reset_panel_layout()
 	reference.load()
 	defer reference.destroy()
 	if tests_root != "" {
-		catalog_load(tests_root)
+		state.catalog_load(tests_root)
 	}
-	if program_path == "" && len(catalog.entries) > 0 {
-		program_path = catalog.entries[0].path
-		view.programs_open = true // let the user pick one
+	if program_path == "" && len(state.catalog.entries) > 0 {
+		program_path = state.catalog.entries[0].path
+		view.display.programs_open = true // let the user pick one
 	}
 	if program_path == "" {
 		fmt.eprintln("error: no program given and none found (build the tests first)")
 		return 1
 	}
 
-	session: Session
-	if !session_open(&session, program_path) {
+	session: state.Session
+	if !state.session_open(&session, program_path) {
 		return 1
 	}
-	defer session_destroy(&session)
-	view.selected_program = catalog_find(program_path)
-	docs_show_lesson(&session)
+	defer state.session_destroy(&session)
+	view.display.selected_program = state.catalog_find(program_path)
+	view.docs_show_lesson(&session)
 
 	clay_memory := init_clay()
 	defer free(clay_memory)
@@ -93,7 +95,7 @@ run :: proc() -> int {
 		clay.UpdateScrollContainers(false, transmute(clay.Vector2)rl.GetMouseWheelMoveV(), frame_time)
 
 		handle_input(&session)
-		render_commands := build_layout(&session, frame_time)
+		render_commands := view.build_layout(&session, frame_time)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLACK)

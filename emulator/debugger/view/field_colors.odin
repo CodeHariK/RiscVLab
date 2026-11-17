@@ -1,14 +1,14 @@
-package rvdbg
+package view
 
-import clay "../vendor/clay-odin"
-import ui "ui"
+import clay "../../vendor/clay-odin"
+import ui "../ui"
 
 // One colour per kind of encoding field (Field_Kind, encoding.odin), for
 // the Encoding strip and the register tags, in each theme. These belong to
 // the debugger rather than the generic theme (ui/theme.odin), which knows
 // nothing about RISC-V.
 
-@(private = "file")
+@(private)
 LIGHT_FIELD_COLORS := [Field_Kind]clay.Color {
 	.Opcode    = {40, 130, 60, 255}, // green
 	.Rd        = {30, 90, 190, 255}, // blue
@@ -20,7 +20,7 @@ LIGHT_FIELD_COLORS := [Field_Kind]clay.Color {
 	.Unknown   = {118, 104, 145, 255},
 }
 
-@(private = "file")
+@(private)
 DARK_FIELD_COLORS := [Field_Kind]clay.Color {
 	.Opcode    = {120, 210, 130, 255},
 	.Rd        = {120, 170, 255, 255},

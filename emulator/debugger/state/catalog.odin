@@ -1,4 +1,4 @@
-package rvdbg
+package state
 
 import "core:fmt"
 import "core:os"

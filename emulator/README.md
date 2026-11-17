@@ -103,33 +103,30 @@ No file access and no printing, so it compiles for any target.
 
 ### `debugger/` (package `rvdbg`): the step debugger
 
-The debugger links the core, `loader` and `disasm` into its own program and calls them directly. Two sub-packages hold the parts that know nothing about RISC-V:
+The debugger links the core, `loader` and `disasm` into its own program and calls them directly. It is four packages, with dependencies pointing one way (`rvdbg` -> `view` -> `state` -> the emulator):
 
 | Folder | Package | What it is |
 |---|---|---|
-| `ui/` | `ui` | Generic UI on raylib + Clay: the Clay renderer, theme (palettes, text styles), embedded fonts, settings, buttons and tabs, the modal window frame, the search box |
-| `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing entries, lookup by name, search |
+| `.` | `rvdbg` | `main.odin` (arguments, window, frame loop; native fullscreen in `window_mode_*.odin`), `input.odin` and `modal_input.odin` (buttons, keys, clicks) |
+| `state/` | `state` | The model, no drawing: the session (open, Reset / Prev / Next, the preview of Next), the timeline of steps, memory access tracking, the program list, source and line map, symbols, reading the program file |
+| `view/` | `view` | Everything on screen, plus the view state (`display_state.odin`: tabs, scrolls, searches, open windows; the global is `display`) |
+| `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, modal window frame, search box |
+| `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing, lookup, search |
 
-The debugger itself:
+`view/` in more detail. Everything shown is a tab (`tab_*.odin`); a panel is just a box holding a list of tabs, drawn by one generic proc. `window_` files are windows over everything.
 
 | File | Responsibility |
 |---|---|
-| `main.odin` | Arguments, window (native fullscreen on macOS: `window_mode_*.odin`), Clay setup, frame loop |
-| `session.odin` | The machine being debugged: open, Reset / Prev / Next, and the preview of what Next will do |
-| `timeline.odin` | Every step taken: what it read and changed, and its one-line summary |
-| `step_detail.odin` | The stages of one step (fetch, decode, read, execute, memory, write); `step_execute.odin` writes the execute stage |
-| `instruction_text.odin`, `explain.odin`, `number_format.odin` | Words for instructions, the status line, and hex-with-decimal numbers |
-| `layout.odin` | The Clay layout: toolbar, code panel, registers, side panel, encoding |
-| `panel_layout.odin` | Resizing (dividers) and rearranging (drag a panel's grip onto another) the panels |
-| `steps_view.odin` | The Steps tab, Compact and Detailed |
-| `memory_view.odin`, `stack_view.odin`, `csr_view.odin` | The Memory, Stack and CSRs tabs |
+| `layout.odin`, `panel_layout.odin` | The frame (toolbar, panel slots, dividers, grips), and resizing / rearranging the panels |
+| `panel.odin` | The `Tab` enum, which tabs each panel holds (`panel_tabs`), and `draw_panel`: header with tab buttons (or the title of a single tab), then the selected tab's content |
+| `code_scroll.odin` | How the code tabs (Source, Disassembly, Steps) scroll and how many lines fit |
+| `tab_source.odin`, `tab_disassembly.odin`, `tab_steps.odin` | The program's source, its disassembly, the steps taken (Compact and Detailed) |
+| `tab_registers.odin`, `tab_encoding.odin` | Registers with read / write tags; the next instruction's fields and effect |
+| `tab_csrs.odin` (with `csr_meaning.odin`), `tab_memory.odin`, `tab_stack.odin`, `tab_elf.odin` | CSRs, memory dump, stack, ELF info |
+| `window_programs.odin`, `window_docs.odin` | The Programs and Docs windows |
+| `step_detail.odin`, `step_execute.odin`, `timeline_text.odin`, `explain.odin`, `instruction_text.odin`, `number_format.odin` | Text: the stages of a step, step summaries, the status line, numbers in hex with decimals |
 | `encoding.odin`, `field_colors.odin` | An instruction as colour-coded fields, and the field colours per theme |
-| `source.odin`, `symbols.odin` | The program's source and address -> line map, and its symbol names |
-| `catalog.odin`, `programs_modal.odin` | The program list (lessons, test programs, riscv-tests) and the Programs window |
-| `docs_view.odin` | The Docs window: follows the next instruction, the lesson's own entries (`# Docs:` line), search |
-| `input.odin`, `modal_input.odin` | Buttons, keys and clicks; the windows' keys |
-| `view.odin` | Which tabs and windows are showing, scroll positions, searches |
-| `program_file.odin` | Reads the program from disk |
+| `display_state.odin`, `ids.odin` | The view state (global `display`), and the ids of buttons and tabs shared with the input handling |
 
 ### `unit_tests/` (package `rv_unit_tests`)
 

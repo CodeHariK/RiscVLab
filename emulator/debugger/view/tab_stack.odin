@@ -1,9 +1,10 @@
-package rvdbg
+package view
 
 import "core:fmt"
-import clay "../vendor/clay-odin"
-import rv "../core"
-import ui "ui"
+import clay "../../vendor/clay-odin"
+import rv "../../core"
+import ui "../ui"
+import state "../state"
 
 // The Stack tab: the words from just below sp up to the top of the stack,
 // newest (lowest address) first, one 8-byte word per row.
@@ -39,7 +40,7 @@ Stack_Frame :: struct {
 	made_at: u64, // pc of that step
 }
 
-stack_view :: proc(session: ^Session) {
+tab_stack :: proc(session: ^state.Session) {
 	colors := ui.palette()
 	sp := rv.reg_read(&session.machine.cpu, STACK_SP)
 	if _, in_ram := rv.bus_load(&session.machine.bus, sp - 1, 1); !in_ram || sp == 0 {
@@ -56,13 +57,13 @@ stack_view :: proc(session: ^Session) {
 	// Two short lines: the side panel doesn't wrap text.
 	clay.TextDynamic(fmt.tprintf("sp = 0x%x, top = 0x%x", sp, top), ui.text_config(.Code_Small, colors.text_dim))
 	usage := fmt.tprintf("%s bytes in use, %d frame(s)", value_text(used), len(frames))
-	if reserved, ok := symbol_address(session, "stack"); ok && reserved < top {
+	if reserved, ok := state.symbol_address(session, "stack"); ok && reserved < top {
 		usage = fmt.tprintf("%s, %s bytes reserved", usage, value_text(top - reserved))
 	}
 	clay.TextDynamic(usage, ui.text_config(.Code_Small, colors.text_dim))
 
-	access := next_memory_access(session)
-	changed: Memory_Access
+	access := state.next_memory_access(session)
+	changed: state.Memory_Access
 	if record, has_record := session.last_step.?; has_record && record.memory_changed {
 		changed = {.Store, record.memory_address, record.memory_size}
 	}
@@ -83,8 +84,8 @@ stack_view :: proc(session: ^Session) {
 }
 
 // The frames still in use, oldest first, from every change to sp so far.
-@(private = "file")
-stack_frames :: proc(session: ^Session) -> []Stack_Frame {
+@(private)
+stack_frames :: proc(session: ^state.Session) -> []Stack_Frame {
 	frames := make([dynamic]Stack_Frame, context.temp_allocator)
 	for entry in session.timeline {
 		record := entry.record
@@ -104,9 +105,9 @@ stack_frames :: proc(session: ^Session) -> []Stack_Frame {
 	return frames[:]
 }
 
-@(private = "file")
-stack_top :: proc(session: ^Session, sp: u64, frames: []Stack_Frame) -> u64 {
-	if address, ok := symbol_address(session, "stack_top"); ok && address >= sp {
+@(private)
+stack_top :: proc(session: ^state.Session, sp: u64, frames: []Stack_Frame) -> u64 {
+	if address, ok := state.symbol_address(session, "stack_top"); ok && address >= sp {
 		return address
 	}
 	top := sp
@@ -116,7 +117,7 @@ stack_top :: proc(session: ^Session, sp: u64, frames: []Stack_Frame) -> u64 {
 	return top
 }
 
-@(private = "file")
+@(private)
 frame_starting_at :: proc(frames: []Stack_Frame, address: u64) -> (Stack_Frame, bool) {
 	for frame in frames {
 		if frame.low == address {
@@ -127,11 +128,11 @@ frame_starting_at :: proc(frames: []Stack_Frame, address: u64) -> (Stack_Frame, 
 }
 
 // "frame of sum+0x4: 0x10 bytes": where the step that made it was.
-@(private = "file")
-frame_heading :: proc(session: ^Session, frame: Stack_Frame, row: int) {
+@(private)
+frame_heading :: proc(session: ^state.Session, frame: Stack_Frame, row: int) {
 	colors := ui.palette()
 	if clay.UI(clay.ID("StackFrame", u32(row)))({layout = {padding = {6, 6, 6, 0}}}) {
-		place := symbol_place(session, frame.made_at)
+		place := state.symbol_place(session, frame.made_at)
 		if place == "" {
 			place = fmt.tprintf("0x%x", frame.made_at)
 		}
@@ -140,8 +141,8 @@ frame_heading :: proc(session: ^Session, frame: Stack_Frame, row: int) {
 	}
 }
 
-@(private = "file")
-stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Memory_Access, changed: Memory_Access, row: int) {
+@(private)
+stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, access: state.Memory_Access, changed: state.Memory_Access, row: int) {
 	colors := ui.palette()
 	value, _ := rv.bus_load(&session.machine.bus, address, STACK_WORD)
 	free := address < sp
@@ -159,7 +160,7 @@ stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Me
 	}
 
 	color := colors.text_dim if free else colors.text
-	word := Memory_Access{.Load, address, STACK_WORD}
+	word := state.Memory_Access{.Load, address, STACK_WORD}
 	background := ui.COLOR_NONE
 	if access.kind != .None && overlaps_access(word, access) {
 		color = field_color(.Rs1) if access.kind == .Load else field_color(.Rd)
@@ -178,8 +179,8 @@ stack_row :: proc(session: ^Session, address: u64, sp: u64, top: u64, access: Me
 }
 
 // "   -> sum+0x20 (code)" when the value is an address we can name.
-@(private = "file")
-value_meaning :: proc(session: ^Session, value: u64, sp: u64, top: u64) -> string {
+@(private)
+value_meaning :: proc(session: ^state.Session, value: u64, sp: u64, top: u64) -> string {
 	program := session.program
 	if value >= program.code_start && value < program.code_end {
 		return fmt.tprintf("   -> %s (code)", symbol_place_or_address(session, value))
@@ -194,15 +195,15 @@ value_meaning :: proc(session: ^Session, value: u64, sp: u64, top: u64) -> strin
 	return ""
 }
 
-@(private = "file")
-symbol_place_or_address :: proc(session: ^Session, address: u64) -> string {
-	if place := symbol_place(session, address); place != "" {
+@(private)
+symbol_place_or_address :: proc(session: ^state.Session, address: u64) -> string {
+	if place := state.symbol_place(session, address); place != "" {
 		return place
 	}
 	return fmt.tprintf("0x%x", address)
 }
 
-@(private = "file")
-overlaps_access :: proc(a: Memory_Access, b: Memory_Access) -> bool {
+@(private)
+overlaps_access :: proc(a: state.Memory_Access, b: state.Memory_Access) -> bool {
 	return a.address < b.address + b.size && b.address < a.address + a.size
 }

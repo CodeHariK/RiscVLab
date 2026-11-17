@@ -1,9 +1,10 @@
-package rvdbg
+package view
 
 import "core:fmt"
 import "core:strings"
-import rv "../core"
-import disasm "../disasm"
+import rv "../../core"
+import disasm "../../disasm"
+import state "../state"
 
 // The detailed view of one step: what each part of the CPU did and why,
 // with every value that led to it.
@@ -43,7 +44,7 @@ stage_names := [Stage]string {
 // One text per stage; "" for a stage the instruction doesn't use.
 Step_Detail :: [Stage]string
 
-step_detail :: proc(session: ^Session, entry: Timeline_Entry) -> Step_Detail {
+step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Step_Detail {
 	detail: Step_Detail
 	detail[.Fetch] = fmt.tprintf("mem[pc 0x%x] -> 0x%08x", entry.pc, entry.instruction)
 	detail[.Decode] = decode_text(entry)
@@ -55,7 +56,7 @@ step_detail :: proc(session: ^Session, entry: Timeline_Entry) -> Step_Detail {
 }
 
 // The instruction's mnemonic, e.g. "lw".
-step_mnemonic :: proc(entry: Timeline_Entry) -> string {
+step_mnemonic :: proc(entry: state.Timeline_Entry) -> string {
 	buffer: [disasm.BUFFER_SIZE]u8
 	text := disasm.disassemble(buffer[:], entry.pc, entry.instruction)
 	return strings.clone(first_word(text), context.temp_allocator)
@@ -68,8 +69,8 @@ is_system_call :: proc(instruction: u32) -> bool {
 }
 
 // "I-type lw (opcode LOAD 0x03): rd t2 (x7), rs1 t0 (x5), imm 0x0"
-@(private = "file")
-decode_text :: proc(entry: Timeline_Entry) -> string {
+@(private)
+decode_text :: proc(entry: state.Timeline_Entry) -> string {
 	instruction := entry.instruction
 	encoding := encoding_of(instruction)
 	opcode := rv.opcode(instruction)
@@ -103,7 +104,7 @@ decode_text :: proc(entry: Timeline_Entry) -> string {
 }
 
 // The assembled immediate, as the execute stage will use it.
-@(private = "file")
+@(private)
 immediate_text :: proc(pc: u64, instruction: u32, format: string) -> string {
 	switch format {
 	case "I-type":
@@ -127,8 +128,8 @@ immediate_text :: proc(pc: u64, instruction: u32, format: string) -> string {
 }
 
 // The registers (and CSR) the instruction reads, with their values then.
-@(private = "file")
-read_text :: proc(entry: Timeline_Entry) -> string {
+@(private)
+read_text :: proc(entry: state.Timeline_Entry) -> string {
 	instruction := entry.instruction
 	if is_system_call(instruction) {
 		return ""
@@ -153,8 +154,8 @@ read_text :: proc(entry: Timeline_Entry) -> string {
 }
 
 // Loads and stores: the bytes moved, and which variable they belong to.
-@(private = "file")
-memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
+@(private)
+memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> string {
 	instruction := entry.instruction
 	if entry.trap != nil {
 		return ""
@@ -171,7 +172,7 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			"load %d bytes @ 0x%x%s -> 0x%s, %s",
 			size,
 			address,
-			symbol_label(session, address),
+			state.symbol_label(session, address),
 			hex_digits(entry.load_value, size),
 			extension,
 		)
@@ -188,7 +189,7 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			size,
 			disasm.register_name(rv.rs2(instruction)),
 			record.memory_address,
-			symbol_label(session, record.memory_address),
+			state.symbol_label(session, record.memory_address),
 			value_text(record.memory_old),
 			value_text(entry.memory_new),
 		)
@@ -198,11 +199,11 @@ memory_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 
 // LR: the load and the reservation; SC: the store, or why it didn't
 // happen; AMO: the old value read and the new one written, in one step.
-@(private = "file")
-atomic_memory_text :: proc(session: ^Session, entry: Timeline_Entry, size: u64) -> string {
+@(private)
+atomic_memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry, size: u64) -> string {
 	instruction := entry.instruction
 	address := entry.rs1_value
-	place := symbol_label(session, address)
+	place := state.symbol_label(session, address)
 	switch rv.funct5(instruction) {
 	case rv.AMO_LR:
 		return fmt.tprintf("load %d bytes @ 0x%x%s -> 0x%s, and reserve 0x%x for an SC", size, address, place, hex_digits(entry.load_value, size), address)
@@ -222,7 +223,7 @@ atomic_memory_text :: proc(session: ^Session, entry: Timeline_Entry, size: u64) 
 }
 
 // `size` bytes of `value` as hex, all digits shown: 0000000a.
-@(private = "file")
+@(private)
 hex_digits :: proc(value: u64, size: u64) -> string {
 	switch size {
 	case 1:
@@ -236,8 +237,8 @@ hex_digits :: proc(value: u64, size: u64) -> string {
 }
 
 // The registers and CSRs the step changed: old -> new.
-@(private = "file")
-write_text :: proc(entry: Timeline_Entry) -> string {
+@(private)
+write_text :: proc(entry: state.Timeline_Entry) -> string {
 	record := entry.record
 	if entry.stops {
 		return "nothing: the machine stops"
@@ -278,7 +279,7 @@ write_text :: proc(entry: Timeline_Entry) -> string {
 }
 
 // True if the instruction format has an rd field.
-@(private = "file")
+@(private)
 writes_rd :: proc(instruction: u32) -> bool {
 	if is_system_call(instruction) {
 		return false

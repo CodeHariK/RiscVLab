@@ -1,23 +1,10 @@
-package rvdbg
-import ui "ui"
+package view
 
-// UI state that isn't a setting: which tab the side panel shows and
-// which listed program is open.
+import ui "../ui"
+
+// UI state that isn't a setting: which tab each panel shows and which
+// listed program is open.
 // Changed by clicking the tabs (input.odin).
-
-Side_Tab :: enum {
-	Csrs,      // control and status registers, privilege level
-	Memory,    // hex dump around the address being used
-	Elf,       // what the loader found in the program file
-	Stack,     // the words from sp up to the top of the stack (stack_view.odin)
-}
-
-// What the code panel shows.
-Code_Tab :: enum {
-	Source,      // the .s file with its comments (when the build made a line map)
-	Disassembly, // the instructions decoded from memory
-	Steps,       // every step taken so far (timeline.odin)
-}
 
 // How the Memory tab groups bytes.
 Memory_Layout :: enum {
@@ -28,14 +15,14 @@ Memory_Layout :: enum {
 View_State :: struct {
 	// Lines the code panel has been scrolled with the mouse wheel, away
 	// from where it would follow the current instruction. Back to 0 on
-	// every step, so stepping always brings the current line into view.
+	// every step, so stepping always brings the current line into display.
 	code_scroll:      f32,
 	memory_layout:    Memory_Layout,
-	code_tab:         Code_Tab,
+	// The tab each panel shows (panel.odin).
+	selected_tab:     [Panel]Tab,
 	// The Steps tab's mode: false = one line per step, true = every stage.
 	steps_detailed:   bool,
-	side_tab:         Side_Tab,
-	// The Docs window (docs_view.odin): open or not, and the entry clicked
+	// The Docs window (window_docs.odin): open or not, and the entry clicked
 	// in its list, or -1 to follow the next instruction.
 	docs_open:        bool,
 	docs_pinned:      int,
@@ -44,7 +31,7 @@ View_State :: struct {
 	docs_scroll_pending: bool,
 	docs_list_scroll: ui.Saved_Scroll,
 	docs_page_scroll: ui.Saved_Scroll,
-	// The Programs window (programs_modal.odin): open or not, its search,
+	// The Programs window (window_programs.odin): open or not, its search,
 	// and the chosen row (a position in the filtered list). Both windows
 	// keep their search, choice and scroll positions while closed, so they
 	// reopen where they were left.
@@ -57,10 +44,9 @@ View_State :: struct {
 	selected_program: int,
 }
 
-view := View_State {
+display := View_State {
 	memory_layout    = .Words,
-	code_tab         = .Source,
-	side_tab         = .Csrs,
+	selected_tab     = {.Code = .Source, .Registers = .Registers, .Side = .Csrs, .Encoding = .Encoding},
 	selected_program = -1,
 	docs_pinned      = -1,
 }

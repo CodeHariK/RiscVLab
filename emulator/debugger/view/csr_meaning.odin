@@ -1,7 +1,8 @@
-package rvdbg
+package view
 
 import "core:fmt"
-import rv "../core"
+import rv "../../core"
+import state "../state"
 
 // What the CSRs tab shows: which CSRs, in what order, and a readable
 // meaning for each value.
@@ -55,7 +56,7 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 
 // True if the last Next changed this CSR: a CSR instruction or MRET wrote
 // it, or trap entry set it.
-csr_changed_by_last_step :: proc(session: ^Session, address: u32) -> bool {
+csr_changed_by_last_step :: proc(session: ^state.Session, address: u32) -> bool {
 	record, has_record := session.last_step.?
 	if !has_record {
 		return false

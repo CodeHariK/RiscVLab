@@ -1,9 +1,10 @@
-package rvdbg
+package view
 
 import "core:fmt"
 import "core:strings"
-import rv "../core"
-import disasm "../disasm"
+import rv "../../core"
+import disasm "../../disasm"
+import state "../state"
 
 // The execute stage of the detailed step view (step_detail.odin): the
 // arithmetic, address or decision the instruction made, written with the
@@ -12,7 +13,7 @@ import disasm "../disasm"
 //   t1 0x3 (3) != zero 0x0 -> taken: target = pc 0x80000020 + -0x10 = 0x80000010
 //   address = t0 0x80001000 + 0x0 = 0x80001000 (numbers)
 
-execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
+execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> string {
 	instruction := entry.instruction
 	mnemonic := step_mnemonic(entry)
 	pc := entry.pc
@@ -33,7 +34,7 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			pc,
 			signed_text(i64(offset)),
 			pc + offset,
-			symbol_label(session, pc + offset),
+			state.symbol_label(session, pc + offset),
 			pc + rv.INSTRUCTION_SIZE,
 		)
 	case rv.OPCODE_JALR:
@@ -44,7 +45,7 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			a,
 			signed_text(i64(rv.imm_i(instruction))),
 			target,
-			symbol_label(session, target),
+			state.symbol_label(session, target),
 			pc + rv.INSTRUCTION_SIZE,
 		)
 	case rv.OPCODE_BRANCH:
@@ -57,7 +58,7 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 				pc,
 				signed_text(i64(offset)),
 				pc + offset,
-				symbol_label(session, pc + offset),
+				state.symbol_label(session, pc + offset),
 			)
 		}
 		return fmt.tprintf("%s %s %s %s %s -> %s", s1, value_text(a), comparison, s2, value_text(b), decision)
@@ -69,7 +70,7 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			a,
 			signed_text(i64(rv.imm_i(instruction))),
 			address,
-			symbol_label(session, address),
+			state.symbol_label(session, address),
 		)
 	case rv.OPCODE_STORE:
 		address := a + rv.imm_s(instruction)
@@ -79,7 +80,7 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 			a,
 			signed_text(i64(rv.imm_s(instruction))),
 			address,
-			symbol_label(session, address),
+			state.symbol_label(session, address),
 		)
 	case rv.OPCODE_OP_IMM, rv.OPCODE_OP_IMM_32:
 		operand := signed_text(i64(rv.imm_i(instruction)))
@@ -109,11 +110,11 @@ execute_text :: proc(session: ^Session, entry: Timeline_Entry) -> string {
 
 // LR / SC / AMO: the address (rs1, no offset), and for SC whether the
 // reservation holds, for an AMO the new value.
-@(private = "file")
-atomic_execute_text :: proc(session: ^Session, entry: Timeline_Entry, mnemonic: string, s1: string, s2: string) -> string {
+@(private)
+atomic_execute_text :: proc(session: ^state.Session, entry: state.Timeline_Entry, mnemonic: string, s1: string, s2: string) -> string {
 	instruction := entry.instruction
 	address := entry.rs1_value
-	place := symbol_label(session, address)
+	place := state.symbol_label(session, address)
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf("address = %s 0x%x: raises %v (atomics must be aligned to their size)", s1, address, trap.cause)
 	}
@@ -149,7 +150,7 @@ atomic_execute_text :: proc(session: ^Session, entry: Timeline_Entry, mnemonic: 
 }
 
 // "+" for amoadd, "min (signed) with" for amomin, ...
-@(private = "file")
+@(private)
 atomic_operator :: proc(mnemonic: string) -> string {
 	name := mnemonic[:strings.index_byte(mnemonic, '.')] if strings.contains(mnemonic, ".") else mnemonic
 	switch name {
@@ -167,8 +168,8 @@ atomic_operator :: proc(mnemonic: string) -> string {
 }
 
 // The value written to rd, or why there isn't one.
-@(private = "file")
-result_text :: proc(entry: Timeline_Entry) -> string {
+@(private)
+result_text :: proc(entry: state.Timeline_Entry) -> string {
 	if entry.record.register_changed {
 		return value_text(entry.register_new)
 	}
@@ -176,7 +177,7 @@ result_text :: proc(entry: Timeline_Entry) -> string {
 }
 
 // ADD / SUB / AND / shifts / SLT and their I and W forms.
-@(private = "file")
+@(private)
 arithmetic_text :: proc(mnemonic: string, s1: string, a: u64, operand: string, result: string) -> string {
 	if strings.has_prefix(mnemonic, "slt") {
 		kind := "unsigned" if strings.has_suffix(mnemonic, "u") else "signed"
@@ -187,8 +188,8 @@ arithmetic_text :: proc(mnemonic: string, s1: string, a: u64, operand: string, r
 
 // CSRRW / CSRRS / CSRRC (and the immediate forms): the new value worked
 // out from the old one, and what the CSR kept.
-@(private = "file")
-csr_execute_text :: proc(entry: Timeline_Entry, mnemonic: string, s1: string) -> string {
+@(private)
+csr_execute_text :: proc(entry: state.Timeline_Entry, mnemonic: string, s1: string) -> string {
 	instruction := entry.instruction
 	csr := disasm.csr_name(rv.csr_address(instruction))
 	if trap, took_trap := entry.trap.?; took_trap {
@@ -225,8 +226,8 @@ csr_execute_text :: proc(entry: Timeline_Entry, mnemonic: string, s1: string) ->
 }
 
 // ECALL / EBREAK (trap into the handler) and MRET (return from it).
-@(private = "file")
-system_call_text :: proc(entry: Timeline_Entry) -> string {
+@(private)
+system_call_text :: proc(entry: state.Timeline_Entry) -> string {
 	switch entry.instruction {
 	case rv.ENCODING_MRET:
 		return fmt.tprintf("return from the trap handler: pc = mepc = 0x%x, MIE = MPIE, privilege = MPP", entry.next_pc)

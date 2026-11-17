@@ -1,4 +1,4 @@
-package rvdbg
+package view
 
 import "core:fmt"
 
@@ -37,7 +37,7 @@ signed_text :: proc(value: i64) -> string {
 }
 
 // " (110)" for a small value read as signed, "" otherwise.
-@(private = "file")
+@(private)
 decimal_suffix :: proc(value: u64) -> string {
 	signed := i64(value)
 	if (signed >= 10 && signed < SMALL_VALUE_LIMIT) || (signed < 0 && signed > -SMALL_VALUE_LIMIT) {

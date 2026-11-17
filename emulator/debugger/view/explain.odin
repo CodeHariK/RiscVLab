@@ -1,14 +1,14 @@
-package rvdbg
+package view
 
 import "core:fmt"
-import "core:strings"
-import rv "../core"
+import rv "../../core"
+import state "../state"
 
 // The status shown in the toolbar. All strings are allocated with the
 // temp allocator, which is freed after each frame.
 
 // One-line state of the program for the status row.
-explain_status :: proc(session: ^Session) -> string {
+explain_status :: proc(session: ^state.Session) -> string {
 	cpu := &session.machine.cpu
 	if trap, stopped := session.stopped.?; stopped {
 		if trap.cause == .Breakpoint {

@@ -1,4 +1,4 @@
-package rvdbg
+package view
 
 import "core:strings"
 

@@ -72,7 +72,7 @@ modal_hint :: proc(text: string) {
 
 // Where a window's scrolling areas were, so reopening the window puts
 // them back. Clay forgets a scrolling area's position once it is no
-// longer drawn, so the window keeps its own copy (view.odin).
+// longer drawn, so the caller keeps its own copy (the debugger: view/display_state.odin).
 Saved_Scroll :: struct {
 	position:        clay.Vector2,
 	restore_pending: bool, // set on reopening, until the area exists again

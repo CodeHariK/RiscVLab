@@ -1,13 +1,14 @@
-package rvdbg
+package view
 
 import "core:fmt"
 import "core:slice"
 import "core:strings"
-import clay "../vendor/clay-odin"
-import rv "../core"
-import disasm "../disasm"
-import ui "ui"
-import reference "reference"
+import clay "../../vendor/clay-odin"
+import rv "../../core"
+import disasm "../../disasm"
+import ui "../ui"
+import reference "../reference"
+import state "../state"
 
 // The Docs window: what instructions, pseudo-instructions and directives
 // are for, in plain words (reference/, from docs/reference/). It opens over
@@ -55,36 +56,36 @@ DOCS_MARKER_WIDTH :: 28 // "-" or "1." in front of a bullet or step
 doc_labels := [?]string{"Does", "Becomes", "How it works", "Fields", "For", "Pseudo", "Emulator", "Watch out", "Related", "Example"}
 
 // Draws the window when it is open. Called last, so it lies on top.
-docs_modal :: proc(session: ^Session) {
-	if view.docs_open {
+docs_modal :: proc(session: ^state.Session) {
+	if display.docs_open {
 		ui.modal_window("DocsWindow", "Docs", BUTTON_ID_DOCS_CLOSE, docs_header, docs_panes, session)
 	}
 }
 
 // "Follow next instruction" next to the title, once an entry is pinned.
-@(private = "file")
+@(private)
 docs_header :: proc() {
-	if view.docs_pinned >= 0 {
+	if display.docs_pinned >= 0 {
 		ui.modal_button(BUTTON_ID_DOCS_FOLLOW, "Follow next instruction")
 	}
 }
 
 // The search box and entry list on the left, the entries on the right.
-@(private = "file")
+@(private)
 docs_panes :: proc(data: rawptr) {
-	session := (^Session)(data)
+	session := (^state.Session)(data)
 	if clay.UI(clay.ID("DocsPanes"))({layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, childGap = 16}}) {
 		shown := docs_shown_entry(session)
 		if clay.UI(clay.ID("DocsLeft"))({
 			layout = {sizing = {clay.SizingFixed(DOCS_LIST_WIDTH), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 6},
 		}) {
-			ui.search_box("DocsSearch", &view.docs_search, "Type to search the docs")
+			ui.search_box("DocsSearch", &display.docs_search, "Type to search the docs")
 			ui.modal_hint("Up / Down: entries   Left / Right: step")
-			ui.scroll_keep(&view.docs_list_scroll, clay.ID(DOCS_LIST_ID))
-			ui.scroll_keep(&view.docs_page_scroll, clay.ID(DOCS_PAGE_ID))
-			if view.docs_scroll_pending && shown >= 0 {
+			ui.scroll_keep(&display.docs_list_scroll, clay.ID(DOCS_LIST_ID))
+			ui.scroll_keep(&display.docs_page_scroll, clay.ID(DOCS_PAGE_ID))
+			if display.docs_scroll_pending && shown >= 0 {
 				if ui.scroll_into_view(clay.ID(DOCS_LIST_ID), clay.ID(DOCS_ENTRY_ID, u32(shown))) {
-					view.docs_scroll_pending = false
+					display.docs_scroll_pending = false
 				}
 			}
 			if clay.UI(clay.ID(DOCS_LIST_ID))({
@@ -105,18 +106,18 @@ docs_panes :: proc(data: rawptr) {
 }
 
 // The entry the list highlights: the pinned one, or the next instruction's.
-docs_shown_entry :: proc(session: ^Session) -> int {
-	if view.docs_pinned >= 0 {
-		return view.docs_pinned
+docs_shown_entry :: proc(session: ^state.Session) -> int {
+	if display.docs_pinned >= 0 {
+		return display.docs_pinned
 	}
 	return reference.find(next_mnemonic(session))
 }
 
-@(private = "file")
-docs_content :: proc(session: ^Session) {
+@(private)
+docs_content :: proc(session: ^state.Session) {
 	colors := ui.palette()
-	if view.docs_pinned >= 0 {
-		docs_entry(reference.entries[view.docs_pinned], 0)
+	if display.docs_pinned >= 0 {
+		docs_entry(reference.entries[display.docs_pinned], 0)
 		return
 	}
 
@@ -147,8 +148,8 @@ docs_content :: proc(session: ^Session) {
 
 // The CSR the next instruction uses, e.g. "mstatus"; "" if it is not a
 // CSR instruction.
-@(private = "file")
-next_csr_name :: proc(session: ^Session) -> string {
+@(private)
+next_csr_name :: proc(session: ^state.Session) -> string {
 	raw, ok := rv.bus_load(&session.machine.bus, session.machine.cpu.pc, 4)
 	instruction := u32(raw)
 	if !ok || rv.opcode(instruction) != rv.OPCODE_SYSTEM || rv.funct3(instruction) == 0 {
@@ -159,8 +160,8 @@ next_csr_name :: proc(session: ^Session) -> string {
 
 // The cause of the trap the next instruction will raise, as named in
 // traps.md (e.g. "Illegal_Instruction"); "" if it won't trap.
-@(private = "file")
-next_trap_name :: proc(session: ^Session) -> string {
+@(private)
+next_trap_name :: proc(session: ^state.Session) -> string {
 	entry, has_preview := session.preview.?
 	if !has_preview {
 		return ""
@@ -174,12 +175,12 @@ next_trap_name :: proc(session: ^Session) -> string {
 
 // The first word of the source line the next instruction came from, e.g.
 // "la" (labels and comments left out); "" without a source line.
-@(private = "file")
-source_word :: proc(session: ^Session) -> string {
+@(private)
+source_word :: proc(session: ^state.Session) -> string {
 	if !session.has_source {
 		return ""
 	}
-	line, known := source_line_at(&session.source, session.machine.cpu.pc)
+	line, known := state.source_line_at(&session.source, session.machine.cpu.pc)
 	if !known || line < 1 || line > len(session.source.lines) {
 		return ""
 	}
@@ -198,8 +199,8 @@ source_word :: proc(session: ^Session) -> string {
 }
 
 // The mnemonic of the instruction at the PC, e.g. "lw"; "" outside memory.
-@(private = "file")
-next_mnemonic :: proc(session: ^Session) -> string {
+@(private)
+next_mnemonic :: proc(session: ^state.Session) -> string {
 	pc := session.machine.cpu.pc
 	raw, ok := rv.bus_load(&session.machine.bus, pc, 4)
 	if !ok {
@@ -220,7 +221,7 @@ next_mnemonic :: proc(session: ^Session) -> string {
 }
 
 // `slot` keeps the ids of the (up to two) entries shown apart.
-@(private = "file")
+@(private)
 docs_entry :: proc(entry: reference.Entry, slot: u32) {
 	colors := ui.palette()
 	if clay.UI(clay.ID("DocsEntryShown", slot))({layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {top = 8, bottom = 16}, childGap = 3}}) {
@@ -243,7 +244,7 @@ docs_entry :: proc(entry: reference.Entry, slot: u32) {
 // One line outside a code block: a section label with its first text, a
 // bullet or numbered step, the format line, a blank line, or more text of
 // the section.
-@(private = "file")
+@(private)
 docs_line :: proc(line: string) {
 	colors := ui.palette()
 	if strings.trim_space(line) == "" {
@@ -274,7 +275,7 @@ docs_line :: proc(line: string) {
 }
 
 // "1. text" -> ("1.", "text", true).
-@(private = "file")
+@(private)
 numbered_step :: proc(text: string) -> (marker: string, rest: string, ok: bool) {
 	digits := 0
 	for digits < len(text) && text[digits] >= '0' && text[digits] <= '9' {
@@ -289,7 +290,7 @@ numbered_step :: proc(text: string) -> (marker: string, rest: string, ok: bool) 
 // A row in the label column layout: the section label (or nothing), then
 // an optional bullet / step marker, then the text, which wraps within its
 // own column so continued lines stay lined up.
-@(private = "file")
+@(private)
 docs_section_row :: proc(label: string, marker: string, text: string, color: clay.Color) {
 	colors := ui.palette()
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = 8}}) {
@@ -315,10 +316,10 @@ docs_section_row :: proc(label: string, marker: string, text: string, color: cla
 // the entries that match the search, grouped by file; click one to pin
 // it. With a search, entries whose heading matches come first, so a group
 // can appear twice.
-@(private = "file")
-docs_index :: proc(session: ^Session, shown: int) {
+@(private)
+docs_index :: proc(session: ^state.Session, shown: int) {
 	colors := ui.palette()
-	if lesson := lesson_doc_entries(session); len(lesson) > 0 && view.docs_search.length == 0 {
+	if lesson := lesson_doc_entries(session); len(lesson) > 0 && display.docs_search.length == 0 {
 		if clay.UI(clay.ID("DocsLessonTitle"))({layout = {padding = {top = 4, bottom = 4}}}) {
 			clay.TextDynamic("This lesson", ui.text_config(.Title, colors.title))
 		}
@@ -346,7 +347,7 @@ docs_index :: proc(session: ^Session, shown: int) {
 }
 
 // One clickable entry in the list (`id` + the entry's index).
-@(private = "file")
+@(private)
 docs_row :: proc(id: string, index: int, shown: int) {
 	colors := ui.palette()
 	element_id := clay.ID(id, u32(index))
@@ -367,12 +368,12 @@ docs_row :: proc(id: string, index: int, shown: int) {
 
 // The entries that match the Docs window's search box.
 docs_filtered :: proc() -> []int {
-	return reference.filter(ui.search_text(&view.docs_search))
+	return reference.filter(ui.search_text(&display.docs_search))
 }
 
 // The entries the open program names on a "# Docs: a, b, c" line near the
 // top of its source (every lesson has one), in that order.
-lesson_doc_entries :: proc(session: ^Session) -> []int {
+lesson_doc_entries :: proc(session: ^state.Session) -> []int {
 	if !session.has_source {
 		return nil
 	}
@@ -397,9 +398,9 @@ lesson_doc_entries :: proc(session: ^Session) -> []int {
 
 // After opening a program: the Docs window starts on the lesson's first
 // entry (or follows the next instruction if it names none).
-docs_show_lesson :: proc(session: ^Session) {
+docs_show_lesson :: proc(session: ^state.Session) {
 	entries := lesson_doc_entries(session)
-	view.docs_pinned = entries[0] if len(entries) > 0 else -1
-	view.docs_scroll_pending = true
-	view.docs_page_scroll.position = {}
+	display.docs_pinned = entries[0] if len(entries) > 0 else -1
+	display.docs_scroll_pending = true
+	display.docs_page_scroll.position = {}
 }

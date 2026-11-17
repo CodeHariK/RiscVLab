@@ -3,7 +3,7 @@ package reference
 import "core:strings"
 import ui "../ui"
 
-// The reference docs shown in the Docs window (../docs_view.odin), read from
+// The reference docs shown in the Docs window (view/window_docs.odin), read from
 // docs/reference/*.md and embedded in the binary, so the same text reads
 // well on GitHub and in the debugger.
 //
@@ -60,7 +60,7 @@ Entry :: struct {
 	names: []string, // e.g. {"lb", "lh", ...}; point into the embedded text
 	title: string, // "Load from memory"
 	lines: []string, // the body, without trailing blank lines
-	// Heading and body in lower case, for the search (ui/search.odin).
+	// Heading and body in lower case, for the search (ui/search.odin, filter below).
 	search_heading: string,
 	search_body: string,
 }

@@ -20,7 +20,7 @@ import ui "../ui"
 //   +--------------+--------------+
 //
 // The layout is three columns (Code, Registers, the side panel) above a
-// bottom row with Encoding. Drag a divider to resize, or
+// bottom row with Encoding and Console side by side. Drag a divider to resize, or
 // drag a panel by its grip (the "::" in its header) onto another panel to
 // swap the two.
 //
@@ -32,6 +32,7 @@ Panel :: enum {
 	Encoding,
 	Side,      // tabbed: CSRs, Memory, Stack, ELF
 	Registers, // the register list (the middle column)
+	Console,   // what the program printed (next to Encoding)
 }
 
 panel_names := [Panel]string {
@@ -39,6 +40,7 @@ panel_names := [Panel]string {
 	.Encoding    = "Encoding",
 	.Side        = "Side panel",
 	.Registers   = "Registers",
+	.Console     = "Console",
 }
 
 MAX_COLUMNS :: 3
@@ -99,8 +101,9 @@ DIVIDER_THICKNESS :: ui.PANEL_GAP
 //   | Code        | Registers | Side panel       |
 //   |             |           | (CSRs, Memory..) |
 //   +-------------+-----------+------------------+
-//   | Encoding (the next instruction and its effect) |
-//   +------------------------------------------------+
+//   | Encoding (the next         | Console         |
+//   | instruction, its effect)   | (printed text)  |
+//   +----------------------------+-----------------+
 reset_panel_layout :: proc() {
 	layout := &panel_layout
 	layout^ = {}
@@ -108,9 +111,9 @@ reset_panel_layout :: proc() {
 	layout.columns[0] = {top = .Code, width = 0.44}
 	layout.columns[1] = {top = .Registers, width = 0.26}
 	layout.columns[2] = {top = .Side}
-	layout.bottom_count = 1
-	layout.bottom = {.Encoding, .Encoding}
-	layout.bottom_split = 0.42
+	layout.bottom_count = 2
+	layout.bottom = {.Encoding, .Console}
+	layout.bottom_split = 0.62
 	layout.main_height = 0.74
 }
 

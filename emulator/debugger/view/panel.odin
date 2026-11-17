@@ -20,6 +20,8 @@ Tab :: enum {
 	Memory,      // hex dump around the address being used
 	Stack,       // the words from sp up to the top of the stack
 	Elf,         // what the loader found in the program file
+	Devices,     // the devices' registers (the UART so far)
+	Console,     // what the program printed through the UART
 }
 
 tab_titles := [Tab]string {
@@ -32,6 +34,8 @@ tab_titles := [Tab]string {
 	.Memory      = "Memory",
 	.Stack       = "Stack",
 	.Elf         = "ELF",
+	.Devices     = "Devices",
+	.Console     = "Console",
 }
 
 // Ids of the tab buttons, checked for clicks in input.odin.
@@ -45,14 +49,17 @@ tab_ids := [Tab]string {
 	.Memory      = "MemoryTab",
 	.Stack       = "StackTab",
 	.Elf         = "ElfTab",
+	.Devices     = "DevicesTab",
+	.Console     = "ConsoleTab",
 }
 
 // Which tabs each panel holds, in order.
 panel_tabs := [Panel][]Tab {
 	.Code      = {.Source, .Disassembly, .Steps},
 	.Registers = {.Registers},
-	.Side      = {.Csrs, .Memory, .Stack, .Elf},
+	.Side      = {.Csrs, .Memory, .Stack, .Elf, .Devices},
 	.Encoding  = {.Encoding},
+	.Console   = {.Console},
 }
 
 // The code tabs draw only the lines that fit and scroll themselves (see
@@ -143,6 +150,10 @@ draw_tab :: proc(session: ^state.Session, tab: Tab) {
 		tab_stack(session)
 	case .Elf:
 		tab_elf(session)
+	case .Devices:
+		tab_devices(session)
+	case .Console:
+		tab_console(session)
 	}
 }
 

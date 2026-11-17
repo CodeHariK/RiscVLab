@@ -49,7 +49,7 @@ View_State :: struct {
 
 display := View_State {
 	memory_layout    = .Words,
-	selected_tab     = {.Code = .Source, .Registers = .Registers, .Side = .Csrs, .Encoding = .Encoding},
+	selected_tab     = {.Code = .Source, .Registers = .Registers, .Side = .Csrs, .Encoding = .Encoding, .Console = .Console},
 	selected_program = -1,
 	program_failed   = -1,
 	docs_pinned      = -1,

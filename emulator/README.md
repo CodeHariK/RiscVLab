@@ -27,8 +27,8 @@ make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 - **Controls:** **Reset** reloads the program; **Prev** / **Next** (or the left / right arrow keys) undo or run one instruction. **Programs** (P or ~) opens the program list, **Docs** (D) the reference docs; both windows have a search box and close with Esc. **Theme** switches light / dark.
 - **Code panel:** **Source** (the `.s` file with its comments; programs are assembled with `-g` and the build writes an address -> line map), **Disassembly** (with symbol labels) and **Steps** (every step so far, newest first; Compact or Detailed with every stage of each instruction).
 - **Registers:** the pc and x0..x31; tags show what the next instruction reads (rs1 / rs2) and writes (rd), and the last change is highlighted.
-- **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps) and **ELF** (what the loader found).
-- **Encoding:** the next instruction's 32 bits as colour-coded fields, then what it reads, computes and writes.
+- **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps), **ELF** (what the loader found) and **Devices** (the UART's registers, decoded).
+- **Encoding:** the next instruction's 32 bits as colour-coded fields, then what it reads, computes and writes. Next to it, **Console** shows what the program printed through the UART.
 - **Layout:** drag the gaps between panels to resize them, and a panel's `::` grip onto another to swap them.
 
 Uses raylib (ships with Odin) and Clay (`vendor/clay-odin`).
@@ -41,9 +41,10 @@ rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 
 - The program is an ELF executable (loaded by its segments, started at its entry point) or a raw binary (loaded and started at `0x80000000`).
 - After `ebreak`, the exit code is the low 8 bits of `a0`, so test programs can report results. Programs with a `tohost` symbol (riscv-tests) report their exit code by writing to it.
+- What the program prints (bytes stored to the UART at `0x10000000`) goes to stdout, as it runs. The report of how it stopped, and `--trace`, go to stderr.
 - `--trace` prints one line per instruction: `pc  bits  disassembly  [reg <- value]`.
 - `--disasm` lists the program's disassembly (objdump format) without running it.
-- `--check-undo` runs the program, steps back to the start, and checks every register and byte of RAM is restored.
+- `--check-undo` runs the program, steps back to the start, and checks every register, byte of RAM and device (the UART) is restored.
 
 ## Source layout
 
@@ -51,11 +52,14 @@ The emulator is split into a **core** and **front ends**, so the same core can d
 
 ```
 core      the CPU and the machine                         (package rv)
+devices   the UART (later CLINT, PLIC)   -> uses core     (package devices)
 loader    ELF / raw program loading      -> uses core     (package loader)
 disasm    instruction bits to text       -> uses core     (package disasm)
-cli       command-line runner            -> uses all three
-debugger  step debugger                  -> uses all three
+cli       command-line runner            -> uses all four
+debugger  step debugger                  -> uses all four
 ```
+
+The core's bus only knows devices through `rv.Device`, a set of procedures (load, peek, store, and save / restore for undo); front ends attach the devices a machine has (`devices.uart_attach`).
 
 ### `core/` (package `rv`): the emulator itself
 
@@ -67,7 +71,7 @@ No file access and no printing, so it compiles for any target.
 | `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the LR / SC reservation, the current undo record |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
-| `bus.odin` | Physical address routing (RAM for now) |
+| `bus.odin` | Physical address routing: RAM, or an attached device (`Device`, `bus_attach`); `bus_peek` reads without side effects; fetch is from RAM only |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
 | `zeroed_pages.odin` | RAM and undo history mapped straight from the OS (`zeroed_pages_wasm.odin` for WebAssembly) |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
@@ -84,6 +88,12 @@ No file access and no printing, so it compiles for any target.
 | `rv64i_system.odin` | FENCE, ECALL, EBREAK |
 | `rv64m.odin` | M extension: multiply and divide |
 | `rv64a.odin` | A extension: LR / SC and the AMOs |
+
+### `devices/` (package `devices`): the hardware around the CPU
+
+| File | Responsibility |
+|---|---|
+| `uart.odin` | The UART (NS16550A, as on QEMU) at `0x10000000`: its registers, `output` (what the program printed), `uart_input`, and undo of its state |
 
 ### `loader/` (package `loader`): putting a program in memory
 
@@ -123,6 +133,7 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 | `tab_source.odin`, `tab_disassembly.odin`, `tab_steps.odin` | The program's source, its disassembly, the steps taken (Compact and Detailed) |
 | `tab_registers.odin`, `tab_encoding.odin` | Registers with read / write tags; the next instruction's fields and effect |
 | `tab_csrs.odin` (with `csr_meaning.odin`), `tab_memory.odin`, `tab_stack.odin`, `tab_elf.odin` | CSRs, memory dump, stack, ELF info |
+| `tab_console.odin`, `tab_devices.odin`, `device_text.odin` | What the program printed through the UART; the devices' registers, decoded; device registers in the step text (`uart THR <- 0x48 'H'`) |
 | `window_programs.odin`, `window_docs.odin` | The Programs and Docs windows |
 | `step_detail.odin`, `step_execute.odin`, `timeline_text.odin`, `explain.odin`, `instruction_text.odin`, `number_format.odin` | Text: the stages of a step, step summaries, the status line, numbers in hex with decimals |
 | `encoding.odin`, `field_colors.odin` | An instruction as colour-coded fields, and the field colours per theme |
@@ -130,7 +141,7 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 
 ### `unit_tests/` (package `rv_unit_tests`)
 
-Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`). Run with `make unit`.
+Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`), the undo history (`history_test.odin`), the loader's checks (`loader_test.odin`), the UART and devices on the bus (`uart_test.odin`). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 
@@ -139,7 +150,8 @@ Unit tests for core rules the test programs can't reach easily: CSR read / write
 | `main.odin` | Entry point: parse options, read the file, run in the chosen mode |
 | `options.odin` | Command-line parsing |
 | `program_file.odin` | Reads the program from disk |
-| `report.odin` | Prints how the run ended; picks the exit code |
+| `report.odin` | Prints how the run ended (stderr); picks the exit code |
+| `console.odin` | Runs the program, writing what it prints through the UART to stdout as it goes |
 | `trace.odin` | `--trace` output |
 | `disasm_listing.odin` | `--disasm` output |
 | `undo_check.odin` | `--check-undo` self-test |

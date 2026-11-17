@@ -164,6 +164,9 @@ memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> str
 	switch rv.opcode(instruction) {
 	case rv.OPCODE_LOAD:
 		address := entry.rs1_value + rv.imm_i(instruction)
+		if place, on_device := device_place(session, address, false); on_device {
+			return fmt.tprintf("read %d byte from the device register %s -> %s", size, place, device_value_text(session, address, false, entry.load_value))
+		}
 		extension := "zero-extended" if rv.funct3(instruction) >= 0b100 else "sign-extended"
 		if size == 8 {
 			extension = "all 64 bits"
@@ -184,6 +187,15 @@ memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> str
 		return atomic_memory_text(session, entry, size)
 	case rv.OPCODE_STORE:
 		record := entry.record
+		if place, on_device := device_place(session, record.memory_address, true); on_device {
+			return fmt.tprintf(
+				"write %d byte of %s to the device register %s: %s",
+				size,
+				disasm.register_name(rv.rs2(instruction)),
+				place,
+				device_value_text(session, record.memory_address, true, entry.rs2_value),
+			)
+		}
 		return fmt.tprintf(
 			"store the low %d bytes of %s @ 0x%x%s: %s -> %s",
 			size,

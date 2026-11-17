@@ -14,10 +14,11 @@ import state "../state"
 //   | [Source][Disassembly][Steps]      | [CSRs][Memory][ELF]    |
 //   | (current instruction highlighted) | tab content, scrolls   |
 //   +-----------------------------------+ with the mouse wheel   |
-//   +-----------------------------------+------------------------+
-//   | Encoding: the next instruction as colour-coded bit fields, |
-//   | then what it reads, computes and writes                    |
-//   +------------------------------------------------------------+
+//   +-------------------------------------+----------------------+
+//   | Encoding: the next instruction as   | Console: what the    |
+//   | colour-coded bit fields, then what  | program printed      |
+//   | it reads, computes and writes       | (the UART)           |
+//   +-------------------------------------+----------------------+
 //
 // This file draws the frame: toolbar, the panel slots and the dividers
 // between them, and panel grips. Every panel is drawn the same way

@@ -63,7 +63,7 @@ compact_steps :: proc(session: ^state.Session) {
 	}
 	for index := count - 1 - max(0, skip - 1); index >= 0 && row < shown; index -= 1 {
 		if clay.UI(clay.ID("StepLine", u32(row)))({layout = {sizing = {width = clay.SizingGrow()}, padding = {6, 6, 2, 2}}}) {
-			clay.TextDynamic(timeline_text(session.timeline_dropped + index + 1, session.timeline[index]), ui.text_config(.Code_Small, colors.text))
+			clay.TextDynamic(timeline_text(session, session.timeline_dropped + index + 1, session.timeline[index]), ui.text_config(.Code_Small, colors.text))
 		}
 		row += 1
 	}
@@ -77,7 +77,7 @@ next_step_text :: proc(session: ^state.Session, number: int) -> string {
 		return "(program finished: press Prev to step back or Reset to run again)"
 	}
 	if entry, has_preview := session.preview.?; has_preview {
-		return timeline_text(number, entry, coming = true)
+		return timeline_text(session, number, entry, coming = true)
 	}
 	pc := session.machine.cpu.pc
 	raw, ok := rv.bus_peek(&session.machine.bus, pc, 4)

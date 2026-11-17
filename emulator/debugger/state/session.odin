@@ -3,6 +3,7 @@ package state
 import "core:fmt"
 import "core:path/filepath"
 import rv "../../core"
+import devices "../../devices"
 import loader "../../loader"
 
 // One debugging session: the machine plus what the UI needs to know
@@ -10,6 +11,9 @@ import loader "../../loader"
 // three actions below, which match the three controls: Reset, Prev, Next.
 Session :: struct {
 	machine:      rv.Machine,
+	// The machine's UART: what the program printed (Console tab). The bus
+	// owns it.
+	uart:         ^devices.Uart,
 	// The program's bytes, kept so Reset can reload a fresh copy.
 	image:        []u8,
 	// Where the program starts and where its code is (from the loader).
@@ -90,6 +94,7 @@ session_destroy :: proc(session: ^Session) {
 session_reset :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
+	session.uart = devices.uart_attach(&session.machine.bus)
 	// session_open checked that the program loads, so it loads again here.
 	session.program, _ = loader.load_program(&session.machine, session.image)
 	session.stopped = nil

@@ -89,17 +89,17 @@ first_row_address :: proc(focus: u64, row_bytes: u64) -> u64 {
 @(private)
 memory_focus :: proc(session: ^state.Session, access: state.Memory_Access, changed: state.Memory_Access) -> (address: u64, reason: string) {
 	if access.kind == .Load {
-		return access.address, fmt.tprintf("next instruction loads %d bytes from 0x%x", access.size, access.address)
+		return access.address, fmt.tprintf("next instruction loads %s from 0x%x", bytes_text(access.size), access.address)
 	}
 	if access.kind == .Store {
-		return access.address, fmt.tprintf("next instruction stores %d bytes to 0x%x", access.size, access.address)
+		return access.address, fmt.tprintf("next instruction stores %s to 0x%x", bytes_text(access.size), access.address)
 	}
 	if changed.kind != .None {
-		return changed.address, fmt.tprintf("last step wrote %d bytes at 0x%x", changed.size, changed.address)
+		return changed.address, fmt.tprintf("last step wrote %s at 0x%x", bytes_text(changed.size), changed.address)
 	}
 	if last := session.last_access; last.kind != .None {
 		verb := "loaded" if last.kind == .Load else "stored"
-		return last.address, fmt.tprintf("last memory access: %s %d bytes at 0x%x", verb, last.size, last.address)
+		return last.address, fmt.tprintf("last memory access: %s %s at 0x%x", verb, bytes_text(last.size), last.address)
 	}
 	program := session.program
 	if program.data_end > program.data_start {

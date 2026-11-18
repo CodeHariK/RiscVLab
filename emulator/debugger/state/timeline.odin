@@ -34,6 +34,9 @@ Timeline_Entry :: struct {
 	memory_new:   u64,
 	csr_new:      u64,
 	using inputs: Step_Inputs,
+	// Which step had last written what this one wrote (last_writes.odin),
+	// to put back on Prev.
+	writes:       Step_Writes,
 	// Only in the Next preview: the instruction traps with no handler set
 	// up (mtvec = 0), so running it stops the machine instead.
 	stops:        bool,

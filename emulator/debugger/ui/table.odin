@@ -30,6 +30,9 @@ Table_Row :: struct {
 	color:      clay.Color, // for cells without their own; COLOR_NONE: the text colour
 	background: clay.Color,
 	span:       bool, // one cell across the whole table
+	// For a span row: the column it starts at (the ones before stay
+	// empty), e.g. 1 to line a note up with the names, not the "#N" column.
+	span_from:  int,
 }
 
 Table_Options :: struct {
@@ -139,7 +142,14 @@ table_row :: proc(row: Table_Row, widths: []f32, total: f32, is_header: bool, op
 	if clay.UI()({layout = {sizing = sizing, childGap = gap}, backgroundColor = background, border = border}) {
 		if row.span {
 			cell := row.cells[0] if len(row.cells) > 0 else Table_Cell{}
-			table_cell(cell, total, true, color, options)
+			skipped: f32 = 0
+			for width in widths[:clamp(row.span_from, 0, len(widths) - 1)] {
+				skipped += width + f32(gap)
+			}
+			if skipped > 0 {
+				table_cell({}, skipped - f32(gap), false, color, options)
+			}
+			table_cell(cell, total - skipped, true, color, options)
 			return
 		}
 		for width, column in widths {

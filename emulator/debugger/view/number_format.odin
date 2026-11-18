@@ -45,3 +45,14 @@ decimal_suffix :: proc(value: u64) -> string {
 	}
 	return ""
 }
+
+// A count of bytes with the right word: "1 byte", "4 bytes".
+bytes_text :: proc(count: u64) -> string {
+	return "1 byte" if count == 1 else fmt.tprintf("%d bytes", count)
+}
+
+// "#4": written by step 4, for the "last written" column of the Registers,
+// CSRs and Devices tabs; "" for never.
+step_mark :: proc(step: int) -> string {
+	return fmt.tprintf("#%d", step) if step > 0 else ""
+}

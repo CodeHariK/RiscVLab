@@ -33,6 +33,7 @@ Palette :: struct {
 	current_line: clay.Color, // the instruction at the PC
 	changed:      clay.Color, // the register the last step wrote
 	stopped:      clay.Color, // status text once the program has stopped
+	unreachable:  clay.Color, // a register that can't be reached right now (UART DLAB)
 }
 
 COLOR_NONE :: clay.Color{0, 0, 0, 0}
@@ -52,6 +53,7 @@ LIGHT_PALETTE :: Palette {
 	current_line = {221, 207, 246, 255},
 	changed      = {196, 176, 240, 200},
 	stopped      = {196, 46, 92, 255},
+	unreachable  = {250, 222, 228, 255},
 }
 
 // Dark: cool greys with the same warm accents.
@@ -69,6 +71,7 @@ DARK_PALETTE :: Palette {
 	current_line = {56, 76, 120, 255},
 	changed      = {110, 85, 30, 220},
 	stopped      = {255, 140, 90, 255},
+	unreachable  = {78, 40, 48, 255},
 }
 
 palette :: proc() -> Palette {

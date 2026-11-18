@@ -45,6 +45,7 @@ tab_registers :: proc(session: ^state.Session) {
 				{text = fmt.tprintf("x%d", index)},
 				{text = disasm.register_name(u32(index))},
 				{text = register_value_text(cpu.regs[index])},
+				{text = step_mark(state.last_write_register(session, u32(index))), color = colors.text_dim},
 			),
 			background = colors.changed if index == changed_index else ui.COLOR_NONE,
 		})

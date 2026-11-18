@@ -165,15 +165,15 @@ memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> str
 	case rv.OPCODE_LOAD:
 		address := entry.rs1_value + rv.imm_i(instruction)
 		if place, on_device := device_place(session, address, false); on_device {
-			return fmt.tprintf("read %d byte from the device register %s -> %s", size, place, device_value_text(session, address, false, entry.load_value))
+			return fmt.tprintf("read %s from the device register %s -> %s", bytes_text(size), place, device_value_text(session, address, false, entry.load_value))
 		}
 		extension := "zero-extended" if rv.funct3(instruction) >= 0b100 else "sign-extended"
 		if size == 8 {
 			extension = "all 64 bits"
 		}
 		text := fmt.tprintf(
-			"load %d bytes @ 0x%x%s -> 0x%s, %s",
-			size,
+			"load %s @ 0x%x%s -> 0x%s, %s",
+			bytes_text(size),
 			address,
 			state.symbol_label(session, address),
 			hex_digits(entry.load_value, size),
@@ -189,16 +189,16 @@ memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> str
 		record := entry.record
 		if place, on_device := device_place(session, record.memory_address, true); on_device {
 			return fmt.tprintf(
-				"write %d byte of %s to the device register %s: %s",
-				size,
+				"write %s of %s to the device register %s: %s",
+				bytes_text(size),
 				disasm.register_name(rv.rs2(instruction)),
 				place,
 				device_value_text(session, record.memory_address, true, entry.rs2_value),
 			)
 		}
 		return fmt.tprintf(
-			"store the low %d bytes of %s @ 0x%x%s: %s -> %s",
-			size,
+			"store the low %s of %s @ 0x%x%s: %s -> %s",
+			bytes_text(size),
 			disasm.register_name(rv.rs2(instruction)),
 			record.memory_address,
 			state.symbol_label(session, record.memory_address),
@@ -218,12 +218,12 @@ atomic_memory_text :: proc(session: ^state.Session, entry: state.Timeline_Entry,
 	place := state.symbol_label(session, address)
 	switch rv.funct5(instruction) {
 	case rv.AMO_LR:
-		return fmt.tprintf("load %d bytes @ 0x%x%s -> 0x%s, and reserve 0x%x for an SC", size, address, place, hex_digits(entry.load_value, size), address)
+		return fmt.tprintf("load %s @ 0x%x%s -> 0x%s, and reserve 0x%x for an SC", bytes_text(size), address, place, hex_digits(entry.load_value, size), address)
 	case rv.AMO_SC:
 		if !entry.record.memory_changed {
 			return "nothing stored: the reservation didn't hold"
 		}
-		return fmt.tprintf("store %d bytes @ 0x%x%s: %s -> %s", size, address, place, value_text(entry.record.memory_old), value_text(entry.memory_new))
+		return fmt.tprintf("store %s @ 0x%x%s: %s -> %s", bytes_text(size), address, place, value_text(entry.record.memory_old), value_text(entry.memory_new))
 	}
 	return fmt.tprintf(
 		"in one step: read 0x%s @ 0x%x%s, write %s back",

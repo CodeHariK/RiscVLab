@@ -23,7 +23,7 @@ tab_elf :: proc(session: ^state.Session) {
 
 		data := "none"
 		if program.data_end > program.data_start {
-			data = fmt.tprintf("0x%x - 0x%x (%d bytes)", program.data_start, program.data_end, program.data_end - program.data_start)
+			data = fmt.tprintf("0x%x - 0x%x (%s)", program.data_start, program.data_end, bytes_text(program.data_end - program.data_start))
 		}
 		rows := [?]ui.Table_Row {
 			program_line("format", format),

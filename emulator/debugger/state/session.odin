@@ -37,6 +37,9 @@ Session :: struct {
 	// How many of the oldest steps were dropped from `timeline` (and
 	// `access_trail`): timeline[i] is step number timeline_dropped + i + 1.
 	timeline_dropped: int,
+	// The step that last wrote each register, CSR and device register
+	// (last_writes.odin).
+	last_writes:  Last_Writes,
 	program_name: string,
 	// The file it was opened from (saved, to reopen it next time).
 	program_path: string,
@@ -92,6 +95,7 @@ session_destroy :: proc(session: ^Session) {
 	delete(session.access_trail)
 	delete(session.timeline)
 	delete(session.program_path)
+	last_writes_destroy(&session.last_writes)
 	source_destroy(&session.source)
 }
 
@@ -110,6 +114,7 @@ session_reset :: proc(session: ^Session) {
 	clear(&session.access_trail)
 	clear(&session.timeline)
 	session.timeline_dropped = 0
+	last_writes_clear(&session.last_writes)
 	session_update_preview(session)
 }
 
@@ -122,6 +127,11 @@ session_next :: proc(session: ^Session) {
 	pc := session.machine.cpu.pc
 	instruction, _ := rv.bus_peek(&session.machine.bus, pc, 4)
 	inputs := step_inputs_capture(session, u32(instruction))
+	// Named before the step: a store to LCR can change what offset 0 is.
+	device_register := ""
+	if access.kind == .Store {
+		device_register = device_register_name(session, access.address)
+	}
 	result := rv.machine_step(&session.machine)
 	if trap, has_trap := result.?; has_trap {
 		// Nothing changed, so the step before stays the latest change.
@@ -131,6 +141,8 @@ session_next :: proc(session: ^Session) {
 	}
 	session.last_step = session.machine.cpu.undo
 	timeline_record(session, pc, u32(instruction), inputs)
+	entry := &session.timeline[len(session.timeline) - 1]
+	last_writes_record(session, session.timeline_dropped + len(session.timeline), entry.record, device_register, &entry.writes)
 	append(&session.access_trail, session.last_access)
 	timeline_trim(session)
 	if access.kind != .None {
@@ -155,7 +167,8 @@ session_prev :: proc(session: ^Session) {
 		session.last_access = pop(&session.access_trail)
 	}
 	if len(session.timeline) > 0 {
-		pop(&session.timeline)
+		undone := pop(&session.timeline)
+		last_writes_undo(session, undone.writes)
 	}
 	// The machine is now as the step before left it, so show what that
 	// step changed, exactly as right after it ran.

@@ -6,16 +6,48 @@
 #
 # There is no "print" instruction. Devices sit at addresses of their own
 # (here the UART, a serial port), and a program talks to them with the
-# same loads and stores it uses for memory: memory-mapped I/O. The UART's
-# registers are single bytes:
+# same loads and stores it uses for memory: memory-mapped I/O.
 #
-#   0x10000000  THR  store a byte here to send it
-#   0x10000005  LSR  bit 5 (THRE) = 1 when it can take the next byte
+# The UART has 8 one-byte registers (see the uart entry in Docs). This
+# lesson uses only two of them:
 #
-# Real serial ports send slowly, so a program checks LSR before every
-# byte. The emulator sends at once (THRE is always 1), but the loop is
-# what real drivers (and xv6) do. Watch the Console tab fill up, and the
-# Memory tab show the UART's registers when a store goes there.
+#   0x10000005  LSR  read  (lbu t1, 5(s0))  bit 5 (THRE) = 1 when the UART
+#                                           can take the next byte
+#   0x10000000  THR  write (sb t0, 0(s0))   send this byte
+#
+# Why LSR first: a real serial port sends slowly. Each byte goes out on
+# the wire one bit at a time (a start bit, 8 data bits, a stop bit), so
+# at 115200 baud a byte takes about 87 microseconds: ~100,000
+# instructions of a fast CPU. A byte stored before the last one has moved
+# on is lost, so the program waits.
+#
+# How it waits: busy-waiting (polling). There is no timer here and the
+# program never measures time. The UART keeps time with its own clock: a
+# store to THR makes THRE 0 (busy), and the UART sets it back to 1 once
+# the byte has moved on. The wait: loop just keeps asking ("is THRE
+# 1 yet?") until the answer is yes, perhaps 100,000 times. Receiving
+# works the same way with LSR bit 0 (DR: a byte has arrived in RBR).
+#
+# The cost: while it spins, the CPU does nothing else. Real systems
+# avoid most of it:
+#   - FIFOs: the 16550 can queue 16 bytes (FCR turns them on, lesson 20),
+#     so a program waits only once the queue is full.
+#   - Interrupts: xv6 puts the text in a buffer and runs other programs;
+#     the UART interrupts (through the PLIC) when it can take more, and
+#     the handler sends the next byte. Keys arrive the same way.
+# Polling is still what you use when nothing else is set up: early boot,
+# a kernel panic message, or a tiny program like this one.
+#
+# In the emulator there is no wire, so a stored byte appears at once and
+# THRE is always 1: the beqz after wait: never jumps back. The loop is
+# kept because it is what real code must do (and what xv6 does).
+#
+# Why THR works without any setup: the emulator's UART (like QEMU's)
+# starts ready to send. Real drivers set it up first (lesson 20).
+# Not used here: RBR (receiving), IER, ISR / FCR, LCR, MCR, MSR, SCR.
+#
+# Watch the Console tab fill up a character per sb, the Devices tab
+# light LSR, then THR, and the Memory tab jump to the UART's registers.
 # a0 = the number of bytes sent: "Hello, UART!" and a newline = 13.
 
     .section .text

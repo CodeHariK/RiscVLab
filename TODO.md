@@ -13,14 +13,14 @@ and, where it teaches something new, a lesson.
 - [x] Undo history (step back), disassembler matching objdump
 - [x] Debugger: source / disassembly / steps (compact and detailed), encoding,
       registers, CSRs, memory, stack, ELF tabs; Programs and Docs windows with
-      search; lessons 01-19
+      search; lessons 01-20
 - [x] Lessons name their Docs entries (# Docs: line); the Docs window opens on them
 - [x] Reference docs: instructions, pseudo-instructions, directives, CSRs,
       traps, concurrency, ELF and memory map, devices, terms
 
 ## Emulator: on the way to xv6
 
-- [x] UART at 0x10000000: programs can print (lesson 19); Console tab in the
+- [x] UART at 0x10000000: programs can print (lessons 19, 20); Console tab in the
       debugger; devices on the bus with their own undo (receiving keys comes
       with xv6's console)
 - [ ] Supervisor and user modes: s-CSRs (sstatus, stvec, sepc, scause, ...),

@@ -1,10 +1,10 @@
 # Devices
 
 The hardware around the CPU that programs talk to: how they reach it
-(memory-mapped I/O) and each device the emulator has so far. Same
-format as instructions.md. The devices copy QEMU's `virt` board, at the
-same addresses (see memory-map), so programs written for QEMU (and
-later xv6) use them unchanged.
+(memory-mapped I/O), each device the emulator has so far, and the ones
+coming next. Same format as instructions.md. The devices copy QEMU's
+`virt` board, at the same addresses (see memory-map), so programs
+written for QEMU (and later xv6) use them unchanged.
 
 ## mmio - Memory-mapped I/O
 
@@ -88,3 +88,74 @@ beqz  t1, wait           # not ready: ask again
 li    t0, 'A'
 sb    t0, 0(s0)          # THR: send 'A'
 ```
+
+## clint - The CLINT (timer and software interrupts)
+
+*device at 0x02000000, the core-local interruptor*
+
+Does: gives every hart a clock that keeps counting, an alarm on it ("interrupt me when the clock reaches X"), and a way for one hart to interrupt another. It is the timer of a RISC-V board.
+
+How it works: three kinds of memory-mapped registers, at 0x02000000 + offset:
+| Offset | Register | Size | What it does |
+|---|---|---|---|
+| 0x0000 | msip (one per hart) | 4 bytes | write 1: send that hart a software interrupt (MSI, mip bit 3) |
+| 0x4000 | mtimecmp (one per hart) | 8 bytes | the alarm: while mtime >= mtimecmp, a timer interrupt is pending (MTI, mip bit 7) |
+| 0xbff8 | mtime | 8 bytes | the clock: counts up at a fixed rate (10 MHz on QEMU), shared by all harts |
+A timer interrupt, step by step:
+1. The kernel reads mtime and writes mtimecmp = mtime + 1000000 (0.1 s at 10 MHz).
+2. It goes on running. The CLINT compares the two on every tick.
+3. When mtime reaches mtimecmp, the CLINT sets mip.MTIP. If mie.MTIE and mstatus.MIE are on, the hart traps between two instructions, with mcause 0x8000000000000007.
+4. The handler sets the next alarm (mtimecmp += 1000000), which clears MTIP, and returns with `mret`.
+MTIP stays 1 for as long as mtime >= mtimecmp: the only way to stop the interrupt is to move the alarm on (or turn MTIE off).
+
+For:
+- preemptive multitasking: without a timer, a program that never makes a system call keeps the CPU for ever. The timer interrupt gives the kernel control back every few milliseconds, so it can switch to another program. xv6's scheduler and its sleep() depend on it.
+- msip: one hart wakes another (multi-core: "wake up", "flush your TLB").
+
+Emulator: not yet: it comes with the next steps on the way to xv6. The plan is for mtime to count instructions rather than wall-clock time (see emulator-time), so a timer interrupt arrives at exactly the same instruction on every run, Prev can step back over it, and the debugger can say "next timer interrupt in 37 steps".
+
+Watch out: xv6 today doesn't use mtimecmp from its kernel. It uses the Sstc extension: the supervisor-mode kernel sets its own alarm in the stimecmp CSR, and reads the clock with the time CSR (rdtime), which mirrors mtime. Older xv6 set mtimecmp from a small machine-mode handler instead. Either way the clock is the CLINT's mtime.
+
+Related: timebase, emulator-time, interrupt, interrupt-sources, mie mip, mmio, memory-map
+
+## timebase - Where the clock's ticks come from
+
+*a quartz crystal on the board*
+
+Does: drives mtime. The board has a quartz crystal oscillator that ticks at a steady, known rate: the timebase. Common rates are 32.768 kHz (the classic watch crystal), 1 MHz or 10 MHz; QEMU's virt board says 10 MHz.
+
+How it works: inside the CLINT:
+1. mtime is a 64-bit counter that adds 1 on every timebase tick. At 10 MHz it would take about 58,000 years to wrap round.
+2. A comparator checks mtime >= mtimecmp all the time. Its output is a wire into the hart, and that wire is mip.MTIP: nothing is sent, the bit simply stays 1 while the condition holds.
+3. The hart checks for pending interrupts at every instruction boundary. Once MTIP is 1 and the interrupt is enabled, the next boundary becomes a trap.
+So the interrupt fires at the time set in mtimecmp, at the first instruction boundary after that tick: a few nanoseconds late, nothing next to a 100 ns tick.
+
+For: keeping time that doesn't depend on the CPU. The timebase is kept separate from the CPU's own clock on purpose: the CPU slows down to save power or speeds up under load, but time must not. Software learns the rate from the device tree (timebase-frequency); xv6 simply assumes "1,000,000 ticks is about 0.1 s on QEMU".
+
+Related: clint, emulator-time
+
+## emulator-time - Time in the emulator: steps or the host clock
+
+*what mtime counts here*
+
+Does: decides what one tick of mtime means in the emulator. A program only ever sees time through mtime (and the time CSR), so it can't tell whether a tick took 100 ns of real time or one instruction. That leaves the emulator a choice.
+
+How it works: two clocks, both feeding the same mtime, so the CLINT itself doesn't care:
+- Step clock (the default, and the debugger's): mtime moves on a fixed amount per instruction. Deterministic: an interrupt lands on the same instruction every run, and Prev can step back over it. A ratio (ticks per instruction) can make it roughly match real seconds at the emulator's speed while staying deterministic.
+- Host clock (for running xv6 interactively from rvemu): mtime follows the Mac's real time, so `sleep 10` takes 10 real seconds. Runs are no longer identical, but the command line needs no undo.
+QEMU has the same idea: its -icount mode ties time to instructions, for runs that can be replayed exactly.
+
+What the step clock changes, compared with real time:
+| Situation | With one tick per instruction |
+|---|---|
+| Scheduling, preemption | works the same: a switch every 1,000,000 instructions instead of every 0.1 s |
+| sleep 10 in xv6's shell | over as soon as enough instructions have run: at ~240 MIPS, much faster than real time |
+| Debugging | interrupts on the same instruction every run; Prev undoes them |
+| Idle (wfi, wait for interrupt) | no instructions run, so mtime would never reach the alarm: wfi must jump mtime forward to mtimecmp (and so wastes no time spinning) |
+| Waiting for a key | the hard case: with only the UART left to wait for, the emulator must wait for real input from you, not jump ahead |
+
+Emulator: not built yet. The plan: the step clock first (the debugger and lessons need it), wfi with the jump forward, then the host clock when xv6's shell runs from rvemu.
+
+Watch out: with the step clock, "seconds" in a program are only as real as the ratio says. Timing measured inside the emulator (how long a loop takes) tells you about instructions, not about real hardware.
+
+Related: clint, timebase, interrupt

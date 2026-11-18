@@ -228,7 +228,7 @@ For: the timer is what makes an OS preemptive; the PLIC is how one CPU line serv
 
 Emulator: neither exists yet (see the TODO): mip stays 0. Supervisor mode adds a second set (SSI, STI, SEI) that machine mode can delegate.
 
-Related: interrupt, mie mip, memory-map, uart
+Related: interrupt, clint, mie mip, memory-map, uart
 
 ## Instruction_Address_Misaligned - Jump to a misaligned address (cause 0x0)
 

@@ -13,7 +13,7 @@ and, where it teaches something new, a lesson.
 - [x] Undo history (step back), disassembler matching objdump
 - [x] Debugger: source / disassembly / steps (compact and detailed), encoding,
       registers, CSRs, memory, stack, ELF tabs; Programs and Docs windows with
-      search; lessons 01-20
+      search; lessons 01-21
 - [x] Lessons name their Docs entries (# Docs: line); the Docs window opens on them
 - [x] Reference docs: instructions, pseudo-instructions, directives, CSRs,
       traps, concurrency, ELF and memory map, devices, terms
@@ -23,10 +23,17 @@ and, where it teaches something new, a lesson.
 - [x] UART at 0x10000000: programs can print (lessons 19, 20); Console tab in the
       debugger; devices on the bus with their own undo (receiving keys comes
       with xv6's console)
+- [x] CLINT timer and machine-mode interrupts: msip, mtimecmp, mtime following
+      the step clock (deterministic, undoable), interrupts taken at instruction
+      boundaries, vectored mtvec, wfi as a nop (lesson 21)
 - [ ] Supervisor and user modes: s-CSRs (sstatus, stvec, sepc, scause, ...),
       medeleg / mideleg, sret, ecall from U / S (rv64mi / rv64si tests);
-      a lesson that drops into user mode
-- [ ] CLINT timer and interrupts: mtime, mtimecmp, interrupts that fire, wfi
+      a lesson that drops into user mode; Sstc (stimecmp, the time CSR) for
+      xv6's timer
+- [ ] Time: wfi jumps the clock to the next alarm; a host clock for running
+      xv6's shell from rvemu
+- [ ] UART output is kept whole (undo puts back its length); a long xv6
+      session will want the oldest output dropped (rvemu has printed it)
 - [ ] Sv39 paging: page tables, page faults, satp, sfence.vma; a debugger
       view of one address being translated
 - [ ] PLIC (interrupt controller)

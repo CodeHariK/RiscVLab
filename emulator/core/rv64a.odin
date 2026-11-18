@@ -27,6 +27,13 @@ package rv
 // The reservation (Cpu.reservation) is set by LR and cleared by SC (pass or
 // fail) and by trap entry, so an SC never succeeds across a trap. On one
 // hart nothing else can touch the memory in between.
+//
+// Atomics work on RAM only: on a device address they raise an access
+// fault, as on many real chips (each region of the memory map says
+// whether it supports atomics). Undo needs it too: a step that traps must
+// change nothing, but an AMO on a device would do its load, which may
+// change the device (a UART read takes a byte), before finding out that
+// the store fails.
 
 OPCODE_AMO :: 0b010_1111
 
@@ -80,7 +87,10 @@ exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 	if address % size != 0 {
 		return trap_make(.Load_Address_Misaligned, address)
 	}
-	value, ok := bus_load(bus, address, size)
+	if !bus_is_ram(bus, address, size) {
+		return trap_make(.Load_Access_Fault, address)
+	}
+	value, ok := bus_load(bus, address, size, cpu_clock(cpu))
 	if !ok {
 		return trap_make(.Load_Access_Fault, address)
 	}
@@ -93,6 +103,9 @@ exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
 	if address % size != 0 {
 		return trap_make(.Store_Address_Misaligned, address)
+	}
+	if !bus_is_ram(bus, address, size) {
+		return trap_make(.Store_Access_Fault, address)
 	}
 	reservation := cpu.reservation
 	holds := reservation.valid && reservation.address == address && reservation.size == size
@@ -113,7 +126,10 @@ exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: 
 	if address % size != 0 {
 		return trap_make(.Store_Address_Misaligned, address)
 	}
-	raw, ok := bus_load(bus, address, size)
+	if !bus_is_ram(bus, address, size) {
+		return trap_make(.Store_Access_Fault, address)
+	}
+	raw, ok := bus_load(bus, address, size, cpu_clock(cpu))
 	if !ok {
 		return trap_make(.Store_Access_Fault, address)
 	}
@@ -164,8 +180,8 @@ unsigned_value :: proc(value: u64, size: u64) -> u64 {
 // Stores and records the old bytes for undo, as exec_store does.
 @(private = "file")
 amo_store :: proc(cpu: ^Cpu, bus: ^Bus, address: u64, size: u64, value: u64) -> bool {
-	old_value, readable := bus_peek(bus, address, size)
-	if !readable || !bus_store(bus, address, size, value) {
+	old_value, readable := bus_peek(bus, address, size, cpu_clock(cpu))
+	if !readable || !bus_store(bus, address, size, value, cpu_clock(cpu)) {
 		return false
 	}
 	cpu.undo.memory_changed = true

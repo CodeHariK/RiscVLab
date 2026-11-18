@@ -23,8 +23,8 @@ machine_with_uart :: proc() -> (rv.Machine, ^devices.Uart) {
 storing_to_thr_sends_a_byte :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
-	testing.expect(t, rv.bus_store(&machine.bus, THR, 1, 'H'))
-	testing.expect(t, rv.bus_store(&machine.bus, THR, 1, 'i'))
+	testing.expect(t, rv.machine_store(&machine, THR, 1, 'H'))
+	testing.expect(t, rv.machine_store(&machine, THR, 1, 'i'))
 	testing.expect_value(t, string(uart.output[:]), "Hi")
 }
 
@@ -32,10 +32,10 @@ storing_to_thr_sends_a_byte :: proc(t: ^testing.T) {
 lsr_says_ready_and_data_waiting :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
-	status, _ := rv.bus_load(&machine.bus, LSR, 1)
+	status, _ := rv.machine_load(&machine, LSR, 1)
 	testing.expect_value(t, status, 0x60) // THRE and TEMT; no data
 	devices.uart_input(uart, {'x'})
-	status, _ = rv.bus_load(&machine.bus, LSR, 1)
+	status, _ = rv.machine_load(&machine, LSR, 1)
 	testing.expect_value(t, status, 0x61) // data ready
 }
 
@@ -44,11 +44,11 @@ reading_rbr_takes_the_byte_but_peeking_doesnt :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
 	devices.uart_input(uart, {'a', 'b'})
-	peeked, _ := rv.bus_peek(&machine.bus, THR, 1)
+	peeked, _ := rv.machine_peek(&machine, THR, 1)
 	testing.expect_value(t, peeked, 'a')
-	first, _ := rv.bus_load(&machine.bus, THR, 1)
-	second, _ := rv.bus_load(&machine.bus, THR, 1)
-	empty, _ := rv.bus_load(&machine.bus, THR, 1)
+	first, _ := rv.machine_load(&machine, THR, 1)
+	second, _ := rv.machine_load(&machine, THR, 1)
+	empty, _ := rv.machine_load(&machine, THR, 1)
 	testing.expect_value(t, first, 'a')
 	testing.expect_value(t, second, 'b')
 	testing.expect_value(t, empty, 0)
@@ -58,9 +58,9 @@ reading_rbr_takes_the_byte_but_peeking_doesnt :: proc(t: ^testing.T) {
 dlab_switches_offsets_0_and_1_to_the_divisor :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
-	rv.bus_store(&machine.bus, LCR, 1, 0x80) // DLAB on
-	rv.bus_store(&machine.bus, THR, 1, 0x03) // divisor low, not a byte sent
-	rv.bus_store(&machine.bus, LCR, 1, 0x03) // DLAB off, 8 bits
+	rv.machine_store(&machine, LCR, 1, 0x80) // DLAB on
+	rv.machine_store(&machine, THR, 1, 0x03) // divisor low, not a byte sent
+	rv.machine_store(&machine, LCR, 1, 0x03) // DLAB off, 8 bits
 	testing.expect_value(t, len(uart.output), 0)
 	testing.expect_value(t, uart.registers.divisor_low, 3)
 }
@@ -69,11 +69,11 @@ dlab_switches_offsets_0_and_1_to_the_divisor :: proc(t: ^testing.T) {
 only_byte_accesses :: proc(t: ^testing.T) {
 	machine, _ := machine_with_uart()
 	defer rv.machine_destroy(&machine)
-	_, loaded := rv.bus_load(&machine.bus, THR, 4)
+	_, loaded := rv.machine_load(&machine, THR, 4)
 	testing.expect(t, !loaded)
-	testing.expect(t, !rv.bus_store(&machine.bus, THR, 2, 0))
+	testing.expect(t, !rv.machine_store(&machine, THR, 2, 0))
 	// The debugger can still look at 4 registers at once.
-	_, peeked := rv.bus_peek(&machine.bus, rv.UART_BASE, 4)
+	_, peeked := rv.machine_peek(&machine, rv.UART_BASE, 4)
 	testing.expect(t, peeked)
 }
 
@@ -83,7 +83,7 @@ undo_takes_a_sent_byte_back :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
 	SB_T0_0_S0 :: u32(0x0054_0023)
-	rv.bus_store(&machine.bus, rv.RAM_BASE, 4, u64(SB_T0_0_S0))
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(SB_T0_0_S0))
 	machine.cpu.pc = rv.RAM_BASE
 	machine.cpu.regs[8] = rv.UART_BASE
 	machine.cpu.regs[5] = 'H'
@@ -100,7 +100,7 @@ undo_gives_a_read_byte_back :: proc(t: ^testing.T) {
 	machine, uart := machine_with_uart()
 	defer rv.machine_destroy(&machine)
 	LBU_T1_0_S0 :: u32(0x0004_4303)
-	rv.bus_store(&machine.bus, rv.RAM_BASE, 4, u64(LBU_T1_0_S0))
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(LBU_T1_0_S0))
 	machine.cpu.pc = rv.RAM_BASE
 	machine.cpu.regs[8] = rv.UART_BASE
 	devices.uart_input(uart, {'k'})

@@ -90,7 +90,7 @@ How it works:
 | Address | What | In this emulator |
 |---|---|---|
 | 0x00001000 | boot ROM on QEMU | no |
-| 0x02000000 | CLINT: timer and software interrupts (see clint) | coming |
+| 0x02000000 | CLINT: timer and software interrupts (see clint) | yes |
 | 0x0c000000 | PLIC: device interrupt controller | coming |
 | 0x10000000 | UART: serial port, for printing (see uart) | yes |
 | 0x10001000 | virtio disk | coming |

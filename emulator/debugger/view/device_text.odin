@@ -17,8 +17,17 @@ device_place :: proc(session: ^state.Session, address: u64, writing: bool) -> (t
 	}
 	offset := address - device.base
 	name := ""
-	if device.name == "uart" && session.uart != nil {
-		name = devices.uart_register_name(session.uart, offset, writing)
+	switch device.name {
+	case "uart":
+		if session.uart != nil {
+			name = devices.uart_register_name(session.uart, offset, writing)
+		}
+	case "clint":
+		switch {
+		case offset >= devices.CLINT_MSIP && offset < devices.CLINT_MSIP + 4: name = "msip"
+		case offset >= devices.CLINT_MTIMECMP && offset < devices.CLINT_MTIMECMP + 8: name = "mtimecmp"
+		case offset >= devices.CLINT_MTIME && offset < devices.CLINT_MTIME + 8: name = "mtime"
+		}
 	}
 	if name == "" {
 		return fmt.tprintf("%s+0x%x (0x%x)", device.name, offset, address), true
@@ -37,8 +46,9 @@ device_value_text :: proc(session: ^state.Session, address: u64, writing: bool, 
 		case "THR", "RBR":
 			return byte_text(value)
 		}
+		return value_text(u64(u8(value))) // UART registers are bytes
 	}
-	return value_text(u64(u8(value)))
+	return value_text(value)
 }
 
 // A byte as a number and, when it is a printable character, as that

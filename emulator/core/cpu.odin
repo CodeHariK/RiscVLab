@@ -26,18 +26,23 @@ Cpu :: struct {
 	next_pc:    u64,
 	// Instructions completed without a trap: the `minstret` CSR.
 	instret:    u64,
-	// Clock cycles: the `mcycle` CSR. One instruction per cycle here, so
-	// it counts with instret, but a program can write each on its own.
+	// Clock cycles: the `mcycle` CSR. One per step here: an instruction,
+	// or a trap or interrupt taken into a handler (those take cycles on
+	// real hardware too, but retire nothing, so instret doesn't count
+	// them). A program can write mcycle and minstret, each on its own.
 	cycle:      u64,
+	// The step clock (cpu_clock) is cycle + clock_offset. See cpu_clock.
+	clock_offset: u64,
 	// Set when this step's CSR instruction wrote minstret / mcycle: the
 	// written value then stands, without the instruction's own count
 	// (cpu_step). Cleared at the start of each step.
 	instret_written: bool,
 	cycle_written:   bool,
+	// Current privilege level. (Next to the bools above, so the three
+	// share one 8-byte slot.)
+	privilege:  Privilege,
 	// Control and status registers (csr.odin).
 	csr:        Csr_File,
-	// Current privilege level.
-	privilege:  Privilege,
 	// Last register write, for tracing. Cleared at the start of each step.
 	last_write: Register_Write,
 	// The address LR reserved for the next SC (rv64a.odin).
@@ -45,6 +50,21 @@ Cpu :: struct {
 	// What the current instruction overwrote, so it can be undone.
 	// Filled in during the step; `machine_step` saves it to the history.
 	undo:       Undo_Record,
+}
+
+// The step clock: one tick per step, like mcycle, but no program can
+// change it. It is the platform's time, which devices that keep time (the
+// CLINT's mtime) follow; the bus calls pass it as `now`. It must be apart
+// from mcycle because a program can write mcycle, and on real hardware
+// that doesn't move the timer (docs: emulator-time).
+//
+// It isn't a counter of its own, though: mcycle already ticks once per
+// step, so the clock is mcycle plus an offset, which changes only when a
+// program writes mcycle (csr_write), by just as much as keeps the clock
+// going. So a step costs nothing extra, and undo needs no field for it:
+// putting mcycle back puts the clock back.
+cpu_clock :: #force_inline proc(cpu: ^Cpu) -> u64 {
+	return cpu.cycle + cpu.clock_offset
 }
 
 // What LR.W / LR.D reserved: SC succeeds only on the same address and

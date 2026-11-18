@@ -28,7 +28,7 @@ run :: proc(kind: Muldiv, a: u64, b: u64, word := false) -> u64 {
 	machine := rv.machine_create(64 * 1024, 0)
 	defer rv.machine_destroy(&machine)
 	machine.cpu.pc = rv.RAM_BASE
-	rv.bus_store(&machine.bus, rv.RAM_BASE, 4, u64(instruction))
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(instruction))
 	machine.cpu.regs[6] = a
 	machine.cpu.regs[7] = b
 	rv.machine_step(&machine)
@@ -94,7 +94,7 @@ mulhsu_and_mulhu_on_word_opcode_are_illegal :: proc(t: ^testing.T) {
 	machine := rv.machine_create(64 * 1024, 0)
 	defer rv.machine_destroy(&machine)
 	machine.cpu.pc = rv.RAM_BASE
-	rv.bus_store(&machine.bus, rv.RAM_BASE, 4, u64(instruction))
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(instruction))
 	trap, trapped := rv.machine_step(&machine).?
 	testing.expect(t, trapped)
 	testing.expect_value(t, trap.cause, rv.Trap_Cause.Illegal_Instruction)

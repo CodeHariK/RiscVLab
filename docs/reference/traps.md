@@ -46,22 +46,42 @@ Related: trap, handler, privilege, mtvec, mepc, mcause, ecall
 
 Does: stops the current code, records why, and jumps to the handler in mtvec.
 
-How it works: when an instruction raises an exception, instead of finishing it the hart:
-1. mepc = the address of the instruction that trapped.
-2. mcause = the cause code (bit 63 set for an interrupt).
-3. mtval = extra information: the bad address, or the instruction's bits.
+How it works: in short, the hardware stores the pc in a CSR (mepc), runs the handler's instructions, and `mret` puts the pc back. When an instruction raises an exception, or an interrupt is taken between two instructions, the hart:
+1. mepc = where to come back: the instruction that trapped (an exception), or the one that hadn't run yet (an interrupt).
+2. mcause = why: the cause code, with bit 63 set for an interrupt.
+3. mtval = extra information: the bad address, or the instruction's bits (0 for interrupts).
 4. mstatus: MPIE = MIE, MIE = 0 (interrupts off in the handler), MPP = the current privilege level.
-5. Switches to machine mode and jumps to the handler at mtvec.
+5. Switches to machine mode and jumps to the handler: pc = mtvec. From here the CPU simply runs the handler's instructions, like any other code.
 
 The instruction that trapped changes nothing else: a faulting load leaves its rd alone, a faulting jump doesn't move the pc. The handler sees the state exactly as it was just before the mistake.
 
-The handler does its work and ends with `mret`, which undoes steps 4 and 5 and jumps back to mepc.
+The handler does its work and ends with `mret`, which undoes steps 4 and 5: pc = mepc, MIE = MPIE, the privilege level = MPP.
+
+Lesson 21's timer interrupt, from start to finish:
+```
+main code                 hardware (trap entry)            handler
+addi a0, a0, 1
+beqz a1, count  <- the interrupt arrives before this runs
+                mepc   = pc of the beqz  (come back here)
+                mcause = 0x8000000000000007  (the timer)
+                mtval  = 0
+                MPIE = MIE, MIE = 0, MPP = old level
+                pc = mtvec  ---------------------------->  li  a1, 1
+                                                           sd  t0, 0(s1)
+                                                           mret
+                pc = mepc, MIE = MPIE  <-----------------
+beqz a1, count  (runs now, as if nothing had happened)
+```
+
+Where to come back differs between the two kinds of trap. After an `ecall`, mepc points at the `ecall` itself: returning there would run it again, so the handler adds 4 first (lesson 13). After an interrupt, nothing needs fixing: the instruction at mepc hasn't run yet, and should.
 
 For: everything an OS does beyond running one program: system calls (`ecall`), handling faults (paging loads a missing page), and timer interrupts that switch between programs.
 
-Emulator: if mtvec is 0, no handler has been set up, so the trap stops the machine (real hardware would jump to address 0). The step details show every CSR the trap writes.
+Emulator: if mtvec's base address is 0 (mtvec = 0, or 1 for vectored), no handler has been set up, so the trap stops the machine (real hardware would jump to address 0). The step details show every CSR the trap writes.
 
-Related: why-traps, mtvec, mepc, mcause, mtval, mstatus, mret, handler, trap-return
+Watch out: only the pc (in mepc), a few mstatus bits and the privilege level are saved; the 31 registers are not. A handler that uses t0 overwrites whatever the interrupted code had in t0, so it must save every register it touches and put them back before `mret` (see handler; mscratch is a spare CSR for parking one). xv6 saves all 31 to memory at the start of its handler. Lesson 21 gets away without it because its loop never uses t0 again.
+
+Related: why-traps, exception, interrupt, mtvec, mepc, mcause, mtval, mstatus, mret, handler, trap-return
 
 ## handler - Writing a trap handler
 
@@ -203,7 +223,7 @@ For:
 - the timer: an OS gets control back every few milliseconds, even from a program that never gives up the CPU, and switches to another program.
 - devices: xv6 doesn't spin waiting for the UART. It puts the text in a buffer and runs other programs; each time the UART can take a byte, it interrupts and the handler sends the next one. A key press arrives the same way.
 
-Emulator: no interrupts yet. Nothing sets mip, and the UART keeps IER but never raises one. The CLINT (timer) and PLIC (devices) come after supervisor and user mode.
+Emulator: machine-mode interrupts work: the CLINT drives MTIP (its timer) and MSIP (msip), the hart takes them at instruction boundaries, and Prev steps back over them. The Steps tab marks such a step "interrupted before it ran". External interrupts (MEIP) wait for the PLIC; the UART keeps IER but raises nothing yet. Lesson 21.
 
 Watch out: an interrupt can arrive between any two instructions, so a handler must save and restore every register it uses (mscratch helps), and code that shares data with a handler must turn interrupts off around it, or use atomics.
 
@@ -226,7 +246,7 @@ How it works:
 
 For: the timer is what makes an OS preemptive; the PLIC is how one CPU line serves many devices.
 
-Emulator: neither exists yet (see the TODO): mip stays 0. Supervisor mode adds a second set (SSI, STI, SEI) that machine mode can delegate.
+Emulator: the CLINT is there (MSI and MTI work; see clint); the PLIC isn't yet, so MEI never turns on. Supervisor mode adds a second set (SSI, STI, SEI) that machine mode can delegate.
 
 Related: interrupt, clint, mie mip, memory-map, uart
 

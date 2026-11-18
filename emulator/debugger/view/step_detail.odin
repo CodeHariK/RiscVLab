@@ -46,6 +46,16 @@ Step_Detail :: [Stage]string
 
 step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Step_Detail {
 	detail: Step_Detail
+	// An interrupt is taken at the instruction boundary, before the
+	// instruction at the pc: nothing of it runs (it runs after mret).
+	if trap, took_trap := entry.trap.?; took_trap && rv.trap_is_interrupt(trap.cause) {
+		detail[.Execute] = fmt.tprintf(
+			"%v is pending and enabled: it is taken before this instruction, which doesn't run yet (it runs when the handler returns with mret)",
+			trap.cause,
+		)
+		detail[.Write] = write_text(entry)
+		return detail
+	}
 	detail[.Fetch] = fmt.tprintf("mem[pc 0x%x] -> 0x%08x", entry.pc, entry.instruction)
 	detail[.Decode] = decode_text(entry)
 	detail[.Read] = read_text(entry)

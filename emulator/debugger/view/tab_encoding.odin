@@ -15,7 +15,7 @@ import state "../state"
 tab_encoding :: proc(session: ^state.Session) {
 	colors := ui.palette()
 	pc := session.machine.cpu.pc
-	raw, ok := rv.bus_peek(&session.machine.bus, pc, 4)
+	raw, ok := rv.machine_peek(&session.machine, pc, 4)
 	if !ok {
 		clay.TextDynamic("pc is outside memory", ui.text_config(.Text, colors.text_dim))
 		return

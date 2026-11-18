@@ -27,7 +27,7 @@ tab_registers :: proc(session: ^state.Session) {
 	if record, has_record := session.last_step.?; has_record && record.register_changed {
 		changed_index = int(record.register_index)
 	}
-	next_instruction, fetched := rv.bus_peek(&session.machine.bus, cpu.pc, 4)
+	next_instruction, fetched := rv.machine_peek(&session.machine, cpu.pc, 4)
 
 	rows := make([dynamic]ui.Table_Row, 0, rv.REGISTER_COUNT + 1, context.temp_allocator)
 	// The pc is not one of x0-x31: no instruction names it as rd/rs1/rs2,

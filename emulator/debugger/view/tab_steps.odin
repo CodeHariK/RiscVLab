@@ -80,7 +80,7 @@ next_step_text :: proc(session: ^state.Session, number: int) -> string {
 		return timeline_text(session, number, entry, coming = true)
 	}
 	pc := session.machine.cpu.pc
-	raw, ok := rv.bus_peek(&session.machine.bus, pc, 4)
+	raw, ok := rv.machine_peek(&session.machine, pc, 4)
 	if !ok {
 		return fmt.tprintf("next: pc 0x%x is outside memory", pc)
 	}

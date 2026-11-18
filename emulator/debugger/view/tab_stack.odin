@@ -43,7 +43,7 @@ Stack_Frame :: struct {
 tab_stack :: proc(session: ^state.Session) {
 	colors := ui.palette()
 	sp := rv.reg_read(&session.machine.cpu, STACK_SP)
-	if _, in_ram := rv.bus_peek(&session.machine.bus, sp - 1, 1); !in_ram || sp == 0 {
+	if _, in_ram := rv.machine_peek(&session.machine, sp - 1, 1); !in_ram || sp == 0 {
 		wrapped_text(
 			fmt.tprintf("sp = 0x%x does not point into RAM yet: programs set it up first, e.g. la sp, stack_top (lesson 09).", sp),
 			ui.text_config(.Code_Small, colors.text_dim),
@@ -143,7 +143,7 @@ frame_heading :: proc(session: ^state.Session, frame: Stack_Frame) -> ui.Table_R
 @(private)
 stack_row :: proc(session: ^state.Session, address: u64, sp: u64, top: u64, access: state.Memory_Access, changed: state.Memory_Access) -> ui.Table_Row {
 	colors := ui.palette()
-	value, _ := rv.bus_peek(&session.machine.bus, address, STACK_WORD)
+	value, _ := rv.machine_peek(&session.machine, address, STACK_WORD)
 	free := address < sp
 
 	offset: string

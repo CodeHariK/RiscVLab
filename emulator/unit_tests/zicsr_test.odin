@@ -17,7 +17,7 @@ csr_instruction :: proc(kind: u32, rd: u32, rs1: u32, csr: u32) -> u32 {
 machine_with :: proc(instruction: u32) -> rv.Machine {
 	machine := rv.machine_create(64 * 1024, 16)
 	machine.cpu.pc = rv.RAM_BASE
-	rv.bus_store(&machine.bus, rv.RAM_BASE, 4, u64(instruction))
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(instruction))
 	return machine
 }
 

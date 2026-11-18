@@ -15,6 +15,10 @@ Bus :: struct {
 	// The device this step's load or store changed, with its state from
 	// before, for undo (machine_step copies it to the undo record).
 	touched:      Device_Touch,
+	// The step clock time (cpu_clock) at which the devices' interrupt
+	// lines change next by themselves (the CLINT's alarm); until then mip
+	// stays as it is.
+	interrupts_change_at: u64,
 }
 
 MAX_DEVICES :: 8
@@ -24,18 +28,26 @@ MAX_DEVICES :: 8
 DEVICE_STATE_SIZE :: 32
 Device_State :: [DEVICE_STATE_SIZE]u8
 
-// A device on the bus. `offset` is from the start of its range. Loads and
-// stores may change the device (reading a UART's receive register takes
+// A device on the bus. `offset` is from the start of its range; `now` is
+// the step clock (cpu_clock), for devices that keep time. Loads and stores
+// may change the device (reading a UART's receive register takes
 // the byte out of it); peek must not. ok = false raises an access fault,
-// e.g. for an access size the device doesn't support.
+// e.g. for an access size the device doesn't support, and must leave the
+// device as it was: the instruction traps, and with no handler the step
+// isn't recorded, so a change couldn't be undone.
 Device :: struct {
 	name:    string,
 	base:    u64,
 	size:    u64,
 	data:    rawptr, // the device itself, passed to every procedure
-	load:    proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool),
-	peek:    proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool),
-	store:   proc(data: rawptr, offset: u64, size: u64, value: u64) -> (ok: bool),
+	load:    proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64, ok: bool),
+	peek:    proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64, ok: bool),
+	store:   proc(data: rawptr, offset: u64, size: u64, value: u64, now: u64) -> (ok: bool),
+	// The mip bits the device drives right now (nil: none), given the
+	// step clock, and the clock time at which they would next change by
+	// themselves (max(u64): only a load or store changes them), so they
+	// needn't be asked every step (interrupts.odin).
+	interrupts: proc(data: rawptr, now: u64) -> (lines: u64, changes_at: u64),
 	// Undo: the state a load or store may change, and putting it back.
 	save:    proc(data: rawptr) -> Device_State,
 	restore: proc(data: rawptr, state: Device_State),
@@ -96,9 +108,15 @@ bus_device_at :: proc(bus: ^Bus, addr: u64, size: u64 = 1) -> (device: ^Device, 
 	return nil, -1, false
 }
 
+// Whether [a, a + a_size) and [b, b + b_size) share an address. Measured
+// from the lower start, so nothing overflows near the top of the
+// address space (`b + b_size` could).
 @(private = "file")
 ranges_overlap :: proc(a: u64, a_size: u64, b: u64, b_size: u64) -> bool {
-	return a < b + b_size && b < a + a_size
+	if a <= b {
+		return b - a < a_size
+	}
+	return a - b < b_size
 }
 
 // Before a load or store that may change device `index`: keep its state
@@ -130,6 +148,13 @@ ram_offset :: #force_inline proc(bus: ^Bus, addr: u64, size: u64) -> (offset: u6
 	return offset, true
 }
 
+// Whether all of [addr, addr + size) is RAM. Atomics work only there
+// (rv64a.odin).
+bus_is_ram :: proc(bus: ^Bus, addr: u64, size: u64) -> bool {
+	_, ok := ram_offset(bus, addr, size)
+	return ok
+}
+
 // The RAM bytes for [addr, addr + size), for bulk copies such as loading
 // a program. ok = false if any of the range is outside RAM.
 bus_ram_slice :: proc(bus: ^Bus, addr: u64, size: u64) -> (bytes: []u8, ok: bool) {
@@ -147,16 +172,18 @@ bus_fetch :: proc(bus: ^Bus, addr: u64) -> (instruction: u32, ok: bool) {
 
 // Reads `size` bytes (1, 2, 4 or 8) as a little-endian value,
 // zero-extended to 64 bits, from RAM or a device. Callers do any sign
-// extension themselves.
+// extension themselves. `now` is the step clock: devices that keep time
+// (the CLINT) follow it. Every caller has it at hand (cpu_clock), so it
+// is passed in rather than kept in the bus.
 //
 // Misaligned addresses are allowed in RAM, as on QEMU.
-bus_load :: proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, ok: bool) {
+bus_load :: proc(bus: ^Bus, addr: u64, size: u64, now: u64) -> (value: u64, ok: bool) {
 	if value, ok = ram_load(bus, addr, size); ok {
 		return
 	}
 	device, index := bus_device_at(bus, addr, size) or_return
 	note_touch(bus, device, index)
-	return device.load(device.data, addr - device.base, size)
+	return device.load(device.data, addr - device.base, size, now)
 }
 
 // RAM only. The direct pointer loads assume a little-endian host (Apple
@@ -185,7 +212,7 @@ ram_load :: #force_inline proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, 
 // a device must stay as it was (reading a UART's receive register would
 // take the byte out of it). A device whose registers are bytes is peeked
 // a byte at a time, so the debugger's 4-byte views can show it too.
-bus_peek :: proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, ok: bool) {
+bus_peek :: proc(bus: ^Bus, addr: u64, size: u64, now: u64) -> (value: u64, ok: bool) {
 	if value, ok = ram_load(bus, addr, size); ok {
 		return
 	}
@@ -193,25 +220,25 @@ bus_peek :: proc(bus: ^Bus, addr: u64, size: u64) -> (value: u64, ok: bool) {
 	if device.peek == nil {
 		return 0, false
 	}
-	if value, ok = device.peek(device.data, addr - device.base, size); ok {
+	if value, ok = device.peek(device.data, addr - device.base, size, now); ok {
 		return
 	}
 	value = 0
 	for i in 0 ..< size {
-		piece := device.peek(device.data, addr - device.base + i, 1) or_return
+		piece := device.peek(device.data, addr - device.base + i, 1, now) or_return
 		value |= (piece & 0xFF) << (8 * i)
 	}
 	return value, true
 }
 
 // Writes the low `size` bytes (1, 2, 4 or 8) of `value`, little-endian,
-// to RAM or a device.
-bus_store :: proc(bus: ^Bus, addr: u64, size: u64, value: u64) -> bool {
+// to RAM or a device (`now`: as for bus_load).
+bus_store :: proc(bus: ^Bus, addr: u64, size: u64, value: u64, now: u64) -> bool {
 	offset, in_ram := ram_offset(bus, addr, size)
 	if !in_ram {
 		device, index := bus_device_at(bus, addr, size) or_return
 		note_touch(bus, device, index)
-		return device.store(device.data, addr - device.base, size, value)
+		return device.store(device.data, addr - device.base, size, value, now)
 	}
 	location := &bus.ram[offset]
 	switch size {

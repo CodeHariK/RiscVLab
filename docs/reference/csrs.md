@@ -67,11 +67,17 @@ Fields:
 
 How it works: on a trap, MPIE = MIE, MIE = 0 and MPP = the current level. On `mret`, MIE = MPIE, MPIE = 1, the level = MPP, and MPP = the least privileged mode.
 
+Why MIE goes off in the handler: a second interrupt arriving inside the handler would trap again and overwrite mepc and mcause, so the handler could never get back. With MIE = 0 the handler runs undisturbed; a handler that wants to allow nesting saves mepc and mcause first, then turns MIE on itself.
+
+Why MPIE exists: the handler must run with interrupts off, but afterwards they must be as they were before the trap, on or off. MPIE ("previous MIE") is where trap entry keeps the old value: a one-entry stack. MPP does the same for the privilege level.
+
+Why mret restores it, instead of the handler doing `csrsi mstatus, 8` (MIE = 1) and then jumping back: an interrupt could arrive between those two instructions, while still in the handler, and overwrite mepc. mret turns interrupts back on and jumps in one indivisible step, so there is no such gap.
+
 For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`), and choosing which mode `mret` enters: an OS sets MPP to user mode, then `mret`s into a user program.
 
 Emulator: only machine mode exists so far, so MPP always reads 0b11 (machine): writing anything else is ignored (WARL). mstatus starts as 0x1800 for that reason. Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
 
-Watch out: MIE only matters once there are interrupts (the timer comes later); traps from instructions happen whatever MIE says.
+Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
 
 Related: mret, mie, mtvec, privilege
 
@@ -91,9 +97,11 @@ Fields:
 - BASE (bits 63..2): the handler's address. Its low 2 bits are assumed 0, so the handler must be 4-byte aligned.
 - MODE (bits 1..0): 0 = direct, every trap jumps to BASE; 1 = vectored, exceptions jump to BASE but interrupts jump to BASE + 4 * cause.
 
+How it works: why the mode shares the register with the address. Instructions are 4 bytes and must start at a multiple of 4, so any handler's address ends in two 0 bits. Those two bits carry no information, so the spec reuses them for the mode instead of spending a whole CSR on it: one `csrw` sets both, and the hardware just masks them off (`mtvec & ~0b11`) to get the address. The same trick appears elsewhere: page table entries keep their flags in the low bits of a page-aligned address (Sv39), and satp keeps its mode in its top bits.
+
 For: the first thing a program that wants to handle traps does: `la` the handler, `csrw mtvec`.
 
-Emulator: mtvec = 0 means "no handler": a trap then stops the machine instead of jumping to address 0. That is how the test programs end with `ebreak`. MODE 2 and 3 are reserved, so bit 1 always reads 0.
+Emulator: a base address of 0 (mtvec = 0, or 1 for vectored) means "no handler": a trap then stops the machine instead of jumping to address 0. That is how the test programs end with `ebreak`. MODE 2 and 3 are reserved, so bit 1 always reads 0.
 
 Watch out: put `.balign 4` before the handler, or its address has bits in the MODE field.
 
@@ -221,7 +229,7 @@ How it works: an interrupt is taken when its mip bit and its mie bit are both 1 
 
 For: choosing which interrupt sources matter, e.g. an OS enables the timer to switch between programs.
 
-Emulator: there are no interrupt sources yet (the timer comes later), so mip stays 0 and writes to it are ignored. mie keeps only the three bits above.
+Emulator: mip shows what the devices drive: MTIP and MSIP from the CLINT (MEIP waits for the PLIC). Software writes to mip are ignored. mie keeps only the three bits above. The CSRs tab spells out both: "software=0 timer=1 external=0".
 
 Related: interrupt, interrupt-sources, mstatus, mcause
 
@@ -276,7 +284,7 @@ The m versions can be written; cycle and instret are read-only copies that user 
 
 For: measuring how long code takes.
 
-Emulator: one instruction per cycle, so all four read the same number, the step count shown in the toolbar, until a program writes mcycle or minstret. A write changes only that counter.
+Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
 
 Watch out:
 - reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).

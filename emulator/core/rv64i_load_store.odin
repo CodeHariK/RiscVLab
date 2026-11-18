@@ -15,7 +15,7 @@ exec_load :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 
 	address := reg_read(cpu, rs1(instruction)) + imm_i(instruction)
 	size := u64(1) << (kind & 0b11)
-	value, ok := bus_load(bus, address, size)
+	value, ok := bus_load(bus, address, size, cpu_clock(cpu))
 	if !ok {
 		return trap_make(.Load_Access_Fault, address)
 	}
@@ -45,9 +45,12 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	size := u64(1) << kind
 
 	// Save the bytes about to be overwritten, for undo (a peek: it must not
-	// count as a read for a device).
-	old_value, readable := bus_peek(bus, address, size)
-	if !readable || !bus_store(bus, address, size, reg_read(cpu, rs2(instruction))) {
+	// count as a read for a device). For a device the old value is only
+	// shown (the debugger): undo puts back the device's own saved state
+	// instead (machine_step_back). So the peek may fail, for a register
+	// that can't be read back, without stopping the store.
+	old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+	if !bus_store(bus, address, size, reg_read(cpu, rs2(instruction)), cpu_clock(cpu)) {
 		return trap_make(.Store_Access_Fault, address)
 	}
 	cpu.undo.memory_changed = true

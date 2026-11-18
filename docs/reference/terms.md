@@ -187,10 +187,23 @@ Related: misa
 *term*
 
 Does: the two kinds of trap.
-- An exception is caused by the instruction being run: a bad load, an illegal instruction, `ecall`. It happens at that instruction, every time.
-- An interrupt comes from outside: a timer, a device. It arrives between instructions, at any time, when enabled.
+- An exception is caused by the instruction being run: a bad load, an illegal instruction, `ecall`. It happens at that instruction, every time ("synchronous").
+- An interrupt comes from outside: a timer, a device. It arrives between instructions, whenever the outside event happens ("asynchronous"), when enabled.
 
-For: mcause's top bit says which one it was. Exceptions are taken no matter what; interrupts only when mstatus.MIE and the bit in mie allow them.
+How it works: both go through the same trap entry (see trap): mepc, mcause, mtval, mstatus, jump to mtvec, and back with `mret`. They differ in:
+| | Exception | Interrupt |
+|---|---|---|
+| Caused by | the instruction itself | something outside the program |
+| Examples | ecall, ebreak, illegal instruction, a load from a bad address | the CLINT's timer, a key arriving at the UART (through the PLIC), another hart |
+| When | at that instruction | between any two instructions |
+| Repeatable | yes: run the program again, it traps at the same place | no, on real hardware: it depends on when the event comes (here time counts steps, so it repeats too) |
+| mcause bit 63 | 0 | 1 |
+| mepc | the instruction that trapped (an ecall: add 4 before mret) | the next instruction, not yet run (return to it unchanged) |
+| mtval | the bad address or instruction, if any | 0 |
+| Can be turned off | no: an instruction that can't complete must trap | yes: mie per kind, mstatus.MIE for all |
+| mtvec vectored mode | always to BASE | to BASE + 4 * number |
+
+For: mcause's top bit says which one it was, so one handler can serve both. Exceptions are the program asking for something or making a mistake; interrupts are the world asking for attention.
 
 Related: trap, interrupt, mcause, mie mip
 

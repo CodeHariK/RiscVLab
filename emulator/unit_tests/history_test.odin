@@ -13,7 +13,7 @@ ADDI_T0_T0_1 :: u32(0x0012_8293) // addi t0, t0, 1
 machine_of_addis :: proc(capacity: int, count: int) -> rv.Machine {
 	machine := rv.machine_create(64 * 1024, capacity)
 	for index in 0 ..< count {
-		rv.bus_store(&machine.bus, rv.RAM_BASE + u64(index) * 4, 4, u64(ADDI_T0_T0_1))
+		rv.machine_store(&machine, rv.RAM_BASE + u64(index) * 4, 4, u64(ADDI_T0_T0_1))
 	}
 	return machine
 }

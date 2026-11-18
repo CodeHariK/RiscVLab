@@ -12,7 +12,7 @@ import loader "../loader"
 print_disassembly :: proc(machine: ^rv.Machine, program: loader.Program) {
 	buffer: [disasm.BUFFER_SIZE]u8
 	for pc := program.code_start; pc + 4 <= program.code_end; pc += 4 {
-		raw, _ := rv.bus_peek(&machine.bus, pc, 4)
+		raw, _ := rv.machine_peek(machine, pc, 4)
 		instruction := u32(raw)
 		fmt.printfln("%x %08x %s", pc, instruction, disasm.disassemble(buffer[:], pc, instruction))
 	}

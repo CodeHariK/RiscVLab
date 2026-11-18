@@ -33,7 +33,7 @@ make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 - **Controls:** **Reset** reloads the program; **Prev** / **Next** (or the left / right arrow keys) undo or run one instruction. **Programs** (P or ~) opens the program list, **Docs** (D) the reference docs; both windows have a search box and close with Esc. **Theme** switches light / dark.
 - **Code panel:** **Source** (the `.s` file with its comments; programs are assembled with `-g` and the build writes an address -> line map), **Disassembly** (with symbol labels) and **Steps** (every step so far, newest first; Compact or Detailed with every stage of each instruction).
 - **Registers:** the pc and x0..x31; tags show what the next instruction reads (rs1 / rs2) and writes (rd), and the last change is highlighted.
-- **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps), **ELF** (what the loader found) and **Devices** (the UART's registers, decoded).
+- **Side panel:** **CSRs** (privilege level and CSRs, last change highlighted), **Memory** (around the address being used, as words or bytes), **Stack** (sp up to the top, with frames worked out from the steps), **ELF** (what the loader found) and **Devices** (the CLINT's and UART's registers, decoded, with a countdown to the next timer interrupt).
 - **Encoding:** the next instruction's 32 bits as colour-coded fields, then what it reads, computes and writes. Next to it, **Console** shows what the program printed through the UART.
 - **Layout:** drag the gaps between panels to resize them, and a panel's `::` grip onto another to swap them; **Reset layout** puts them back.
 - **Remembered:** theme, layout, each panel's tab, the Steps and Memory modes and the last program are saved to `~/Library/Application Support/RiscVLab/rvdbg.json` (macOS; `~/.config/RiscVLab/` elsewhere) whenever they change, and restored at startup.
@@ -59,7 +59,7 @@ The emulator is split into a **core** and **front ends**, so the same core can d
 
 ```
 core      the CPU and the machine                         (package rv)
-devices   the UART (later CLINT, PLIC)   -> uses core     (package devices)
+devices   CLINT, UART (later the PLIC)   -> uses core     (package devices)
 loader    ELF / raw program loading      -> uses core     (package loader)
 disasm    instruction bits to text       -> uses core     (package disasm)
 cli       command-line runner            -> uses all four
@@ -79,6 +79,7 @@ No file access and no printing, so it compiles for any target.
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing: RAM, or an attached device (`Device`, `bus_attach`); `bus_peek` reads without side effects; fetch is from RAM only |
+| `interrupts.odin` | Interrupts: the devices' lines into mip (read only when they can have changed), which interrupt to take at an instruction boundary |
 | `memory_map.odin` | Address constants, matching QEMU `virt` |
 | `zeroed_pages.odin` | RAM and undo history mapped straight from the OS (`zeroed_pages_wasm.odin` for WebAssembly) |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
@@ -100,6 +101,7 @@ No file access and no printing, so it compiles for any target.
 
 | File | Responsibility |
 |---|---|
+| `clint.odin` | The CLINT at `0x02000000`: msip, mtimecmp, and mtime following the step clock (clock + offset); drives mip's MTIP and MSIP |
 | `uart.odin` | The UART (NS16550A, as on QEMU) at `0x10000000`: its registers, `output` (what the program printed), `uart_input`, and undo of its state |
 
 ### `loader/` (package `loader`): putting a program in memory
@@ -148,7 +150,7 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 
 ### `unit_tests/` (package `rv_unit_tests`)
 
-Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`), the undo history (`history_test.odin`), the loader's checks (`loader_test.odin`), the UART and devices on the bus (`uart_test.odin`). Run with `make unit`.
+Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`), the undo history (`history_test.odin`), the loader's checks (`loader_test.odin`), the UART and devices on the bus (`uart_test.odin`), the CLINT and interrupts (`clint_test.odin`). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 

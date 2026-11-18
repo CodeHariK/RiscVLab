@@ -647,8 +647,9 @@ For:
 Watch out:
 - With rd = zero the old value is thrown away: `amoswap.w zero, zero, (a0)` just stores 0 atomically (a lock release).
 - The suffixes `.aq` / `.rl` / `.aqrl` (e.g. `amoswap.w.aq`) add memory ordering: see memory-ordering. They don't change what the instruction computes.
+- Atomics are for RAM. Each region of a real memory map says whether it supports them, and device regions often don't. This emulator raises an access fault for lr, sc or an AMO on a device address (Store_Access_Fault, or Load_Access_Fault for lr).
 
-Related: lr.w lr.d sc.w sc.d, locks, memory-ordering, add sub
+Related: lr.w lr.d sc.w sc.d, locks, memory-ordering, add sub, mmio
 
 Example:
 ```
@@ -707,7 +708,7 @@ For: asking more privileged code to do something. A user program asks the kernel
 
 Watch out:
 - The handler must add 4 to mepc before `mret`, or it returns to the `ecall` and runs it again.
-- With no handler (mtvec = 0) this emulator stops instead. Lessons 12 and 13.
+- With no handler (mtvec's base address is 0) this emulator stops instead. Lessons 12 and 13.
 
 Related: mret, ebreak, csrrw (mtvec), system-call
 
@@ -760,6 +761,27 @@ csrw mepc, t0
 mret
 ```
 
+
+## wfi - Wait for interrupt
+
+*I-type, privileged*
+
+Does: tells the hart it has nothing to do until an interrupt arrives. On real hardware the hart can stop and save power; the next interrupt (even one that is pending but not enabled) wakes it, and it carries on after the wfi.
+
+How it works: wfi is only a hint. The spec allows a hart to treat it as a nop, and then the software's own loop does the waiting:
+```
+idle:
+wfi                      # sleep until something happens
+j     idle               # (an interrupt handler ran; look for work again)
+```
+
+For: an OS's idle loop: xv6's scheduler runs wfi when no process is ready, instead of spinning at full power.
+
+Emulator: a nop. Time counts steps here (see emulator-time), so a loop around wfi still reaches its timer interrupt. Jumping the clock ahead to the next alarm instead can come later, as a speed-up.
+
+Watch out: wfi doesn't turn interrupts on. If none can be taken (mie or mstatus.MIE off), a real hart may sleep for ever, or keep going: code mustn't rely on either.
+
+Related: interrupt, clint, emulator-time
 ## csrrw csrrwi - CSR read and write
 
 *I-type (CSR), Zicsr*

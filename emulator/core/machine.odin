@@ -22,7 +22,7 @@ Machine :: struct {
 Stop_Reason :: enum {
 	// EBREAK: the normal way for a test program to finish.
 	Breakpoint,
-	// Any other trap while no handler is set up (mtvec = 0).
+	// Any other trap while no handler is set up (mtvec's base is 0).
 	Trap,
 	// The step limit was reached (guards against endless loops).
 	Step_Limit,
@@ -62,10 +62,17 @@ machine_destroy :: proc(machine: ^Machine) {
 
 // Runs one instruction and records how to undo it.
 //
-// If the instruction traps and a handler is set up (mtvec != 0), the trap
-// is taken: the hart jumps to the handler, `last_trap` is set and the
-// step counts as done (nil). If there is no handler, nothing changed, so
-// nothing is recorded and the trap is returned: the machine stops.
+// First, at the instruction boundary: if an interrupt is pending and
+// enabled (interrupts.odin), it is taken instead, and the instruction at
+// the pc doesn't run (it runs after the handler's mret).
+//
+// If the instruction traps and a handler is set up (mtvec's base != 0),
+// the trap is taken: the hart jumps to the handler, `last_trap` is set and
+// the step counts as done (nil). If there is no handler, nothing changed,
+// so nothing is recorded and the trap is returned: the machine stops.
+//
+// Every step that is done moves mcycle, and so the step clock, on by one
+// (cpu_clock); minstret counts only the instructions that completed.
 machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu := &machine.cpu
 	cpu.undo = Undo_Record {
@@ -77,7 +84,21 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	machine.last_trap = nil
 	machine.bus.touched = {}
 
-	result := cpu_step(cpu, &machine.bus)
+	if cpu_clock(cpu) >= machine.bus.interrupts_change_at {
+		machine_update_interrupts(machine) // an alarm time has come
+	}
+	result: Step_Result
+	// The common case, nothing pending and enabled, costs one test.
+	cause, take := Trap_Cause{}, false
+	if cpu.csr.mip & cpu.csr.mie != 0 {
+		cause, take = interrupt_to_take(cpu)
+	}
+	if take {
+		cpu.last_write = {}
+		result = trap_make(cause, 0) // mtval is 0 for interrupts
+	} else {
+		result = cpu_step(cpu, &machine.bus)
+	}
 	if touch := machine.bus.touched; touch.touched {
 		cpu.undo.device_changed = true
 		cpu.undo.device_index = u8(touch.index)
@@ -94,12 +115,26 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		cpu.undo.trap_mtval = cpu.csr.mtval
 		trap_enter(cpu, trap)
 		machine.last_trap = trap
+		cpu.cycle += 1 // cpu_step counts only instructions that completed
 	}
 
 	if history_is_enabled(&machine.history) {
 		history_push(&machine.history, cpu.undo)
 	}
+	// Look again if a device register was used or an alarm time came.
+	// (mie and mstatus.MIE don't change mip: they are checked when the
+	// interrupt is about to be taken, above.)
+	if machine.bus.touched.touched || cpu_clock(cpu) >= machine.bus.interrupts_change_at {
+		machine_update_interrupts(machine)
+	}
 	return nil
+}
+
+// Sets mip to what the devices drive now, and notes when to look again.
+// mip is never stored for undo: it follows from the devices' state and
+// the step clock, so it is worked out again whenever either changes.
+machine_update_interrupts :: proc(machine: ^Machine) {
+	machine.cpu.csr.mip, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, cpu_clock(&machine.cpu))
 }
 
 // Undoes the most recent recorded step. Returns false when there is
@@ -117,7 +152,7 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 			device.restore(device.data, record.device_state)
 		}
 	} else if record.memory_changed {
-		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old)
+		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old, cpu_clock(&machine.cpu))
 	}
 	if record.register_changed {
 		machine.cpu.regs[record.register_index] = record.register_old
@@ -141,6 +176,7 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	machine.cpu.privilege = record.privilege
 	machine.cpu.last_write = {}
 	machine.last_trap = nil
+	machine_update_interrupts(machine)
 	return true
 }
 
@@ -180,9 +216,40 @@ machine_host_exit :: proc(machine: ^Machine) -> Maybe(u64) {
 	if !has_tohost {
 		return nil
 	}
-	value, _ := bus_peek(&machine.bus, address, 8)
+	value, _ := machine_peek(machine, address, 8)
 	if value & 1 == 0 {
 		return nil
 	}
 	return value >> 1
+}
+
+// Loads, stores and peeks as the machine sees memory and its devices
+// now (at its step clock): for front ends and tests, which would
+// otherwise pass cpu_clock(&machine.cpu) to the bus themselves. These aren't
+// steps, so they aren't undone; but a load or store can change a device's
+// interrupt lines (setting mtimecmp), so mip is worked out again after one.
+machine_load :: proc(machine: ^Machine, address: u64, size: u64) -> (value: u64, ok: bool) {
+	value, ok = bus_load(&machine.bus, address, size, cpu_clock(&machine.cpu))
+	after_front_end_access(machine)
+	return value, ok
+}
+
+machine_peek :: proc(machine: ^Machine, address: u64, size: u64) -> (value: u64, ok: bool) {
+	return bus_peek(&machine.bus, address, size, cpu_clock(&machine.cpu))
+}
+
+machine_store :: proc(machine: ^Machine, address: u64, size: u64, value: u64) -> bool {
+	ok := bus_store(&machine.bus, address, size, value, cpu_clock(&machine.cpu))
+	after_front_end_access(machine)
+	return ok
+}
+
+// If the access reached a device: forget the touch (it belongs to no
+// step) and look at the interrupt lines again.
+@(private = "file")
+after_front_end_access :: proc(machine: ^Machine) {
+	if machine.bus.touched.touched {
+		machine.bus.touched = {}
+		machine_update_interrupts(machine)
+	}
 }

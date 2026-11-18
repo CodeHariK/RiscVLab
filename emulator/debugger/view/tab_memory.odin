@@ -110,7 +110,7 @@ memory_focus :: proc(session: ^state.Session, access: state.Memory_Access, chang
 		)
 	}
 	sp := rv.reg_read(&session.machine.cpu, 2)
-	if _, in_ram := rv.bus_peek(&session.machine.bus, sp, 1); in_ram {
+	if _, in_ram := rv.machine_peek(&session.machine, sp, 1); in_ram {
 		return sp, fmt.tprintf("around the stack pointer sp = 0x%x", sp)
 	}
 	return session.machine.cpu.pc, "the instruction at pc: instructions are stored in memory like any data"
@@ -121,7 +121,7 @@ memory_focus :: proc(session: ^state.Session, access: state.Memory_Access, chang
 @(private)
 memory_cell :: proc(session: ^state.Session, address: u64, size: u64, access: state.Memory_Access, changed: state.Memory_Access) -> ui.Table_Cell {
 	colors := ui.palette()
-	value, in_ram := rv.bus_peek(&session.machine.bus, address, size)
+	value, in_ram := rv.machine_peek(&session.machine, address, size)
 	text := "--------" if size == 4 else "--"
 	if in_ram {
 		text = fmt.tprintf("%08x", value) if size == 4 else fmt.tprintf("%02x", value)

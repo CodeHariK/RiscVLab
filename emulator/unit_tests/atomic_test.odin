@@ -24,7 +24,7 @@ machine_running :: proc(program: ..u32) -> rv.Machine {
 	machine := rv.machine_create(64 * 1024, 16)
 	machine.cpu.pc = rv.RAM_BASE
 	for instruction, index in program {
-		rv.bus_store(&machine.bus, rv.RAM_BASE + u64(index) * 4, 4, u64(instruction))
+		rv.machine_store(&machine, rv.RAM_BASE + u64(index) * 4, 4, u64(instruction))
 	}
 	machine.cpu.regs[6] = DATA
 	return machine
@@ -40,14 +40,14 @@ SC_D :: proc() -> u32 { return amo(rv.AMO_SC, true) }
 lr_then_sc_succeeds :: proc(t: ^testing.T) {
 	machine := machine_running(LR_D(), SC_D())
 	defer rv.machine_destroy(&machine)
-	rv.bus_store(&machine.bus, DATA, 8, 0x11)
+	rv.machine_store(&machine, DATA, 8, 0x11)
 	machine.cpu.regs[7] = 0x22
 
 	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.regs[5], 0x11) // loaded
 	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.regs[5], 0) // success
-	value, _ := rv.bus_load(&machine.bus, DATA, 8)
+	value, _ := rv.machine_load(&machine, DATA, 8)
 	testing.expect_value(t, value, 0x22)
 	testing.expect(t, !machine.cpu.reservation.valid) // used up
 }
@@ -60,7 +60,7 @@ sc_without_lr_fails :: proc(t: ^testing.T) {
 
 	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.regs[5], 1) // failure
-	value, _ := rv.bus_load(&machine.bus, DATA, 8)
+	value, _ := rv.machine_load(&machine, DATA, 8)
 	testing.expect_value(t, value, 0) // memory unchanged
 }
 
@@ -126,17 +126,17 @@ misaligned_atomics_trap :: proc(t: ^testing.T) {
 word_amo_sign_extends_and_compares_32_bits :: proc(t: ^testing.T) {
 	machine := machine_running(amo(rv.AMO_ADD, false), amo(rv.AMO_MINU, false))
 	defer rv.machine_destroy(&machine)
-	rv.bus_store(&machine.bus, DATA, 4, 0x8000_0000)
+	rv.machine_store(&machine, DATA, 4, 0x8000_0000)
 	machine.cpu.regs[7] = 1
 
 	rv.machine_step(&machine) // amoadd.w
 	testing.expect_value(t, machine.cpu.regs[5], 0xffff_ffff_8000_0000) // old value, sign-extended
-	value, _ := rv.bus_load(&machine.bus, DATA, 4)
+	value, _ := rv.machine_load(&machine, DATA, 4)
 	testing.expect_value(t, value, 0x8000_0001)
 
 	machine.cpu.regs[7] = 0xffff_ffff_0000_0002 // only the low 32 bits count: 2
 	rv.machine_step(&machine) // amominu.w
-	value, _ = rv.bus_load(&machine.bus, DATA, 4)
+	value, _ = rv.machine_load(&machine, DATA, 4)
 	testing.expect_value(t, value, 2) // 2 < 0x80000001 unsigned
 }
 

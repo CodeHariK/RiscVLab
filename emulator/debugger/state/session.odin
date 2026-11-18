@@ -12,9 +12,10 @@ import loader "../../loader"
 // three actions below, which match the three controls: Reset, Prev, Next.
 Session :: struct {
 	machine:      rv.Machine,
-	// The machine's UART: what the program printed (Console tab). The bus
-	// owns it.
+	// The machine's UART: what the program printed (Console tab), and its
+	// CLINT (the timer). The bus owns both.
 	uart:         ^devices.Uart,
+	clint:        ^devices.Clint,
 	// The program's bytes, kept so Reset can reload a fresh copy.
 	image:        []u8,
 	// Where the program starts and where its code is (from the loader).
@@ -104,6 +105,7 @@ session_destroy :: proc(session: ^Session) {
 session_reset :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
+	session.clint = devices.clint_attach(&session.machine.bus)
 	session.uart = devices.uart_attach(&session.machine.bus)
 	// session_open checked that the program loads, so it loads again here.
 	session.program, _ = loader.load_program(&session.machine, session.image)
@@ -125,7 +127,7 @@ session_next :: proc(session: ^Session) {
 	}
 	access := next_memory_access(session)
 	pc := session.machine.cpu.pc
-	instruction, _ := rv.bus_peek(&session.machine.bus, pc, 4)
+	instruction, _ := rv.machine_peek(&session.machine, pc, 4)
 	inputs := step_inputs_capture(session, u32(instruction))
 	// Named before the step: a store to LCR can change what offset 0 is.
 	device_register := ""
@@ -213,7 +215,7 @@ session_update_preview :: proc(session: ^Session) {
 	}
 	machine := &session.machine
 	pc := machine.cpu.pc
-	raw, fetched := rv.bus_peek(&machine.bus, pc, 4)
+	raw, fetched := rv.machine_peek(machine, pc, 4)
 	if !fetched {
 		return
 	}

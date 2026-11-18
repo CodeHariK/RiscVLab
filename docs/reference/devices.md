@@ -17,7 +17,7 @@ How it works: the bus looks at every address. RAM addresses go to memory; an add
 - a load can change the device: loading the UART's RBR takes the received byte out of it, so the next load gets the next one.
 - some registers mean different things for loads and stores (offset 0 of the UART is RBR to a load, THR to a store).
 
-Emulator: a device decides which access sizes it accepts (the UART only bytes); anything else raises a load or store access fault. Instructions can't be fetched from a device: that raises Instruction_Access_Fault. Undo asks the device to put back its own state, so stepping back over a store to THR takes the byte back off the Console instead of sending another.
+Emulator: a device decides which access sizes it accepts (the UART only bytes); anything else raises a load or store access fault. Instructions can't be fetched from a device: that raises Instruction_Access_Fault. Atomics (lr, sc, the AMOs) work only on RAM: on a device they raise an access fault. Undo asks the device to put back its own state, so stepping back over a store to THR takes the byte back off the Console instead of sending another.
 
 Watch out: device registers are not memory. Reading back what you wrote may give something else, and reading the same register twice may give two different values. Compilers must not cache or reorder these accesses: C code uses `volatile` for them.
 
@@ -112,7 +112,7 @@ For:
 - preemptive multitasking: without a timer, a program that never makes a system call keeps the CPU for ever. The timer interrupt gives the kernel control back every few milliseconds, so it can switch to another program. xv6's scheduler and its sleep() depend on it.
 - msip: one hart wakes another (multi-core: "wake up", "flush your TLB").
 
-Emulator: not yet: it comes with the next steps on the way to xv6. The plan is for mtime to count instructions rather than wall-clock time (see emulator-time), so a timer interrupt arrives at exactly the same instruction on every run, Prev can step back over it, and the debugger can say "next timer interrupt in 37 steps".
+Emulator: msip, mtimecmp and mtime, for one hart; 4- and 8-byte accesses (the 8-byte registers also as two 4-byte halves). mtime counts steps rather than wall-clock time (see emulator-time): it is the step clock plus an offset that writing mtime changes, so a timer interrupt arrives at exactly the same instruction on every run, and Prev steps back over it. mtimecmp starts as all ones (no alarm). The Devices tab shows the three registers and counts down "timer interrupt pending in N steps". Lesson 21.
 
 Watch out: xv6 today doesn't use mtimecmp from its kernel. It uses the Sstc extension: the supervisor-mode kernel sets its own alarm in the stimecmp CSR, and reads the clock with the time CSR (rdtime), which mirrors mtime. Older xv6 set mtimecmp from a small machine-mode handler instead. Either way the clock is the CLINT's mtime.
 
@@ -154,7 +154,7 @@ What the step clock changes, compared with real time:
 | Idle (wfi, wait for interrupt) | no instructions run, so mtime would never reach the alarm: wfi must jump mtime forward to mtimecmp (and so wastes no time spinning) |
 | Waiting for a key | the hard case: with only the UART left to wait for, the emulator must wait for real input from you, not jump ahead |
 
-Emulator: not built yet. The plan: the step clock first (the debugger and lessons need it), wfi with the jump forward, then the host clock when xv6's shell runs from rvemu.
+Emulator: the step clock, at one tick per step: an instruction, or a trap or interrupt taken into a handler. mtime = the step clock + an offset that writing mtime changes. The step clock is not mcycle itself: they count the same steps, but a program can write mcycle, and on real hardware that doesn't move mtime. It is worked out as mcycle + an offset, and writing mcycle changes the offset by just enough that the step clock carries on as if nothing happened. wfi is a nop for now; the jump forward to the next alarm, and the host clock for xv6's shell in rvemu, come later.
 
 Watch out: with the step clock, "seconds" in a program are only as real as the ratio says. Timing measured inside the emulator (how long a loop takes) tells you about instructions, not about real hardware.
 

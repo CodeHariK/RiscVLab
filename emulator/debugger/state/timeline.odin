@@ -38,7 +38,7 @@ Timeline_Entry :: struct {
 	// to put back on Prev.
 	writes:       Step_Writes,
 	// Only in the Next preview: the instruction traps with no handler set
-	// up (mtvec = 0), so running it stops the machine instead.
+	// up (mtvec base = 0), so running it stops the machine instead.
 	stops:        bool,
 }
 
@@ -57,10 +57,10 @@ step_inputs_capture :: proc(session: ^Session, instruction: u32) -> Step_Inputs 
 	case rv.OPCODE_LOAD:
 		address := inputs.rs1_value + rv.imm_i(instruction)
 		size := u64(1) << (rv.funct3(instruction) & 0b11)
-		inputs.load_value, _ = rv.bus_peek(&machine.bus, address, size)
+		inputs.load_value, _ = rv.machine_peek(machine, address, size)
 	case rv.OPCODE_AMO:
 		size := u64(1) << (rv.funct3(instruction) & 0b11)
-		inputs.load_value, _ = rv.bus_peek(&machine.bus, inputs.rs1_value, size)
+		inputs.load_value, _ = rv.machine_peek(machine, inputs.rs1_value, size)
 		inputs.reservation = machine.cpu.reservation
 	}
 	return inputs
@@ -88,7 +88,7 @@ timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs
 		entry.register_new = machine.cpu.regs[record.register_index]
 	}
 	if record.memory_changed {
-		entry.memory_new, _ = rv.bus_peek(&machine.bus, record.memory_address, record.memory_size)
+		entry.memory_new, _ = rv.machine_peek(machine, record.memory_address, record.memory_size)
 	}
 	if record.csr_changed {
 		entry.csr_new, _ = rv.csr_read(&machine.cpu, record.csr_address)

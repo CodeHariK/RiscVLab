@@ -66,7 +66,19 @@ last_write_device_register :: proc(session: ^Session, name: string) -> int {
 // device register this knows by name.
 device_register_name :: proc(session: ^Session, address: u64) -> string {
 	device, _, found := rv.bus_device_at(&session.machine.bus, address)
-	if !found || device.name != "uart" || session.uart == nil {
+	if !found {
+		return ""
+	}
+	if device.name == "clint" {
+		offset := address - device.base
+		switch {
+		case offset >= devices.CLINT_MSIP && offset < devices.CLINT_MSIP + 4: return "clint.msip"
+		case offset >= devices.CLINT_MTIMECMP && offset < devices.CLINT_MTIMECMP + 8: return "clint.mtimecmp"
+		case offset >= devices.CLINT_MTIME && offset < devices.CLINT_MTIME + 8: return "clint.mtime"
+		}
+		return ""
+	}
+	if device.name != "uart" || session.uart == nil {
 		return ""
 	}
 	switch devices.uart_register_name(session.uart, address - device.base, true) {

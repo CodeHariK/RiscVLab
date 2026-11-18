@@ -5,6 +5,7 @@ import clay "../../vendor/clay-odin"
 import rl "vendor:raylib"
 import ui "../ui"
 import state "../state"
+import rv "../../core"
 
 // The debugger window, described with Clay:
 //
@@ -173,7 +174,7 @@ toolbar :: proc(session: ^state.Session) {
 
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(16)}}}) {}
 		cpu := &session.machine.cpu
-		info := fmt.tprintf("%s    step %d    pc 0x%x", session.program_name, cpu.instret, cpu.pc)
+		info := fmt.tprintf("%s    step %d    pc 0x%x", session.program_name, rv.cpu_clock(cpu), cpu.pc)
 		clay.TextDynamic(info, ui.text_config(.Code, colors.text_dim))
 		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(24)}}}) {}
 		ended := session.stopped != nil || session.exited != nil

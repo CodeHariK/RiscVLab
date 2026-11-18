@@ -59,6 +59,7 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 		machine.cpu.reservation == start_reservation &&
 		machine.cpu.instret == 0 &&
 		machine.cpu.cycle == 0 &&
+		machine.cpu.clock_offset == 0 &&
 		slice.equal(machine.bus.ram, start_ram) &&
 		devices_match(machine, start_devices)
 

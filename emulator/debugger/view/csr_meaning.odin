@@ -47,6 +47,10 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 			return "no trap yet"
 		}
 		return cause_text(value)
+	case rv.CSR_MIE:
+		return interrupt_bits_text(value, "enabled")
+	case rv.CSR_MIP:
+		return interrupt_bits_text(value, "pending (driven by the devices)")
 	case rv.CSR_MISA:
 		return "RV64IMA"
 	case rv.CSR_MINSTRET:
@@ -57,20 +61,32 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 	return value_text(value)
 }
 
-// mcause as a name: "Illegal_Instruction", "interrupt 7" (bit 63 set), or
-// the number for a value that names no cause (software can write any).
+// mcause as a name: "Illegal_Instruction", "Machine_Timer_Interrupt",
+// "interrupt 9" for another interrupt (bit 63 set), or the number for a
+// value that names no cause (software can write any).
 @(private)
 cause_text :: proc(value: u64) -> string {
-	INTERRUPT_BIT :: u64(1) << 63
-	if value & INTERRUPT_BIT != 0 {
-		return fmt.tprintf("interrupt %d", value &~ INTERRUPT_BIT)
-	}
 	for cause in rv.Trap_Cause {
 		if u64(cause) == value {
 			return fmt.tprintf("%v", cause)
 		}
 	}
+	if value & rv.INTERRUPT_BIT != 0 {
+		return fmt.tprintf("interrupt %d", value &~ rv.INTERRUPT_BIT)
+	}
 	return fmt.tprintf("%s: not a cause this hart raises", value_text(value))
+}
+
+// mie / mip: the three machine interrupt bits.
+@(private)
+interrupt_bits_text :: proc(value: u64, what: string) -> string {
+	return fmt.tprintf(
+		"%s: software=%d timer=%d external=%d",
+		what,
+		(value & rv.MIP_MSIP) >> 3,
+		(value & rv.MIP_MTIP) >> 7,
+		(value & rv.MIP_MEIP) >> 11,
+	)
 }
 
 // True if the last Next changed this CSR: a CSR instruction or MRET wrote

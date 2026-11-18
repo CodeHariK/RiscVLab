@@ -153,9 +153,15 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MTVAL:
 		csr.mtval = value
 	case CSR_MIP:
-		// Pending bits are set by devices (timer, interrupt controller),
-		// none of which exist yet; software writes are ignored.
+		// The pending bits are wires from the devices (the CLINT's timer
+		// and software interrupts; interrupts.odin): software writes are
+		// ignored.
 	case CSR_MCYCLE:
+		// The step clock (cpu_clock = cycle + clock_offset) must not
+		// jump: like any step, this one moves it on by exactly one. So the
+		// offset takes up the difference between the new mcycle and the
+		// one it would have counted to (cycle + 1).
+		cpu.clock_offset += cpu.cycle + 1 - value
 		cpu.cycle = value
 		cpu.cycle_written = true
 	case CSR_MINSTRET:
@@ -168,7 +174,8 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 }
 
 // Puts back a value read earlier from this CSR, exactly, with no WARL
-// fix-ups (used by undo). Read-only and unknown CSRs are ignored.
+// fix-ups (used by undo, machine_step_back, before it puts the counters
+// back). Read-only and unknown CSRs are ignored.
 csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	csr := &cpu.csr
 	switch address {
@@ -189,6 +196,10 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	case CSR_MIP:
 		csr.mip = value
 	case CSR_MCYCLE:
+		// Undoing a write to mcycle: the offset goes back too. The step
+		// being undone moved the clock on by one, so before it the clock
+		// was one less than now, with mcycle = `value`.
+		cpu.clock_offset = cpu_clock(cpu) - 1 - value
 		cpu.cycle = value
 	case CSR_MINSTRET:
 		cpu.instret = value

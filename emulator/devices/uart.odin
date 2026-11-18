@@ -126,9 +126,9 @@ uart_register_name :: proc(uart: ^Uart, offset: u64, writing: bool) -> string {
 }
 
 @(private = "file")
-uart_load :: proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool) {
+uart_load :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64, ok: bool) {
 	uart := (^Uart)(data)
-	value = uart_peek(data, offset, size) or_return
+	value = uart_peek(data, offset, size, now) or_return
 	// Reading RBR takes the byte: the next read gets the one after it.
 	if offset == 0 && uart.registers.lcr & UART_LCR_DLAB == 0 && uart.input_read < len(uart.input) {
 		uart.input_read += 1
@@ -137,7 +137,7 @@ uart_load :: proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool
 }
 
 @(private = "file")
-uart_peek :: proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool) {
+uart_peek :: proc(data: rawptr, offset: u64, size: u64, _: u64) -> (value: u64, ok: bool) {
 	if size != 1 {
 		return 0, false
 	}
@@ -176,7 +176,7 @@ uart_peek :: proc(data: rawptr, offset: u64, size: u64) -> (value: u64, ok: bool
 }
 
 @(private = "file")
-uart_store :: proc(data: rawptr, offset: u64, size: u64, value: u64) -> (ok: bool) {
+uart_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, _: u64) -> (ok: bool) {
 	if size != 1 {
 		return false
 	}

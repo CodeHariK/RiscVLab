@@ -181,7 +181,7 @@ Opcode 1110011 (SYSTEM), I-type with the CSR address in bits 31:20. Each puts th
 
 Assembler shorthands: `csrr rd, csr` = CSRRS rd, csr, x0; `csrw csr, rs1` = CSRRW x0, csr, rs1. A CSR that isn't implemented, or a write to a read-only one, raises `Illegal_Instruction`.
 
-Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64I, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle, minstret (= instructions retired); cycle, instret (read-only copies).
+Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64I, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle (= steps: instructions, and traps and interrupts taken), minstret (= instructions retired); cycle, instret (read-only copies).
 
 ## Not supported yet
 

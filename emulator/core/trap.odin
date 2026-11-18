@@ -1,7 +1,8 @@
 package rv
 
-// Synchronous exception causes, numbered as in the privileged spec's
-// `mcause` table. Interrupt causes come later with the CLINT and PLIC.
+// Trap causes, numbered as in the privileged spec's `mcause` table:
+// exceptions (caused by an instruction), then interrupts, which have bit
+// 63 set (interrupts.odin).
 Trap_Cause :: enum u64 {
 	Instruction_Address_Misaligned = 0,
 	Instruction_Access_Fault       = 1,
@@ -14,6 +15,28 @@ Trap_Cause :: enum u64 {
 	Ecall_From_U_Mode              = 8,
 	Ecall_From_S_Mode              = 9,
 	Ecall_From_M_Mode              = 11,
+	// Interrupts: bit 63, then the interrupt's number (its bit in mie / mip).
+	Machine_Software_Interrupt     = INTERRUPT_BIT | 3,
+	Machine_Timer_Interrupt        = INTERRUPT_BIT | 7,
+	Machine_External_Interrupt     = INTERRUPT_BIT | 11,
+}
+
+// mcause bit 63: the trap was an interrupt, not an exception. The rest
+// of mcause is the number: the exception code, or the interrupt's bit in
+// mie / mip.
+//
+//   cause                     mcause               bit 63  kind
+//   Illegal_Instruction       0x2                  0       exception
+//   Ecall_From_M_Mode         0xb                  0       exception
+//   Machine_Timer_Interrupt   0x8000000000000007   1       interrupt
+INTERRUPT_BIT :: u64(1) << 63
+
+// True if the trap is an interrupt (from outside: the timer, a device)
+// rather than an exception (caused by the instruction). They are taken
+// the same way, except where the spec tells them apart: vectored mtvec
+// (trap_enter), and mepc pointing at an instruction that hasn't run.
+trap_is_interrupt :: proc(cause: Trap_Cause) -> bool {
+	return u64(cause) & INTERRUPT_BIT != 0
 }
 
 // A raised exception: why it happened, plus the value that will go into

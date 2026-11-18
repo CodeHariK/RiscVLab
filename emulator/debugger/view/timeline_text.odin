@@ -23,6 +23,9 @@ timeline_effect :: proc(session: ^state.Session, entry: state.Timeline_Entry) ->
 	if trap, took_trap := entry.trap.?; took_trap && entry.stops {
 		return fmt.tprintf("%v, no trap handler: the machine stops", trap.cause)
 	}
+	if trap, took_trap := entry.trap.?; took_trap && rv.trap_is_interrupt(trap.cause) {
+		return fmt.tprintf("interrupted before it ran: %v -> handler 0x%x", trap.cause, entry.next_pc)
+	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		return fmt.tprintf("trap %v -> handler 0x%x", trap.cause, entry.next_pc)
 	}

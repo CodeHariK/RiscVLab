@@ -272,9 +272,9 @@ system_call_text :: proc(entry: state.Timeline_Entry) -> string {
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		if entry.stops {
-			return fmt.tprintf("raises %v; no handler is set up (mtvec = 0)", trap.cause)
+			return fmt.tprintf("raises %v; no handler is set up (mtvec base = 0)", trap.cause)
 		}
-		return fmt.tprintf("raises %v; mtvec = 0x%x is set, so the handler runs", trap.cause, entry.next_pc)
+		return fmt.tprintf("raises %v; mtvec is set, so the handler at 0x%x runs", trap.cause, entry.next_pc)
 	}
 	return "?"
 }

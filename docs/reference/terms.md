@@ -192,7 +192,7 @@ Does: the two kinds of trap.
 
 For: mcause's top bit says which one it was. Exceptions are taken no matter what; interrupts only when mstatus.MIE and the bit in mie allow them.
 
-Related: trap, mcause, mie mip
+Related: trap, interrupt, mcause, mie mip
 
 ## assembler - Assembler and linker
 

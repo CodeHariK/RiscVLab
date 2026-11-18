@@ -172,6 +172,64 @@ Emulator: only machine mode exists so far. Supervisor and user mode come next on
 
 Related: mstatus, mret, ecall, csr-addresses
 
+## interrupt - Interrupts
+
+*a device asking for attention*
+
+Does: lets a device (a timer, the UART, a disk) tell the CPU that something happened. The CPU stops the running program between two instructions, runs a handler for the device, then goes back exactly where it left off. The alternative is polling: the program asks the device again and again (lesson 19).
+
+How it works: an interrupt is a trap, with the same steps as an exception (see trap):
+1. mepc = the next instruction, the one that hadn't run yet.
+2. mcause = the cause, with bit 63 set: 0x8000000000000007 is the machine timer, 0x800000000000000b an external device.
+3. mstatus: MPIE = MIE, MIE = 0 (no interrupts inside the handler), MPP = the privilege level it came from.
+4. pc = mtvec (in vectored mode: mtvec base + 4 * cause).
+The handler deals with the device (reads the byte, sets the next timer) and ends with `mret`; the program never notices it was stopped.
+
+| | Exception | Interrupt |
+|---|---|---|
+| Caused by | the instruction itself (ecall, a bad address, an invalid instruction) | something outside the program: a timer, a device |
+| When | at that instruction, every time | between any two instructions, whenever it arrives |
+| mcause bit 63 | 0 | 1 |
+| mepc | the instruction that trapped | the next instruction, not yet run |
+| Can be turned off | no | yes: mie, mstatus.MIE |
+
+Fields: three switches decide whether an interrupt is taken now. All must be on:
+- mip bit: the interrupt is pending (the device is asking). Devices set it.
+- mie bit: this kind of interrupt is enabled. Software sets it.
+- mstatus.MIE: interrupts are enabled at all. Trap entry clears it; mret restores it.
+A pending interrupt that isn't enabled just waits in mip until it is.
+
+For:
+- the timer: an OS gets control back every few milliseconds, even from a program that never gives up the CPU, and switches to another program.
+- devices: xv6 doesn't spin waiting for the UART. It puts the text in a buffer and runs other programs; each time the UART can take a byte, it interrupts and the handler sends the next one. A key press arrives the same way.
+
+Emulator: no interrupts yet. Nothing sets mip, and the UART keeps IER but never raises one. The CLINT (timer) and PLIC (devices) come after supervisor and user mode.
+
+Watch out: an interrupt can arrive between any two instructions, so a handler must save and restore every register it uses (mscratch helps), and code that shares data with a handler must turn interrupts off around it, or use atomics.
+
+Related: interrupt-sources, polling, exception, trap, mie mip, mcause, mstatus
+
+## interrupt-sources - Where interrupts come from
+
+*software, timer, external*
+
+Does: each hart has three machine-mode interrupt lines, one bit each in mie and mip:
+| Bit | Name | mcause | Comes from |
+|---|---|---|---|
+| 3 | MSI: software interrupt | 0x8000000000000003 | another hart, writing the CLINT's msip register (multi-core: "wake up", "flush your TLB") |
+| 7 | MTI: timer interrupt | 0x8000000000000007 | the CLINT, when its mtime counter reaches mtimecmp |
+| 11 | MEI: external interrupt | 0x800000000000000b | the PLIC, which collects many devices (UART, virtio disk) into this one line |
+
+How it works:
+- CLINT ("core-local interruptor", at 0x02000000 on QEMU's virt board): a clock (mtime) that keeps counting, and a compare register (mtimecmp) per hart. Software sets mtimecmp to "now + 10 ms"; when mtime passes it, MTI turns on until mtimecmp is set again.
+- PLIC ("platform-level interrupt controller", at 0x0c000000): each device has an interrupt number (the UART is 10 on virt). The PLIC raises MEI when an enabled device asks; the handler then reads the PLIC's claim register to learn which device it was, deals with it, and writes the number back to say it is done.
+
+For: the timer is what makes an OS preemptive; the PLIC is how one CPU line serves many devices.
+
+Emulator: neither exists yet (see the TODO): mip stays 0. Supervisor mode adds a second set (SSI, STI, SEI) that machine mode can delegate.
+
+Related: interrupt, mie mip, memory-map, uart
+
 ## Instruction_Address_Misaligned - Jump to a misaligned address (cause 0x0)
 
 *exception: a fault*

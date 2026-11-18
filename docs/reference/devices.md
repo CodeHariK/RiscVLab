@@ -23,6 +23,30 @@ Watch out: device registers are not memory. Reading back what you wrote may give
 
 Related: uart, memory-map, lbu, sb
 
+## polling - Polling (busy-waiting)
+
+*asking a device again and again*
+
+Does: the program waits for a device by reading its status register in a loop until a bit says it is ready, then acts. No timer is involved: the device keeps time with its own clock and flips the bit when it is ready; the program only keeps asking.
+
+How it works: lesson 19 waits for the UART like this:
+```
+wait:
+lbu   t1, 5(s0)          # read LSR
+andi  t1, t1, 0x20       # THRE: ready for the next byte?
+beqz  t1, wait           # not yet: ask again
+sb    t0, 0(s0)          # ready: send the byte
+```
+On real hardware a byte takes about 87 microseconds at 115200 baud, so this loop may run some 100,000 times per byte. Receiving is the same with LSR bit 0 (DR).
+
+For: the simplest way to use a device, and the only one before interrupts are set up: early boot, a kernel's panic message, tiny programs.
+
+Emulator: the UART sends at once, so THRE is always 1 and the loop never repeats. The loop is still needed on real hardware.
+
+Watch out: while it polls, the CPU does nothing else. Real systems poll less with FIFOs (the 16550 queues 16 bytes, turned on through FCR, lesson 20) and not at all with interrupts: the device tells the CPU when it is ready (see interrupt).
+
+Related: interrupt, uart, mmio
+
 ## uart - The UART (serial port)
 
 *device at 0x10000000, an NS16550A*
@@ -52,7 +76,7 @@ Emulator: sending is instant, so THRE is always 1 and the byte appears at once: 
 
 Watch out: a real UART sends slowly (a byte takes about 87 microseconds at 115200 baud), far slower than the CPU. A program that stores to THR without checking THRE loses bytes on real hardware, even though it works here.
 
-Related: mmio, memory-map
+Related: mmio, polling, interrupt, memory-map
 
 Example:
 ```

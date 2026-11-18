@@ -223,7 +223,7 @@ For: choosing which interrupt sources matter, e.g. an OS enables the timer to sw
 
 Emulator: there are no interrupt sources yet (the timer comes later), so mip stays 0 and writes to it are ignored. mie keeps only the three bits above.
 
-Related: mstatus, mcause
+Related: interrupt, interrupt-sources, mstatus, mcause
 
 ## misa - Machine ISA
 

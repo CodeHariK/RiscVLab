@@ -123,7 +123,11 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		}
 		trap_enter(cpu, trap)
 		machine.last_trap = trap
-		cpu.csr.mcycle += 1 // cpu_step counts only instructions that completed
+		// A trap or interrupt taken into a handler is a step too, and
+		// takes a cycle. cpu_step only counts instructions that completed
+		// (an interrupt doesn't even reach it), so this step's cycle is
+		// counted here; minstret isn't, since nothing retired.
+		cpu.csr.mcycle += 1
 	}
 
 	when DEBUG_RECORD_STEPS {

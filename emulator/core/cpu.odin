@@ -31,7 +31,8 @@ Cpu :: struct {
 	step_clock_offset: u64,
 	// Set when this step's CSR instruction wrote minstret / mcycle: the
 	// written value then stands, without the instruction's own count
-	// (cpu_step). Cleared at the start of each step.
+	// (cpu_step). Cleared at the start of each step. (mcycle also counts a
+	// trap or interrupt taken into a handler: machine_step does that.)
 	minstret_written: bool,
 	mcycle_written:   bool,
 	// Current privilege level. (Next to the bools above, so the three
@@ -101,4 +102,46 @@ reg_write :: #force_inline proc(cpu: ^Cpu, index: u32, value: u64) {
 		cpu.last_write = Register_Write{valid = true, index = index, value = value}
 	}
 	cpu.regs[index] = value
+}
+
+// ------------------------------------------------------------ one instruction
+
+// Every instruction is 4 bytes: without the C extension there are no
+// 2-byte ones, so the next instruction is always at pc + 4.
+INSTRUCTION_SIZE :: u64(4)
+
+// Fetches, decodes and executes one instruction.
+//
+// On success the PC moves to `next_pc`, and minstret and mcycle count
+// the instruction (unless it wrote that counter: a CSR write takes effect
+// after the instruction, so the written value is what the next one reads).
+// On a trap the PC stays on the faulting instruction, which is where
+// `mepc` points, and neither counts here: the instruction didn't
+// complete. A trap taken into a handler still takes a cycle; machine_step
+// counts that one.
+cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		cpu.last_write = {}
+	}
+	cpu.minstret_written = false
+	cpu.mcycle_written = false
+
+	instruction, fetched := bus_fetch(bus, cpu.pc)
+	if !fetched {
+		return trap_make(.Instruction_Access_Fault, cpu.pc)
+	}
+
+	cpu.next_pc = cpu.pc + INSTRUCTION_SIZE
+	if trap, has_trap := execute(cpu, bus, instruction).?; has_trap {
+		return trap
+	}
+
+	cpu.pc = cpu.next_pc
+	if !cpu.minstret_written {
+		cpu.csr.minstret += 1
+	}
+	if !cpu.mcycle_written {
+		cpu.csr.mcycle += 1
+	}
+	return nil
 }

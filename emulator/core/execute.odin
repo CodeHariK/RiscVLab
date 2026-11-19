@@ -1,5 +1,9 @@
 package rv
 
+// Instruction dispatch: the major opcode (bits 6..0) picks the handler for
+// an instruction's group, in the rv64*.odin files. cpu_step (cpu.odin)
+// calls `execute` once per instruction, after fetching it.
+
 // Major opcodes (instruction bits 6..0), from the "RV32/64G Instruction Set
 // Listings" chapter of the unprivileged spec.
 OPCODE_LOAD :: 0b000_0011
@@ -16,45 +20,10 @@ OPCODE_JALR :: 0b110_0111
 OPCODE_JAL :: 0b110_1111
 OPCODE_SYSTEM :: 0b111_0011
 
-INSTRUCTION_SIZE :: u64(4)
-
-// Fetches, decodes and executes one instruction.
-//
-// On success the PC moves to `next_pc`, and minstret and mcycle count
-// the instruction (unless it wrote that counter: a CSR write takes effect
-// after the instruction, so the written value is what the next one reads).
-// On a trap the PC stays on the faulting instruction, which is where
-// `mepc` points.
-cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
-	when DEBUG_RECORD_STEPS {
-		cpu.last_write = {}
-	}
-	cpu.minstret_written = false
-	cpu.mcycle_written = false
-
-	instruction, fetched := bus_fetch(bus, cpu.pc)
-	if !fetched {
-		return trap_make(.Instruction_Access_Fault, cpu.pc)
-	}
-
-	cpu.next_pc = cpu.pc + INSTRUCTION_SIZE
-	if trap, has_trap := execute(cpu, bus, instruction).?; has_trap {
-		return trap
-	}
-
-	cpu.pc = cpu.next_pc
-	if !cpu.minstret_written {
-		cpu.csr.minstret += 1
-	}
-	if !cpu.mcycle_written {
-		cpu.csr.mcycle += 1
-	}
-	return nil
-}
-
 // Sends the instruction to the handler for its major opcode.
 // Each handler lives in the file for its instruction group.
-@(private = "file")
+// Package-private: only cpu_step (cpu.odin) calls it.
+@(private)
 execute :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	switch opcode(instruction) {
 	case OPCODE_LUI:

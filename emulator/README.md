@@ -78,7 +78,7 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
-| `cpu.odin` | Hart state: registers, PC, CSRs (including the counters mcycle and minstret), the LR / SC reservation, the current undo record; the step clock (`step_clock`) that devices keep time by |
+| `cpu.odin` | Hart state: registers, PC, CSRs (including the counters mcycle and minstret), the LR / SC reservation, the current undo record; the step clock (`step_clock`) that devices keep time by; `cpu_step`: fetch one instruction, run it, count it |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing: RAM, or an attached device (`Device`, `bus_attach`); `bus_peek` reads without side effects; fetch is from RAM only |
@@ -89,7 +89,7 @@ No file access and no printing, so it compiles for any target.
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
 | `privilege.odin` | Privilege levels and mstatus.MPP; trap entry (save `mepc` / `mcause` / `mtval`, update `mstatus`, jump to `mtvec`); MRET (return from a trap handler) |
 | `decode.odin` | Instruction field and immediate extraction |
-| `execute.odin` | Fetch, then dispatch by major opcode |
+| `execute.odin` | Dispatch: the major opcode picks the handler for the instruction's group |
 | `rv64i_upper.odin` | LUI, AUIPC |
 | `rv64i_control.odin` | JAL, JALR, branches |
 | `rv64i_load_store.odin` | Loads and stores |

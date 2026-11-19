@@ -82,7 +82,7 @@ The Encoding tab shows what the next step will read, compute and write; the Step
 In the code, `machine_step` (machine.odin) runs a step, in this order:
 1. Start the undo record: the pc, the counters and the privilege level.
 2. If the step clock has reached the time a device said its lines would change (the CLINT's alarm), work out mip again. Then the interrupt check; the common case, nothing pending, costs one test (`mip & mie`).
-3. Otherwise `cpu_step` (execute.odin): fetch, set `next_pc = pc + 4`, and `execute` switches on the opcode to the handler for the group (rv64i_alu.odin, rv64a.odin, ...). Handlers read fields with decode.odin, write rd through `reg_write`, jump by setting `next_pc`, and note everything they overwrite in the undo record first. No trap: pc = next_pc, and minstret and mcycle count one.
+3. Otherwise `cpu_step` (cpu.odin): fetch, set `next_pc = pc + 4`, and `execute` (execute.odin) switches on the opcode to the handler for the group (rv64i_alu.odin, rv64a.odin, ...). Handlers read fields with decode.odin, write rd through `reg_write`, jump by setting `next_pc`, and note everything they overwrite in the undo record first. No trap: pc = next_pc, and minstret and mcycle count one.
 4. If the step's load or store reached a device, the bus kept the device's state from before; it goes into the undo record.
 5. A trap with a handler: `trap_enter` (privilege.odin) sets mepc, mcause, mtval and mstatus (their old values go into the undo record), switches to machine mode and jumps to mtvec; mcycle counts the step, minstret doesn't. With no handler, nothing is recorded and the trap is returned: the machine stops.
 6. The record goes into the history.

@@ -75,7 +75,7 @@ Watch out:
 Notes:
 - CSR instructions are I-type whose 12-bit immediate is the CSR address (not sign-extended); the immediate forms put a 5-bit value in the rs1 field.
 - ECALL, EBREAK, MRET and WFI have every field fixed, so the emulator matches the whole 32-bit word.
-- Unprivileged vs privileged: everything here is from the unprivileged spec except MRET (`priv_return.odin`) and WFI (`rv64i_system.odin`, next to ECALL and EBREAK, which share its opcode). SRET and SFENCE.VMA come with supervisor mode and paging.
+- Unprivileged vs privileged: everything here is from the unprivileged spec except MRET (`privilege.odin`) and WFI (`rv64i_system.odin`, next to ECALL and EBREAK, which share its opcode). SRET and SFENCE.VMA come with supervisor mode and paging.
 
 ### Upper immediates (rv64i_upper.odin)
 
@@ -200,7 +200,7 @@ The A extension: lr, sc and the AMOs. R-type, opcode 0101111 (AMO). funct5 (bits
 | AMOMINU / AMOMAXU | 11000 / 11100 | unsigned min / max |
 Misaligned: LR raises Load_Address_Misaligned, SC and AMOs Store_Address_Misaligned. Outside RAM (nothing there, or a device: atomics work on RAM only): Load_Access_Fault for LR, Store_Access_Fault for SC and AMOs. Trap entry clears the reservation, and undo restores it.
 
-### Fences and system (rv64i_system.odin, priv_return.odin)
+### Fences and system (rv64i_system.odin, privilege.odin)
 
 The fences, ecall, ebreak, and the privileged mret and wfi.
 | Instruction | Encoding | Effect today |
@@ -209,7 +209,7 @@ The fences, ecall, ebreak, and the privileged mret and wfi.
 | FENCE.I (Zifencei) | opcode 0001111, funct3 001 | no-op (no instruction cache to flush) |
 | ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (the cause follows the current privilege level) |
 | EBREAK | 0x00100073 | trap `Breakpoint`; with no handler set up, the normal way for test programs to stop |
-| MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`priv_return.odin`) |
+| MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`privilege.odin`) |
 | WFI (privileged) | 0x10500073 | no-op: "wait for interrupt" is only a hint, and time here counts steps, so a loop around WFI still reaches its timer interrupt |
 
 ### CSR instructions (Zicsr, zicsr.odin)
@@ -224,6 +224,6 @@ The six CSR instructions. Opcode 1110011 (SYSTEM), I-type with the CSR address i
 | CSRRSI rd, csr, uimm | 110 | as CSRRS (no write if uimm = 0) |
 | CSRRCI rd, csr, uimm | 111 | as CSRRC (no write if uimm = 0) |
 Assembler shorthands: `csrr rd, csr` = CSRRS rd, csr, x0; `csrw csr, rs1` = CSRRW x0, csr, rs1. A CSR that isn't implemented, or a write to a read-only one, raises `Illegal_Instruction`.
-Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64IMA, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle (= steps: instructions, and traps and interrupts taken), minstret (= instructions retired); cycle, instret (read-only copies).
+Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64IMA with U, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle (= steps: instructions, and traps and interrupts taken), minstret (= instructions retired); cycle, instret (read-only copies).
 
 Related: lui, addi, add, lb, beq, jal, mul, lr.w, csrrw, immediate, sign-extension, two's-complement, emulator

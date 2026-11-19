@@ -14,8 +14,9 @@ Register_Write :: struct {
 
 // Architectural state of one RISC-V hart (hardware thread).
 //
-// The hart starts in machine mode, which is the only mode so far; traps
-// enter machine mode too (priv_trap.odin).
+// The hart starts in machine mode. MRET can take it down to user mode,
+// and every trap brings it back up to machine mode (privilege.odin).
+// Supervisor mode comes next.
 Cpu :: struct {
 	// Integer registers x0..x31. x0 always reads as zero.
 	regs:       [REGISTER_COUNT]u64,

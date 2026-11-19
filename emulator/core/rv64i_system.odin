@@ -1,7 +1,7 @@
 package rv
 
 // FENCE and the SYSTEM opcode: ECALL, EBREAK and WFI here; MRET is in
-// priv_return.odin, and the CSR instructions (also SYSTEM, with
+// privilege.odin, and the CSR instructions (also SYSTEM, with
 // funct3 != 0) are in zicsr.odin.
 
 ENCODING_ECALL :: u32(0x0000_0073)

@@ -798,7 +798,7 @@ csrw  csr, rs  ->  csrrw  zero, csr, rs
 csrwi csr, n   ->  csrrwi zero, csr, n
 ```
 
-Watch out: CSRs keep only the bits they support (WARL: "write any, read legal"). Reading back can give something else than what was written; here mstatus.MPP always stays machine mode. The step details say when this happens.
+Watch out: CSRs keep only the bits they support (WARL: "write any, read legal"). Reading back can give something else than what was written; here mstatus.MPP ignores supervisor mode (0b01), which the hart doesn't have yet. The step details say when this happens.
 
 Related: csrrs, csrrc, mret, encodings#CSR instructions
 

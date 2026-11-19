@@ -60,12 +60,20 @@ Related: csrrw, csrrs, csrrc, Illegal_Instruction
 
 Does: the hart's global state: whether interrupts are on, and what to restore when a trap handler returns.
 
-Fields:
+Fields: one 64-bit register made of small fields; these are the ones this emulator has (the rest read 0):
+```
+  bit:    63 ... 13 | 12  11 | 10  9  8 |   7  | 6  5  4 |  3  | 2  1  0
+  field:     (0)    |  MPP   |   (0)    | MPIE |   (0)   | MIE |   (0)
+
+  mstatus = 0x1880 = binary ...0001 1000 1000 0000
+                                  ^ ^    ^
+                                MPP=11   MPIE=1   (MIE, bit 3, is 0)
+```
 - MIE (bit 3): machine interrupts enabled. Trap entry clears it, so a handler is not interrupted.
 - MPIE (bit 7): MIE as it was before the last trap. `mret` copies it back into MIE.
-- MPP (bits 12..11): the privilege level before the last trap: 0b00 user, 0b01 supervisor, 0b11 machine. `mret` returns to it.
+- MPP (bits 12..11): the privilege level before the last trap: 0b00 user, 0b01 supervisor, 0b11 machine (0b10 is reserved). `mret` returns to it.
 
-How it works: on a trap, MPIE = MIE, MIE = 0 and MPP = the current level. On `mret`, MIE = MPIE, MPIE = 1, the level = MPP, and MPP = the least privileged mode.
+How it works: a field in the middle of a register is read by masking and shifting. MPP is bits 12..11, so its mask is 0b11 << 11 = 0x1800: `(mstatus & 0x1800) >> 11` gives 0..3, the mode. Writing it clears those two bits and ORs in the mode shifted left by 11. On a trap, MPIE = MIE, MIE = 0 and MPP = the current level. On `mret`, MIE = MPIE, MPIE = 1, the level = MPP, and MPP = the least privileged mode.
 
 Why MIE goes off in the handler: a second interrupt arriving inside the handler would trap again and overwrite mepc and mcause, so the handler could never get back. With MIE = 0 the handler runs undisturbed; a handler that wants to allow nesting saves mepc and mcause first, then turns MIE on itself.
 
@@ -75,7 +83,7 @@ Why mret restores it, instead of the handler doing `csrsi mstatus, 8` (MIE = 1) 
 
 For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`), and choosing which mode `mret` enters: an OS sets MPP to user mode, then `mret`s into a user program.
 
-Emulator: only machine mode exists so far, so MPP always reads 0b11 (machine): writing anything else is ignored (WARL). mstatus starts as 0x1800 for that reason. Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
+Emulator: machine and user mode exist so far, so MPP holds 0b11 (machine) or 0b00 (user); writing 0b01 (supervisor) or 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
 
 Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
 
@@ -243,7 +251,7 @@ Fields:
 - MXL (bits 63..62): register width: 1 = 32-bit, 2 = 64-bit.
 - Extensions (bits 25..0): one bit per letter: bit 0 = A, bit 8 = I, bit 12 = M, and so on.
 
-How it works: here misa = 0x8000000000001101: MXL = 2 (RV64), bit 0 (A), bit 8 (I) and bit 12 (M).
+How it works: here misa = 0x8000000000101101: MXL = 2 (RV64), bit 0 (A), bit 8 (I), bit 12 (M) and bit 20 (U: user mode).
 
 For: software that adapts to the hardware it runs on.
 

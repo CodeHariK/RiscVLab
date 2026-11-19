@@ -188,7 +188,7 @@ How it works: traps go up (to machine mode, or to supervisor mode when delegated
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 
-Emulator: only machine mode exists so far. Supervisor and user mode come next on the way to xv6.
+Emulator: machine and user mode so far. `mret` with MPP = 0b00 drops into user mode, where the machine CSRs, `mret` and the machine-only instructions raise Illegal_Instruction, `ecall` traps with cause 0x8, and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Every trap goes back to machine mode. Supervisor mode comes next, on the way to xv6.
 
 Related: mstatus, mret, ecall, csr-addresses
 

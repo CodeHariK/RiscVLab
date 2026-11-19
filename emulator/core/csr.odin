@@ -13,7 +13,8 @@ package rv
 // than its bits 9:8 allow (csr_allowed), reading or writing a CSR that
 // isn't implemented, or writing a read-only one, is illegal: the CSR
 // instructions (zicsr.odin) turn that into an Illegal_Instruction trap.
-// (The hart only runs in machine mode so far, which may access them all.)
+// All the CSRs so far are machine CSRs, except the read-only counters
+// cycle and instret, so user mode can only read those two.
 //
 // Many CSRs are "WARL" (write any value, read legal value): fields that
 // don't exist or can't hold the written value are fixed up on write.
@@ -45,19 +46,25 @@ CSR_MINSTRET :: 0xB02
 CSR_CYCLE :: 0xC00
 CSR_INSTRET :: 0xC02
 
-// mstatus fields kept so far (more arrive with supervisor and user mode).
-MSTATUS_MIE :: u64(1) << 3 // machine interrupts enabled
-MSTATUS_MPIE :: u64(1) << 7 // MIE before the last trap
-MSTATUS_MPP :: u64(0b11) << 11 // privilege level before the last trap
+// mstatus, the machine status register: one 64-bit CSR made of small
+// fields. The ones this hart has so far (the rest read 0; supervisor mode
+// adds SIE, SPIE, SPP and others):
+//
+//   bit:   63 ...  13 | 12 11 | 10 9 8 | 7    | 6 5 4 | 3   | 2 1 0
+//   field:    (0)     |  MPP  |  (0)   | MPIE |  (0)  | MIE |  (0)
+//
+//   MIE   machine interrupts on (only matters in machine mode)
+//   MPIE  what MIE was before the last trap (MRET puts it back)
+//   MPP   the mode the last trap came from (MRET returns to it): two
+//         bits, read and written with mstatus_mpp / mstatus_with_mpp
+//         (privilege.odin, which also has MSTATUS_MPP and MSTATUS_RESET)
+MSTATUS_MIE :: u64(1) << 3
+MSTATUS_MPIE :: u64(1) << 7
 
 // misa: MXL = 2 (64-bit) in bits 63:62, then one bit per extension letter
-// (bit 0 = A, ..., bit 8 = I, bit 12 = M): RV64IMA. Zicsr and Zifencei
-// have no letter.
-MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A')
-
-// Interrupt bits in mie / mip: software, timer and external interrupts,
-// for machine mode. (Supervisor bits come with supervisor mode.)
-MACHINE_INTERRUPT_BITS :: u64(1) << 3 | u64(1) << 7 | u64(1) << 11
+// (bit 0 = A, ..., bit 8 = I, bit 12 = M, bit 20 = U): RV64IMA, with user
+// mode. Zicsr and Zifencei have no letter.
+MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A') | u64(1) << ('U' - 'A')
 
 // The CSRs that need their own storage. Counters live in Cpu.instret and
 // Cpu.cycle, and the read-only machine information CSRs are constants.
@@ -131,14 +138,18 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	csr := &cpu.csr
 	switch address {
 	case CSR_MSTATUS:
-		// MPP can only hold an implemented mode; machine is the only one so
-		// far, so it always reads as 3.
-		kept := value & (MSTATUS_MIE | MSTATUS_MPIE)
-		csr.mstatus = kept | u64(LEAST_PRIVILEGED_MODE) << MSTATUS_MPP_SHIFT
+		// MPP can only hold a mode the hart has (WARL): user (0) or
+		// machine (3) so far. Writing 1 (supervisor, not here yet) or 2
+		// (reserved) leaves MPP as it was.
+		mpp := mstatus_mpp(value)
+		if !privilege_implemented(mpp) {
+			mpp = mstatus_mpp(csr.mstatus)
+		}
+		csr.mstatus = mstatus_with_mpp(value & (MSTATUS_MIE | MSTATUS_MPIE), mpp)
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
-		csr.mie = value & MACHINE_INTERRUPT_BITS
+		csr.mie = value & MACHINE_INTERRUPT_BITS // the bits that exist (interrupts.odin)
 	case CSR_MTVEC:
 		// Mode (bits 1:0): 0 = direct, 1 = vectored; 2 and 3 are reserved,
 		// so bit 1 is kept at 0. The base must stay 4-byte aligned.
@@ -206,6 +217,3 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	}
 }
 
-// The value mstatus has at reset: MPP can only hold machine mode, so it
-// reads as 3 from the start; everything else is 0.
-MSTATUS_RESET :: u64(LEAST_PRIVILEGED_MODE) << MSTATUS_MPP_SHIFT

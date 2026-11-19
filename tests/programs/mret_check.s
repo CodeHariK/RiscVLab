@@ -31,15 +31,20 @@ _start:
     andi t1, s5, 8
     bnez t1, fail
 
-    # 4: after MRET, MPIE = 1 and MPP = machine (the only mode)
+    # 4: after MRET, MPIE = 1 and MPP = user (the least privileged mode,
+    #    so a second MRET can't go back up by mistake)
     li   a0, 4
     csrr t0, mstatus
     li   t1, 0x1880                 # MPP | MPIE
     and  t2, t0, t1
+    li   t1, 0x0080                 # MPP = 00 (user), MPIE = 1
     bne  t2, t1, fail
 
-    # 5: MRET jumps to whatever mepc holds, even without a trap
+    # 5: MRET jumps to whatever mepc holds, even without a trap. MPP is
+    #    set to machine first, or this MRET would drop into user mode.
     li   a0, 5
+    li   t0, 0x1800
+    csrs mstatus, t0                # MPP = 11 (machine)
     la   t0, after_jump
     csrw mepc, t0
     mret

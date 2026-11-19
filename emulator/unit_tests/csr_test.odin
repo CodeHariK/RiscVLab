@@ -32,6 +32,7 @@ misa_reports_rv64i_and_ignores_writes :: proc(t: ^testing.T) {
 	value, _ := rv.csr_read(&cpu, rv.CSR_MISA)
 	testing.expect_value(t, value >> 62, 2) // MXL = 64-bit
 	testing.expect_value(t, value & (1 << 8), 1 << 8) // I
+	testing.expect_value(t, value & (1 << 20), 1 << 20) // U: user mode
 }
 
 @(test)
@@ -99,11 +100,18 @@ mip_ignores_software_writes :: proc(t: ^testing.T) {
 }
 
 @(test)
-mstatus_mpp_only_holds_machine_mode :: proc(t: ^testing.T) {
-	// Machine is the only implemented mode, so MPP (bits 12:11) stays 3
-	// even when software writes 0 (user mode) there.
+mstatus_mpp_holds_user_or_machine :: proc(t: ^testing.T) {
+	// MPP (bits 12:11) holds the modes the hart has: user (0) and machine
+	// (3). Supervisor (1) and the reserved 2 leave it as it was.
 	cpu: rv.Cpu
+	cpu.csr.mstatus = rv.MSTATUS_RESET
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, 0))
 	value, _ := rv.csr_read(&cpu, rv.CSR_MSTATUS)
-	testing.expect_value(t, value, rv.MSTATUS_MPP)
+	testing.expect_value(t, value, 0) // user
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, rv.mstatus_with_mpp(0, .Supervisor)))
+	value, _ = rv.csr_read(&cpu, rv.CSR_MSTATUS)
+	testing.expect_value(t, value, 0) // supervisor ignored: still user
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, rv.MSTATUS_MPP))
+	value, _ = rv.csr_read(&cpu, rv.CSR_MSTATUS)
+	testing.expect_value(t, value, rv.MSTATUS_MPP) // machine
 }

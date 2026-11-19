@@ -34,7 +34,7 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 			"MIE=%d MPIE=%d MPP=%v",
 			(value & rv.MSTATUS_MIE) >> 3,
 			(value & rv.MSTATUS_MPIE) >> 7,
-			rv.Privilege((value & rv.MSTATUS_MPP) >> rv.MSTATUS_MPP_SHIFT),
+			rv.mstatus_mpp(value),
 		)
 	case rv.CSR_MTVEC:
 		if value == 0 {

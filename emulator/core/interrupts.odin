@@ -13,13 +13,28 @@ package rv
 // At each instruction boundary, a pending interrupt is taken if its bit
 // is set in both mip and mie, and interrupts are on: mstatus.MIE in
 // machine mode (always, from a lower privilege level). It is a trap like
-// any other (priv_trap.odin), with mcause bit 63 set, and mepc = the
+// any other (privilege.odin), with mcause bit 63 set, and mepc = the
 // instruction that hadn't run yet. If several are pending, external
 // beats software beats timer, as in the spec.
 
-MIP_MSIP :: u64(1) << 3 // machine software interrupt pending
-MIP_MTIP :: u64(1) << 7 // machine timer interrupt pending
-MIP_MEIP :: u64(1) << 11 // machine external interrupt pending
+// The interrupt bits, at the same place in mie (enabled) and mip
+// (pending): one per kind of interrupt.
+//
+//   bit:   11    7     3
+//   mie:   MEIE  MTIE  MSIE      software turns each kind on or off
+//   mip:   MEIP  MTIP  MSIP      the devices raise them
+//
+// An interrupt is taken when its bit is 1 in both, and interrupts are on:
+// mstatus.MIE in machine mode. mstatus.MIE is a different register's bit
+// (it too is bit 3, by chance): the one switch for all of them.
+MIP_MSIP :: u64(1) << 3 // machine software interrupt pending (the CLINT's msip)
+MIP_MTIP :: u64(1) << 7 // machine timer interrupt pending (the CLINT's alarm)
+MIP_MEIP :: u64(1) << 11 // machine external interrupt pending (the PLIC, later)
+
+// The interrupt bits mie and mip have for machine mode. A write to mie
+// keeps only these (csr_write), and devices can only drive these in mip.
+// Supervisor mode adds bits 1, 5 and 9.
+MACHINE_INTERRUPT_BITS :: MIP_MSIP | MIP_MTIP | MIP_MEIP
 
 // mip as the devices drive it now (`now`: the step clock, for devices
 // that keep time), and the clock time at which that next changes by

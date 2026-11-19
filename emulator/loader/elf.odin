@@ -111,6 +111,21 @@ Elf_Header :: struct {
 	section_count:  u16, // e_shnum
 }
 
+// Checks the 64-byte file header and reads the fields the loader uses:
+//
+//   offset  size  field         what it is
+//   0       4     magic         0x7f 'E' 'L' 'F'
+//   4       1     class         2 = 64-bit
+//   5       1     data          1 = little-endian
+//   16      2     e_type        2 = executable
+//   18      2     e_machine     243 = RISC-V
+//   24      8     e_entry       the address to start at
+//   32      8     e_phoff       where the segment table (program headers) starts
+//   40      8     e_shoff       where the section table starts
+//   54      2     e_phentsize   bytes per segment entry (56)
+//   56      2     e_phnum       number of segments
+//   58      2     e_shentsize   bytes per section entry (64)
+//   60      2     e_shnum       number of sections
 @(private = "file")
 parse_header :: proc(image: []u8) -> (header: Elf_Header, error: Elf_Error) {
 	if len(image) < ELF_HEADER_SIZE {
@@ -156,6 +171,16 @@ Elf_Segment :: struct {
 	memory_size: u64, // p_memsz: bytes in memory (the rest is zero)
 }
 
+// Reads entry `index` of the segment table (a program header, 56 bytes):
+//
+//   offset  size  field     what it is
+//   0       4     p_type    1 = PT_LOAD: copy into memory
+//   4       4     p_flags   1 = executable, 2 = writable, 4 = readable
+//   8       8     p_offset  where its bytes are in the file
+//   16      8     p_vaddr   its virtual address (not used: no paging yet)
+//   24      8     p_paddr   its physical address: where it goes in RAM
+//   32      8     p_filesz  how many bytes the file has
+//   40      8     p_memsz   how many it takes in memory (the rest is zeros)
 @(private = "file")
 read_segment :: proc(image: []u8, header: Elf_Header, index: u64) -> (segment: Elf_Segment, error: Elf_Error) {
 	base := header.segment_offset + index * u64(header.segment_size)
@@ -193,6 +218,23 @@ load_segment :: proc(bus: ^rv.Bus, image: []u8, segment: Elf_Segment) -> Elf_Err
 // ------------------------------------------------------------- symbols
 
 // Address of the symbol called `name`, searching every symbol table.
+//
+// A symbol table is a section (an entry in the section table, 64 bytes)
+// of type 2 (SHT_SYMTAB). The fields used here:
+//
+//   offset  size  field      what it is
+//   4       4     sh_type    2 = symbol table
+//   24      8     sh_offset  where the section's bytes are in the file
+//   32      8     sh_size    how many bytes it has
+//   40      4     sh_link    for a symbol table: the section holding its names
+//
+// The table itself is a run of 24-byte symbols:
+//
+//   offset  size  field      what it is
+//   0       4     st_name    where its name starts in the names section
+//   4       1     st_info    low 4 bits: 1 object (data), 2 function, 3 section, 4 file
+//   6       2     st_shndx   its section, or 0 = undefined (defined elsewhere)
+//   8       8     st_value   its address
 @(private = "file")
 find_symbol :: proc(image: []u8, header: Elf_Header, name: string) -> Maybe(u64) {
 	for index in 0 ..< u64(header.section_count) {

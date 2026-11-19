@@ -109,6 +109,13 @@ clint_register :: proc(clint: ^Clint, offset: u64, now: u64) -> (value: u64, sta
 	return 0, 0, 0, false
 }
 
+// A load (or peek: reading changes nothing) of `size` bytes at `offset`.
+// A 4-byte access to an 8-byte register reads one half of it. For example
+// a 4-byte load at 0x4004, the high half of mtimecmp:
+//
+//   start = 0x4000, register_size = 8, offset - start = 4
+//   4 + 4 <= 8 (fits) and 4 % 4 = 0 (aligned)
+//   shift = 4 * 8 = 32: value = mtimecmp >> 32, then the low 32 bits
 @(private = "file")
 clint_peek :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64, ok: bool) {
 	if size != 4 && size != 8 {
@@ -117,8 +124,9 @@ clint_peek :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u6
 	clint := (^Clint)(data)
 	register, start, register_size, found := clint_register(clint, offset, now)
 	if !found {
-		return 0, true
+		return 0, true // the space between the registers reads as 0
 	}
+	// Where the access starts inside the register, in bits.
 	shift := (offset - start) * 8
 	if offset - start + size > register_size || (offset - start) % size != 0 {
 		return 0, false // past the register's end, or misaligned
@@ -130,6 +138,14 @@ clint_peek :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u6
 	return value, true
 }
 
+// A store of `size` bytes at `offset`. A 4-byte store to an 8-byte
+// register replaces one half and keeps the other, as 32-bit code sets
+// mtimecmp. For example a 4-byte store of 0x1234 at 0x4004:
+//
+//   shift   = 32
+//   mask    = 0xffffffff_00000000              the bytes being written
+//   updated = (mtimecmp &~ mask) | (0x1234 << 32)
+//           = new high half, old low half
 @(private = "file")
 clint_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, now: u64) -> (ok: bool) {
 	if size != 4 && size != 8 {
@@ -138,10 +154,10 @@ clint_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, now: u64) 
 	clint := (^Clint)(data)
 	register, start, register_size, found := clint_register(clint, offset, now)
 	if !found {
-		return true
+		return true // the space between the registers ignores writes
 	}
 	if offset - start + size > register_size || (offset - start) % size != 0 {
-		return false
+		return false // past the register's end, or misaligned
 	}
 	// Replace the bytes written, keep the rest of the register.
 	shift := (offset - start) * 8
@@ -153,7 +169,9 @@ clint_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, now: u64) 
 	case CLINT_MTIMECMP:
 		clint.mtimecmp = updated
 	case CLINT_MTIME:
-		// Setting the clock: keep counting from the new value.
+		// Setting the clock: mtime = now * TICKS + offset, so choose the
+		// offset that makes it read `updated` now; it keeps counting from
+		// there. (A negative offset just wraps round, which works out.)
 		clint.offset = updated - now * CLINT_TICKS_PER_STEP
 	}
 	return true

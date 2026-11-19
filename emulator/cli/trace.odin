@@ -14,6 +14,11 @@ import disasm "../disasm"
 // (the instruction runs after the handler's mret).
 // Used as the machine_run observer. Written to stderr, like the report:
 // stdout is the program's output.
+//
+// Which line a step gets, in the order checked below:
+//   - it stopped the machine (a trap with no handler): the trap and its value;
+//   - it took a trap or interrupt into a handler: where the handler is;
+//   - otherwise: the register it wrote, if any.
 print_trace_line :: proc(machine: ^rv.Machine, pc: u64, result: rv.Step_Result) {
 	raw, _ := rv.machine_peek(machine, pc, 4)
 	instruction := u32(raw)

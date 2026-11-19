@@ -73,6 +73,10 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 		return illegal_instruction(instruction) // funct3 = 100 is reserved
 	}
 
+	// The old value goes into the undo record first; csr_write applies the
+	// CSR's own rules (WARL fix-ups, and for mcycle, moving clock_offset
+	// so the step clock doesn't jump: csr.odin). A read-only CSR refuses
+	// the write: illegal, and nothing to undo.
 	if writes {
 		cpu.undo.csr_changed = true
 		cpu.undo.csr_address = address
@@ -82,6 +86,7 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 			return illegal_instruction(instruction)
 		}
 	}
+	// rd gets the value from before the write (reg_write drops it for x0).
 	reg_write(cpu, destination, old)
 	return nil
 }

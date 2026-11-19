@@ -36,7 +36,7 @@ exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	case ENCODING_WFI:
 		// "Wait for interrupt": a hint that the hart has nothing to do
 		// until one arrives. The spec allows doing nothing, and here time
-		// is counted in instructions (docs: emulator-time), so a program
+		// is counted in steps (docs: emulator-time), so a program
 		// that loops on wfi still reaches its timer interrupt. Skipping
 		// ahead to the next alarm can come later, as a speed-up.
 		return nil

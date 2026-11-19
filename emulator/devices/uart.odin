@@ -125,6 +125,7 @@ uart_register_name :: proc(uart: ^Uart, offset: u64, writing: bool) -> string {
 	return ""
 }
 
+// A program's load: what peek shows, and reading RBR also takes the byte.
 @(private = "file")
 uart_load :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64, ok: bool) {
 	uart := (^Uart)(data)
@@ -136,6 +137,8 @@ uart_load :: proc(data: rawptr, offset: u64, size: u64, now: u64) -> (value: u64
 	return value, true
 }
 
+// What a load of the register at `offset` would return, without the
+// load's side effect (taking a received byte). Bytes only.
 @(private = "file")
 uart_peek :: proc(data: rawptr, offset: u64, size: u64, _: u64) -> (value: u64, ok: bool) {
 	if size != 1 {
@@ -146,6 +149,8 @@ uart_peek :: proc(data: rawptr, offset: u64, size: u64, _: u64) -> (value: u64, 
 	divisor := registers.lcr & UART_LCR_DLAB != 0
 	switch offset {
 	case 0:
+		// DLAB set: the divisor's low byte. Otherwise RBR: the next byte
+		// received, or 0 if nothing is waiting (LSR bit 0 says which).
 		if divisor {
 			return u64(registers.divisor_low), true
 		}
@@ -154,27 +159,35 @@ uart_peek :: proc(data: rawptr, offset: u64, size: u64, _: u64) -> (value: u64, 
 		}
 		return 0, true
 	case 1:
+		// DLAB set: the divisor's high byte. Otherwise IER.
 		return u64(registers.divisor_high if divisor else registers.ier), true
 	case 2:
-		// Bit 0 = 1: no interrupt pending. Bits 7:6 = FIFOs enabled.
+		// ISR, the interrupt status (FCR is write-only at this offset).
+		// Bit 0 = 1 means "no interrupt pending": this UART never raises
+		// one yet. Bits 7:6 = 11 once FIFOs are on (FCR bit 0), which is
+		// how a driver tells a 16550 from the older, FIFO-less 16450.
 		fifos: u8 = 0xC0 if registers.fcr & 1 != 0 else 0
 		return u64(0x01 | fifos), true
 	case 3:
-		return u64(registers.lcr), true
+		return u64(registers.lcr), true // byte format, and DLAB in bit 7
 	case 4:
-		return u64(registers.mcr), true
+		return u64(registers.mcr), true // modem lines: stored, no effect
 	case 5:
+		// LSR, the line status. Sending is instant here, so THR is always
+		// empty (bit 5, THRE) and nothing is being sent (bit 6, TEMT).
+		// Bit 0 (DR) when a received byte is waiting in RBR.
 		status := UART_LSR_THR_EMPTY | UART_LSR_TRANSMITTER_EMPTY
 		if uart.input_read < len(uart.input) {
 			status |= UART_LSR_DATA_READY
 		}
 		return u64(status), true
 	case 7:
-		return u64(registers.scr), true
+		return u64(registers.scr), true // scratch: holds whatever was written
 	}
-	return 0, true // MSR and the unused offsets
+	return 0, true // MSR (no modem lines) and the unused offsets
 }
 
+// A program's store to the register at `offset`. Bytes only.
 @(private = "file")
 uart_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, _: u64) -> (ok: bool) {
 	if size != 1 {
@@ -186,18 +199,26 @@ uart_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, _: u64) -> 
 	divisor := registers.lcr & UART_LCR_DLAB != 0
 	switch offset {
 	case 0:
+		// DLAB set: the divisor's low byte. Otherwise THR: send the byte,
+		// which lands in `output` at once (no wire to wait for).
 		if divisor {
 			registers.divisor_low = byte_value
 		} else {
 			append(&uart.output, byte_value)
 		}
 	case 1:
+		// DLAB set: the divisor's high byte. Otherwise IER: only its low
+		// 4 bits exist (received data, transmitter empty, line status,
+		// modem status interrupts).
 		if divisor {
 			registers.divisor_high = byte_value
 		} else {
 			registers.ier = byte_value & 0x0F
 		}
 	case 2:
+		// FCR: bit 0 turns the FIFOs on (ISR shows it); bit 1 empties the
+		// receive FIFO. (Bit 2, clearing the transmit FIFO, has nothing to
+		// clear: sending is instant.)
 		registers.fcr = byte_value
 		if byte_value & UART_FCR_CLEAR_RECEIVE != 0 {
 			uart.input_read = len(uart.input) // drop what wasn't read

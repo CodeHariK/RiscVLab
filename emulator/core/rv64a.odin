@@ -66,8 +66,10 @@ exec_amo :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	case:
 		return illegal_instruction(instruction)
 	}
+	// The address is rs1 itself: atomics have no offset.
 	address := reg_read(cpu, rs1(instruction))
 
+	// funct5 picks the operation; aq / rl need nothing here (see above).
 	switch funct5(instruction) {
 	case AMO_LR:
 		if rs2(instruction) != 0 {
@@ -82,6 +84,8 @@ exec_amo :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	return illegal_instruction(instruction)
 }
 
+// LR.W / LR.D: rd = the value at `address` (.W sign-extended), and
+// reserve the address for the next SC.
 @(private = "file")
 exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
 	if address % size != 0 {
@@ -99,6 +103,9 @@ exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 	return nil
 }
 
+// SC.W / SC.D: store rs2 at `address` only if the reservation from the
+// last LR still holds (same address and size); rd = 0 if it stored,
+// 1 if not.
 @(private = "file")
 exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
 	if address % size != 0 {
@@ -121,8 +128,13 @@ exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 	return nil
 }
 
+// The AMOs (AMOSWAP, AMOADD, ...): rd = the value at `address`, and
+// memory = that value op rs2, as one step that nothing can come between.
 @(private = "file")
 exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
+	// Every check comes first. An AMO writes, so even a failing read is
+	// reported as a store fault (Store_Address_Misaligned,
+	// Store_Access_Fault), as the spec says.
 	if address % size != 0 {
 		return trap_make(.Store_Address_Misaligned, address)
 	}
@@ -133,6 +145,10 @@ exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: 
 	if !ok {
 		return trap_make(.Store_Access_Fault, address)
 	}
+	// .W works on 32-bit values: both are sign-extended to 64 bits, so
+	// rd gets a sign-extended result and MIN / MAX compare them as
+	// signed 32-bit numbers. (The upper half of `result` is cut off again
+	// by the 4-byte store.)
 	old := amo_extend(raw, size)
 	operand := amo_extend(reg_read(cpu, rs2(instruction)), size)
 
@@ -153,10 +169,14 @@ exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: 
 	case AMO_MAX:
 		result = old if i64(old) > i64(operand) else operand
 	case AMO_MINU:
+		// Unsigned: for .W, compare the 32-bit values, not their
+		// sign-extended forms (0x80000000 is large, not negative).
 		result = old if unsigned_value(old, size) < unsigned_value(operand, size) else operand
 	case AMO_MAXU:
 		result = old if unsigned_value(old, size) > unsigned_value(operand, size) else operand
 	}
+	// Store, then write rd: if the store fails, nothing has changed yet,
+	// so the trap leaves the step with nothing to undo.
 	if !amo_store(cpu, bus, address, size, result) {
 		return trap_make(.Store_Access_Fault, address)
 	}

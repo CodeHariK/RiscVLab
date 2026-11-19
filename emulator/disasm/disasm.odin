@@ -24,30 +24,43 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 	s1 := register_name(rv.rs1(instruction))
 	s2 := register_name(rv.rs2(instruction))
 
+	// One case per major opcode. Each returns the text, or falls out of
+	// the switch for an encoding that doesn't exist, which is shown as data
+	// (`.word`, at the bottom).
 	switch rv.opcode(instruction) {
 	case rv.OPCODE_LUI:
+		// The 20-bit upper field as it is in the bits, in hex: objdump
+		// doesn't shift it into place or sign-extend it.
 		return fmt.bprintf(buffer, "lui %s,0x%x", d, instruction >> 12)
 	case rv.OPCODE_AUIPC:
 		return fmt.bprintf(buffer, "auipc %s,0x%x", d, instruction >> 12)
 	case rv.OPCODE_JAL:
+		// The target as an absolute address (pc + offset), not the offset.
 		return fmt.bprintf(buffer, "jal %s,%x", d, pc + rv.imm_j(instruction))
 	case rv.OPCODE_JALR:
+		// Only funct3 = 0 exists. Written offset(base), like a load.
 		if rv.funct3(instruction) == 0 {
 			return fmt.bprintf(buffer, "jalr %s,%d(%s)", d, i64(rv.imm_i(instruction)), s1)
 		}
 	case rv.OPCODE_BRANCH:
+		// The two registers compared, then the target, absolute.
 		if name := branch_mnemonic(instruction); name != "" {
 			return fmt.bprintf(buffer, "%s %s,%s,%x", name, s1, s2, pc + rv.imm_b(instruction))
 		}
 	case rv.OPCODE_LOAD:
+		// rd, then offset(base): the address is base + offset.
 		if name := load_mnemonic(instruction); name != "" {
 			return fmt.bprintf(buffer, "%s %s,%d(%s)", name, d, i64(rv.imm_i(instruction)), s1)
 		}
 	case rv.OPCODE_STORE:
+		// The register stored (rs2) comes first, then offset(base).
 		if name := store_mnemonic(instruction); name != "" {
 			return fmt.bprintf(buffer, "%s %s,%d(%s)", name, s2, i64(rv.imm_s(instruction)), s1)
 		}
 	case rv.OPCODE_OP_IMM:
+		// addi, slti, ... take a signed decimal immediate. The shifts take a
+		// 6-bit amount, in hex; the immediate's top bits pick logical or
+		// arithmetic, so they aren't part of the number.
 		if name := op_imm_mnemonic(instruction); name != "" {
 			return fmt.bprintf(buffer, "%s %s,%s,%d", name, d, s1, i64(rv.imm_i(instruction)))
 		}
@@ -55,6 +68,7 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "%s %s,%s,0x%x", name, d, s1, (instruction >> 20) & 0x3F)
 		}
 	case rv.OPCODE_OP_IMM_32:
+		// addiw, or a 32-bit shift, whose 5-bit amount sits where rs2 would.
 		if rv.funct3(instruction) == 0b000 {
 			return fmt.bprintf(buffer, "addiw %s,%s,%d", d, s1, i64(rv.imm_i(instruction)))
 		}
@@ -62,6 +76,7 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "%s %s,%s,0x%x", name, d, s1, rv.rs2(instruction))
 		}
 	case rv.OPCODE_OP:
+		// Three registers: rd, rs1, rs2 (the M extension's too).
 		if name := op_mnemonic(instruction); name != "" {
 			return fmt.bprintf(buffer, "%s %s,%s,%s", name, d, s1, s2)
 		}
@@ -70,6 +85,8 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "%s %s,%s,%s", name, d, s1, s2)
 		}
 	case rv.OPCODE_MISC_MEM:
+		// fence names its two sets of accesses, as letters from "iorw":
+		// the predecessor set in bits 27:24, the successor set in 23:20.
 		switch rv.funct3(instruction) {
 		case 0b000:
 			predecessor, successor: [4]u8
@@ -83,6 +100,8 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "fence.i")
 		}
 	case rv.OPCODE_AMO:
+		// The ordering suffix (.aq, .rl, .aqrl) goes on the name. lr has
+		// no rs2: rd,(rs1); sc and the AMOs: rd,rs2,(rs1).
 		if name := amo_mnemonic(instruction); name != "" {
 			order := amo_order_suffix(instruction)
 			switch rv.funct5(instruction) {
@@ -93,6 +112,9 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			}
 		}
 	case rv.OPCODE_SYSTEM:
+		// The CSR instructions: rd, the CSR by name, then rs1, or for the
+		// immediate forms (funct3 bit 2) the 5-bit value in the rs1 field,
+		// in decimal. Otherwise one of the fixed encodings.
 		if name := zicsr_mnemonic(instruction); name != "" {
 			csr_buffer: [8]u8
 			csr := csr_text(rv.csr_address(instruction), csr_buffer[:])

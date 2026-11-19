@@ -78,7 +78,7 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
-| `cpu.odin` | Hart state: registers, PC, `instret`, `cycle`, CSRs, the LR / SC reservation, the current undo record; the step clock (`cpu_clock`) that devices keep time by |
+| `cpu.odin` | Hart state: registers, PC, CSRs (including the counters mcycle and minstret), the LR / SC reservation, the current undo record; the step clock (`step_clock`) that devices keep time by |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing: RAM, or an attached device (`Device`, `bus_attach`); `bus_peek` reads without side effects; fetch is from RAM only |

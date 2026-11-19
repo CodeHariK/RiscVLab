@@ -66,8 +66,8 @@ MSTATUS_MPIE :: u64(1) << 7
 // mode. Zicsr and Zifencei have no letter.
 MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A') | u64(1) << ('U' - 'A')
 
-// The CSRs that need their own storage. Counters live in Cpu.instret and
-// Cpu.cycle, and the read-only machine information CSRs are constants.
+// The CSRs that need their own storage (the read-only machine
+// information CSRs are constants).
 Csr_File :: struct {
 	mstatus:  u64,
 	mie:      u64,
@@ -77,6 +77,18 @@ Csr_File :: struct {
 	mcause:   u64,
 	mtval:    u64,
 	mip:      u64,
+	// The two counters every RISC-V hart has, for programs to measure
+	// themselves with (lesson 11). Each is one counter at two CSR
+	// addresses: the m... one for machine mode, read / write, and a
+	// read-only copy without the m (cycle, instret) for lower modes.
+	//
+	// Clock cycles. One per step here: an instruction, or a trap or
+	// interrupt taken into a handler (those take cycles on real hardware
+	// too, but retire nothing, so minstret doesn't count them). Also the
+	// base of the step clock (step_clock, cpu.odin).
+	mcycle:   u64,
+	// Instructions completed ("retired").
+	minstret: u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
@@ -122,9 +134,9 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 	case CSR_MIP:
 		return csr.mip, true
 	case CSR_MCYCLE, CSR_CYCLE:
-		return cpu.cycle, true
+		return cpu.csr.mcycle, true
 	case CSR_MINSTRET, CSR_INSTRET:
-		return cpu.instret, true
+		return cpu.csr.minstret, true
 	}
 	return 0, false
 }
@@ -168,16 +180,16 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		// and software interrupts; interrupts.odin): software writes are
 		// ignored.
 	case CSR_MCYCLE:
-		// The step clock (cpu_clock = cycle + clock_offset) must not
+		// The step clock (step_clock = mcycle + step_clock_offset) must not
 		// jump: like any step, this one moves it on by exactly one. So the
 		// offset takes up the difference between the new mcycle and the
-		// one it would have counted to (cycle + 1).
-		cpu.clock_offset += cpu.cycle + 1 - value
-		cpu.cycle = value
-		cpu.cycle_written = true
+		// one it would have counted to (mcycle + 1).
+		cpu.step_clock_offset += cpu.csr.mcycle + 1 - value
+		cpu.csr.mcycle = value
+		cpu.mcycle_written = true
 	case CSR_MINSTRET:
-		cpu.instret = value
-		cpu.instret_written = true
+		cpu.csr.minstret = value
+		cpu.minstret_written = true
 	case:
 		return false
 	}
@@ -210,10 +222,10 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		// Undoing a write to mcycle: the offset goes back too. The step
 		// being undone moved the clock on by one, so before it the clock
 		// was one less than now, with mcycle = `value`.
-		cpu.clock_offset = cpu_clock(cpu) - 1 - value
-		cpu.cycle = value
+		cpu.step_clock_offset = step_clock(cpu) - 1 - value
+		cpu.csr.mcycle = value
 	case CSR_MINSTRET:
-		cpu.instret = value
+		cpu.csr.minstret = value
 	}
 }
 

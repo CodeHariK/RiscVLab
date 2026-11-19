@@ -29,8 +29,8 @@ DEBUG_RECORD_STEPS :: #config(DEBUG_RECORD_STEPS, true)
 Undo_Record :: struct {
 	// Where the step started (restored on undo).
 	pc:               u64,
-	instret:          u64,
-	cycle:            u64,
+	minstret:         u64,
+	mcycle:           u64,
 	privilege:        Privilege,
 	// The register the step overwrote, if any.
 	register_old:     u64,

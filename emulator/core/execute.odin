@@ -20,7 +20,7 @@ INSTRUCTION_SIZE :: u64(4)
 
 // Fetches, decodes and executes one instruction.
 //
-// On success the PC moves to `next_pc`, and `instret` and `cycle` count
+// On success the PC moves to `next_pc`, and minstret and mcycle count
 // the instruction (unless it wrote that counter: a CSR write takes effect
 // after the instruction, so the written value is what the next one reads).
 // On a trap the PC stays on the faulting instruction, which is where
@@ -29,8 +29,8 @@ cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	when DEBUG_RECORD_STEPS {
 		cpu.last_write = {}
 	}
-	cpu.instret_written = false
-	cpu.cycle_written = false
+	cpu.minstret_written = false
+	cpu.mcycle_written = false
 
 	instruction, fetched := bus_fetch(bus, cpu.pc)
 	if !fetched {
@@ -43,11 +43,11 @@ cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	}
 
 	cpu.pc = cpu.next_pc
-	if !cpu.instret_written {
-		cpu.instret += 1
+	if !cpu.minstret_written {
+		cpu.csr.minstret += 1
 	}
-	if !cpu.cycle_written {
-		cpu.cycle += 1
+	if !cpu.mcycle_written {
+		cpu.csr.mcycle += 1
 	}
 	return nil
 }

@@ -28,7 +28,7 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 	result := rv.machine_run(machine, max_steps)
 	// Every step is recorded except one that stopped the machine (a trap
 	// with no handler). Steps that trapped into a handler are recorded but
-	// don't retire, so this can be more than instret.
+	// don't retire, so this can be more than minstret.
 	recorded := result.steps
 	if result.reason == .Breakpoint || result.reason == .Trap {
 		recorded -= 1
@@ -57,9 +57,9 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 		machine.cpu.privilege == start_privilege &&
 		machine.cpu.pc == start_pc &&
 		machine.cpu.reservation == start_reservation &&
-		machine.cpu.instret == 0 &&
-		machine.cpu.cycle == 0 &&
-		machine.cpu.clock_offset == 0 &&
+		machine.cpu.csr.minstret == 0 &&
+		machine.cpu.csr.mcycle == 0 &&
+		machine.cpu.step_clock_offset == 0 &&
 		slice.equal(machine.bus.ram, start_ram) &&
 		devices_match(machine, start_devices)
 

@@ -14,7 +14,7 @@ explain_status :: proc(session: ^state.Session) -> string {
 		if trap.cause == .Breakpoint {
 			return fmt.tprintf(
 				"Program finished (ebreak) after %d instructions. a0 = %s",
-				cpu.instret,
+				cpu.csr.minstret,
 				value_text(rv.reg_read(cpu, rv.REG_A0)),
 			)
 		}
@@ -22,12 +22,12 @@ explain_status :: proc(session: ^state.Session) -> string {
 	}
 	if exit_code, exited := session.exited.?; exited {
 		if exit_code == 0 {
-			return fmt.tprintf("Program finished through tohost after %d instructions: exit code 0 (pass)", cpu.instret)
+			return fmt.tprintf("Program finished through tohost after %d instructions: exit code 0 (pass)", cpu.csr.minstret)
 		}
 		return fmt.tprintf("Program finished through tohost: exit code %s (riscv-tests: test %d failed)", value_text(u64(exit_code)), exit_code)
 	}
-	if cpu.instret == 0 {
+	if cpu.csr.minstret == 0 {
 		return "Ready. Press Next (or the right arrow key) to run the first instruction."
 	}
-	return fmt.tprintf("Paused after %d instructions.", cpu.instret)
+	return fmt.tprintf("Paused after %d instructions.", cpu.csr.minstret)
 }

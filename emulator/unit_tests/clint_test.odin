@@ -168,19 +168,19 @@ writing_mcycle_does_not_move_mtime :: proc(t: ^testing.T) {
 	CSRW_MCYCLE_ZERO :: u32(0xb000_1073) // csrrw zero, mcycle, zero
 	rv.machine_store(&machine, rv.RAM_BASE + 8, 4, u64(CSRW_MCYCLE_ZERO))
 	steps(&machine, 3) // addi, addi, csrw mcycle
-	testing.expect_value(t, machine.cpu.cycle, 0)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 0)
 	now, _ := rv.machine_load(&machine, MTIME, 8)
 	testing.expect_value(t, now, 3)
 	steps(&machine, 1)
-	testing.expect_value(t, machine.cpu.cycle, 1)
-	testing.expect_value(t, rv.cpu_clock(&machine.cpu), 4)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 1)
+	testing.expect_value(t, rv.step_clock(&machine.cpu), 4)
 
 	// Undo puts mcycle back, and the clock with it.
 	testing.expect(t, rv.machine_step_back(&machine))
 	testing.expect(t, rv.machine_step_back(&machine)) // the csrw
-	testing.expect_value(t, machine.cpu.cycle, 2)
-	testing.expect_value(t, rv.cpu_clock(&machine.cpu), 2)
-	testing.expect_value(t, machine.cpu.clock_offset, 0)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 2)
+	testing.expect_value(t, rv.step_clock(&machine.cpu), 2)
+	testing.expect_value(t, machine.cpu.step_clock_offset, 0)
 }
 
 // Taking an interrupt is a step: it takes a cycle and a tick of the step
@@ -193,12 +193,12 @@ an_interrupt_takes_a_cycle_but_retires_nothing :: proc(t: ^testing.T) {
 	machine.cpu.csr.mstatus |= rv.MSTATUS_MIE
 	rv.machine_store(&machine, MTIMECMP, 8, 2)
 	steps(&machine, 3) // addi, addi, interrupt
-	testing.expect_value(t, machine.cpu.instret, 2)
-	testing.expect_value(t, machine.cpu.cycle, 3)
-	testing.expect_value(t, rv.cpu_clock(&machine.cpu), 3)
+	testing.expect_value(t, machine.cpu.csr.minstret, 2)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 3)
+	testing.expect_value(t, rv.step_clock(&machine.cpu), 3)
 	testing.expect(t, rv.machine_step_back(&machine))
-	testing.expect_value(t, machine.cpu.cycle, 2)
-	testing.expect_value(t, rv.cpu_clock(&machine.cpu), 2)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 2)
+	testing.expect_value(t, rv.step_clock(&machine.cpu), 2)
 }
 
 // mtvec = 1 is vectored mode with base 0: no handler, so the machine

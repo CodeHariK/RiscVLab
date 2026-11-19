@@ -68,8 +68,8 @@ plain_csrs_hold_any_value :: proc(t: ^testing.T) {
 @(test)
 counters_read_their_own_count :: proc(t: ^testing.T) {
 	cpu: rv.Cpu
-	cpu.instret = 42
-	cpu.cycle = 40
+	cpu.csr.minstret = 42
+	cpu.csr.mcycle = 40
 	instret, _ := rv.csr_read(&cpu, rv.CSR_INSTRET)
 	cycle, _ := rv.csr_read(&cpu, rv.CSR_CYCLE)
 	testing.expect_value(t, instret, 42)
@@ -81,14 +81,14 @@ counters_read_their_own_count :: proc(t: ^testing.T) {
 @(test)
 writing_one_counter_leaves_the_other :: proc(t: ^testing.T) {
 	cpu: rv.Cpu
-	cpu.instret = 42
-	cpu.cycle = 42
+	cpu.csr.minstret = 42
+	cpu.csr.mcycle = 42
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MINSTRET, 7))
-	testing.expect_value(t, cpu.instret, 7)
-	testing.expect_value(t, cpu.cycle, 42)
+	testing.expect_value(t, cpu.csr.minstret, 7)
+	testing.expect_value(t, cpu.csr.mcycle, 42)
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MCYCLE, 9))
-	testing.expect_value(t, cpu.cycle, 9)
-	testing.expect_value(t, cpu.instret, 7)
+	testing.expect_value(t, cpu.csr.mcycle, 9)
+	testing.expect_value(t, cpu.csr.minstret, 7)
 }
 
 @(test)

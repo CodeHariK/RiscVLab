@@ -34,7 +34,7 @@ Everything else changes only when software runs a CSR instruction.
 
 For: anything that is about the CPU itself rather than about the program's data: traps, interrupts, privilege levels, and later virtual memory. Keeping these out of x0..x31 means ordinary code can't change them by accident, and a privilege level can lock away the CSRs of the levels above it.
 
-Emulator: on RV64 every CSR is 64 bits wide (on RV32 they are 32 bits, and the 64-bit counters are read in two halves, e.g. cycle and cycleh). Here mhartid, misa and the ID CSRs are constants in the code, the counters all read the step count, and the rest are fields of the Csr_File struct in core/csr.odin.
+Emulator: on RV64 every CSR is 64 bits wide (on RV32 they are 32 bits, and the 64-bit counters are read in two halves, e.g. cycle and cycleh). Here mhartid, misa and the ID CSRs are constants in the code, and the rest, the counters mcycle and minstret included, are fields of the Csr_File struct in core/csr.odin.
 
 Related: csr-addresses, csrrw, csrrs, trap
 
@@ -48,7 +48,7 @@ How it works: the top four bits of the number say who may use the CSR.
 - Bits 11..10 = 0b11 means read-only: writing it raises Illegal_Instruction.
 - Bits 9..8 give the lowest privilege level allowed: 0b00 user, 0b01 supervisor, 0b11 machine.
 
-For example, mhartid is 0xf14 = 0b1111_0001_0100: bits 11..10 are 0b11 (read-only) and bits 9..8 are 0b11 (machine only). mstatus is 0x300: writable, machine only. cycle is 0xc00: read-only, usable from user mode.
+For example, mhartid is 0xf14 = 0b1111_0001_0100: bits 11..10 are 0b11 (read-only) and bits 9..8 are 0b11 (machine only). mstatus is 0x300: writable, machine only. cycle is 0xc00: read-only, usable from user mode (it is the user name of mcycle, see mcycle).
 
 Watch out: using a CSR that does not exist, writing a read-only one, or using one from too low a privilege level all raise Illegal_Instruction.
 
@@ -284,21 +284,24 @@ csrr t0, mhartid         # which hart this is: 0 (lesson 11)
 
 *CSRs 0xb00, 0xb02 (machine, read / write) and 0xc00, 0xc02 (user, read-only)*
 
-Does:
-- mcycle / cycle: clock cycles since reset.
-- minstret / instret: instructions finished ("retired") since reset.
+Does: two counters, each with two names. The m name is for machine mode, which can read and write it; the name without m reads the same counter, read-only, from any mode:
+| Counter | Machine name (read / write) | Name for every mode (read-only) | Counts |
+|---|---|---|---|
+| clock cycles | mcycle, 0xb00 | cycle, 0xc00 | every cycle since reset |
+| instructions retired | minstret, 0xb02 | instret, 0xc02 | every instruction that finished since reset |
+So there is no separate "cycle" register: `csrr t0, cycle` and `csrr t0, mcycle` read the same number. The m prefix is the usual one for machine-mode CSRs (mstatus, mepc, ...); supervisor ones start with s.
 
-The m versions can be written; cycle and instret are read-only copies that user programs may read.
+How it works: a counter goes up by itself, without any instruction asking. A program reads it twice and subtracts to see how long something took. Machine mode may write a counter, for example to start it from 0; lower modes can only read (and on real hardware only if machine mode allows it, through mcounteren).
 
-For: measuring how long code takes.
+For: measuring how long code takes, and how many instructions it ran.
 
-Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
+Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. Both are fields of Csr_File (core/csr.odin). There is no mcounteren yet, so user mode can always read cycle and instret. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
 
 Watch out:
 - reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).
 - a write takes effect after the writing instruction, so `csrw minstret, t0` makes the next read give exactly t0: the csrw itself isn't counted.
 
-Related: csr-addresses
+Related: csr-addresses, retire, emulator-time
 
 Example:
 ```

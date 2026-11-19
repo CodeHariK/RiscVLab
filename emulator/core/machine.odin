@@ -72,21 +72,21 @@ machine_destroy :: proc(machine: ^Machine) {
 // so nothing is recorded and the trap is returned: the machine stops.
 //
 // Every step that is done moves mcycle, and so the step clock, on by one
-// (cpu_clock); minstret counts only the instructions that completed.
+// (step_clock); minstret counts only the instructions that completed.
 machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu := &machine.cpu
 	when DEBUG_RECORD_STEPS {
 		cpu.undo = Undo_Record {
 			pc        = cpu.pc,
-			instret   = cpu.instret,
-			cycle     = cpu.cycle,
+			minstret  = cpu.csr.minstret,
+			mcycle    = cpu.csr.mcycle,
 			privilege = cpu.privilege,
 		}
 	}
 	machine.last_trap = nil
 	machine.bus.touched = {}
 
-	if cpu_clock(cpu) >= machine.bus.interrupts_change_at {
+	if step_clock(cpu) >= machine.bus.interrupts_change_at {
 		machine_update_interrupts(machine) // an alarm time has come
 	}
 	result: Step_Result
@@ -123,7 +123,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		}
 		trap_enter(cpu, trap)
 		machine.last_trap = trap
-		cpu.cycle += 1 // cpu_step counts only instructions that completed
+		cpu.csr.mcycle += 1 // cpu_step counts only instructions that completed
 	}
 
 	when DEBUG_RECORD_STEPS {
@@ -134,7 +134,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	// Look again if a device register was used or an alarm time came.
 	// (mie and mstatus.MIE don't change mip: they are checked when the
 	// interrupt is about to be taken, above.)
-	if machine.bus.touched.touched || cpu_clock(cpu) >= machine.bus.interrupts_change_at {
+	if machine.bus.touched.touched || step_clock(cpu) >= machine.bus.interrupts_change_at {
 		machine_update_interrupts(machine)
 	}
 	return nil
@@ -144,7 +144,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 // mip is never stored for undo: it follows from the devices' state and
 // the step clock, so it is worked out again whenever either changes.
 machine_update_interrupts :: proc(machine: ^Machine) {
-	machine.cpu.csr.mip, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, cpu_clock(&machine.cpu))
+	machine.cpu.csr.mip, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, step_clock(&machine.cpu))
 }
 
 // Undoes the most recent recorded step. Returns false when there is
@@ -162,7 +162,7 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 			device.restore(device.data, record.device_state)
 		}
 	} else if record.memory_changed {
-		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old, cpu_clock(&machine.cpu))
+		bus_store(&machine.bus, record.memory_address, record.memory_size, record.memory_old, step_clock(&machine.cpu))
 	}
 	if record.register_changed {
 		machine.cpu.regs[record.register_index] = record.register_old
@@ -181,8 +181,8 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		machine.cpu.csr.mtval = record.trap_mtval
 	}
 	machine.cpu.pc = record.pc
-	machine.cpu.instret = record.instret
-	machine.cpu.cycle = record.cycle
+	machine.cpu.csr.minstret = record.minstret
+	machine.cpu.csr.mcycle = record.mcycle
 	machine.cpu.privilege = record.privilege
 	machine.cpu.last_write = {}
 	machine.last_trap = nil
@@ -235,21 +235,21 @@ machine_host_exit :: proc(machine: ^Machine) -> Maybe(u64) {
 
 // Loads, stores and peeks as the machine sees memory and its devices
 // now (at its step clock): for front ends and tests, which would
-// otherwise pass cpu_clock(&machine.cpu) to the bus themselves. These aren't
+// otherwise pass step_clock(&machine.cpu) to the bus themselves. These aren't
 // steps, so they aren't undone; but a load or store can change a device's
 // interrupt lines (setting mtimecmp), so mip is worked out again after one.
 machine_load :: proc(machine: ^Machine, address: u64, size: u64) -> (value: u64, ok: bool) {
-	value, ok = bus_load(&machine.bus, address, size, cpu_clock(&machine.cpu))
+	value, ok = bus_load(&machine.bus, address, size, step_clock(&machine.cpu))
 	after_front_end_access(machine)
 	return value, ok
 }
 
 machine_peek :: proc(machine: ^Machine, address: u64, size: u64) -> (value: u64, ok: bool) {
-	return bus_peek(&machine.bus, address, size, cpu_clock(&machine.cpu))
+	return bus_peek(&machine.bus, address, size, step_clock(&machine.cpu))
 }
 
 machine_store :: proc(machine: ^Machine, address: u64, size: u64, value: u64) -> bool {
-	ok := bus_store(&machine.bus, address, size, value, cpu_clock(&machine.cpu))
+	ok := bus_store(&machine.bus, address, size, value, step_clock(&machine.cpu))
 	after_front_end_access(machine)
 	return ok
 }

@@ -15,7 +15,7 @@ Bus :: struct {
 	// The device this step's load or store changed, with its state from
 	// before, for undo (machine_step copies it to the undo record).
 	touched:      Device_Touch,
-	// The step clock time (cpu_clock) at which the devices' interrupt
+	// The step clock time (step_clock) at which the devices' interrupt
 	// lines change next by themselves (the CLINT's alarm); until then mip
 	// stays as it is.
 	interrupts_change_at: u64,
@@ -29,7 +29,7 @@ DEVICE_STATE_SIZE :: 32
 Device_State :: [DEVICE_STATE_SIZE]u8
 
 // A device on the bus. `offset` is from the start of its range; `now` is
-// the step clock (cpu_clock), for devices that keep time. Loads and stores
+// the step clock (step_clock), for devices that keep time. Loads and stores
 // may change the device (reading a UART's receive register takes
 // the byte out of it); peek must not. ok = false raises an access fault,
 // e.g. for an access size the device doesn't support, and must leave the
@@ -175,7 +175,7 @@ bus_fetch :: proc(bus: ^Bus, addr: u64) -> (instruction: u32, ok: bool) {
 // Reads `size` bytes (1, 2, 4 or 8) as a little-endian value,
 // zero-extended to 64 bits, from RAM or a device. Callers do any sign
 // extension themselves. `now` is the step clock: devices that keep time
-// (the CLINT) follow it. Every caller has it at hand (cpu_clock), so it
+// (the CLINT) follow it. Every caller has it at hand (step_clock), so it
 // is passed in rather than kept in the bus.
 //
 // Misaligned addresses are allowed in RAM, as on QEMU.

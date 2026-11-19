@@ -94,7 +94,7 @@ exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 	if !bus_is_ram(bus, address, size) {
 		return trap_make(.Load_Access_Fault, address)
 	}
-	value, ok := bus_load(bus, address, size, cpu_clock(cpu))
+	value, ok := bus_load(bus, address, size, step_clock(cpu))
 	if !ok {
 		return trap_make(.Load_Access_Fault, address)
 	}
@@ -141,7 +141,7 @@ exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: 
 	if !bus_is_ram(bus, address, size) {
 		return trap_make(.Store_Access_Fault, address)
 	}
-	raw, ok := bus_load(bus, address, size, cpu_clock(cpu))
+	raw, ok := bus_load(bus, address, size, step_clock(cpu))
 	if !ok {
 		return trap_make(.Store_Access_Fault, address)
 	}
@@ -203,9 +203,9 @@ amo_store :: proc(cpu: ^Cpu, bus: ^Bus, address: u64, size: u64, value: u64) -> 
 	// Atomics only reach RAM (exec_* check bus_is_ram), where a peek
 	// always works. (Not recording: no old bytes to save.)
 	when DEBUG_RECORD_STEPS {
-		old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+		old_value, _ := bus_peek(bus, address, size, step_clock(cpu))
 	}
-	if !bus_store(bus, address, size, value, cpu_clock(cpu)) {
+	if !bus_store(bus, address, size, value, step_clock(cpu)) {
 		return false
 	}
 	when DEBUG_RECORD_STEPS {

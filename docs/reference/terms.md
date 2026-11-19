@@ -148,7 +148,7 @@ Related: lb lh lw ld, .byte .half .word .dword
 
 Does: an instruction retires when it finishes and its result counts. One that traps does not retire.
 
-For: the instret / minstret counters count retired instructions. The toolbar's step number is the same count, so a step that trapped into a handler doesn't add to it.
+For: the minstret counter (instret is its read-only name) counts retired instructions. The debugger's "after N instructions" is that count. The toolbar's "step N" counts steps, like mcycle, so it also counts a trap or interrupt taken into a handler.
 
 Related: mcycle minstret cycle instret
 

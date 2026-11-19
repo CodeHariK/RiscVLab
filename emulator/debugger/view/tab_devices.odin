@@ -52,7 +52,7 @@ tab_devices :: proc(session: ^state.Session) {
 clint_section :: proc(session: ^state.Session, next: state.Memory_Access, last: state.Memory_Access) {
 	colors := ui.palette()
 	clint := session.clint
-	clock := rv.cpu_clock(&session.machine.cpu)
+	clock := rv.step_clock(&session.machine.cpu)
 	wrapped_text(
 		fmt.tprintf("clint at 0x%x: the timer, and software interrupts. 4- and 8-byte registers.", rv.CLINT_BASE),
 		ui.text_config(.Code_Small, colors.accent),

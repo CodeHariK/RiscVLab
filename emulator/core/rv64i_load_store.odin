@@ -15,7 +15,7 @@ exec_load :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 
 	address := reg_read(cpu, rs1(instruction)) + imm_i(instruction)
 	size := u64(1) << (kind & 0b11)
-	value, ok := bus_load(bus, address, size, cpu_clock(cpu))
+	value, ok := bus_load(bus, address, size, step_clock(cpu))
 	if !ok {
 		return trap_make(.Load_Access_Fault, address)
 	}
@@ -51,9 +51,9 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	// that can't be read back, without stopping the store.
 	// (Not recording: no old bytes to save, just the store.)
 	when DEBUG_RECORD_STEPS {
-		old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+		old_value, _ := bus_peek(bus, address, size, step_clock(cpu))
 	}
-	if !bus_store(bus, address, size, reg_read(cpu, rs2(instruction)), cpu_clock(cpu)) {
+	if !bus_store(bus, address, size, reg_read(cpu, rs2(instruction)), step_clock(cpu)) {
 		return trap_make(.Store_Access_Fault, address)
 	}
 	when DEBUG_RECORD_STEPS {

@@ -14,7 +14,7 @@ report_result :: proc(machine: ^rv.Machine, result: rv.Run_Result) -> int {
 
 	switch result.reason {
 	case .Breakpoint:
-		fmt.eprintfln("ebreak at pc=0x%016x after %d instructions, a0=%d", cpu.pc, cpu.instret, a0)
+		fmt.eprintfln("ebreak at pc=0x%016x after %d instructions, a0=%d", cpu.pc, cpu.csr.minstret, a0)
 		return int(a0 & 0xFF)
 	case .Trap:
 		fmt.eprintfln(
@@ -22,12 +22,12 @@ report_result :: proc(machine: ^rv.Machine, result: rv.Run_Result) -> int {
 			result.trap.cause,
 			result.trap.value,
 			cpu.pc,
-			cpu.instret,
+			cpu.csr.minstret,
 		)
 		return 1
 	case .Host_Exit:
 		if result.exit_code == 0 {
-			fmt.eprintfln("tohost: exit code 0 (pass) after %d instructions", cpu.instret)
+			fmt.eprintfln("tohost: exit code 0 (pass) after %d instructions", cpu.csr.minstret)
 		} else {
 			fmt.eprintfln("tohost: exit code %d (riscv-tests: test %d failed) at pc=0x%016x", result.exit_code, result.exit_code, cpu.pc)
 		}

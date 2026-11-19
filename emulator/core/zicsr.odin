@@ -74,7 +74,7 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	}
 
 	// The old value goes into the undo record first; csr_write applies the
-	// CSR's own rules (WARL fix-ups, and for mcycle, moving clock_offset
+	// CSR's own rules (WARL fix-ups, and for mcycle, moving step_clock_offset
 	// so the step clock doesn't jump: csr.odin). A read-only CSR refuses
 	// the write: illegal, and nothing to undo.
 	if writes {

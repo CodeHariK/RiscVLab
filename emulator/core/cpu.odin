@@ -25,20 +25,15 @@ Cpu :: struct {
 	// Address of the next instruction. `cpu_step` sets it to pc + 4 before
 	// executing; jumps and taken branches overwrite it.
 	next_pc:    u64,
-	// Instructions completed without a trap: the `minstret` CSR.
-	instret:    u64,
-	// Clock cycles: the `mcycle` CSR. One per step here: an instruction,
-	// or a trap or interrupt taken into a handler (those take cycles on
-	// real hardware too, but retire nothing, so instret doesn't count
-	// them). A program can write mcycle and minstret, each on its own.
-	cycle:      u64,
-	// The step clock (cpu_clock) is cycle + clock_offset. See cpu_clock.
-	clock_offset: u64,
+	// Not a CSR: what turns mcycle into the step clock, the machine's time
+	// that the CLINT follows (step_clock = mcycle + step_clock_offset). It
+	// changes only when a program writes mcycle (csr_write).
+	step_clock_offset: u64,
 	// Set when this step's CSR instruction wrote minstret / mcycle: the
 	// written value then stands, without the instruction's own count
 	// (cpu_step). Cleared at the start of each step.
-	instret_written: bool,
-	cycle_written:   bool,
+	minstret_written: bool,
+	mcycle_written:   bool,
 	// Current privilege level. (Next to the bools above, so the three
 	// share one 8-byte slot.)
 	privilege:  Privilege,
@@ -64,8 +59,8 @@ Cpu :: struct {
 // program writes mcycle (csr_write), by just as much as keeps the clock
 // going. So a step costs nothing extra, and undo needs no field for it:
 // putting mcycle back puts the clock back.
-cpu_clock :: #force_inline proc(cpu: ^Cpu) -> u64 {
-	return cpu.cycle + cpu.clock_offset
+step_clock :: #force_inline proc(cpu: ^Cpu) -> u64 {
+	return cpu.csr.mcycle + cpu.step_clock_offset
 }
 
 // What LR.W / LR.D reserved: SC succeeds only on the same address and

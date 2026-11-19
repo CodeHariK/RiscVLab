@@ -92,12 +92,12 @@ counter_write_is_not_counted_by_its_own_instruction :: proc(t: ^testing.T) {
 	machine.cpu.regs[6] = 100
 
 	testing.expect(t, rv.machine_step(&machine) == nil)
-	testing.expect_value(t, machine.cpu.instret, 100)
-	testing.expect_value(t, machine.cpu.cycle, 1)
+	testing.expect_value(t, machine.cpu.csr.minstret, 100)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 1)
 
 	testing.expect(t, rv.machine_step_back(&machine))
-	testing.expect_value(t, machine.cpu.instret, 0)
-	testing.expect_value(t, machine.cpu.cycle, 0)
+	testing.expect_value(t, machine.cpu.csr.minstret, 0)
+	testing.expect_value(t, machine.cpu.csr.mcycle, 0)
 }
 
 @(test)

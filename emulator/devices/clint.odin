@@ -17,13 +17,14 @@ import rv "../core"
 // faults. Other offsets read as 0 and ignore writes.
 //
 // Time is counted in steps, not real time: mtime is worked out from the
-// step clock (rv.cpu_clock, one tick per step, which no program can
-// write), mtime = clock * CLINT_TICKS_PER_STEP + offset, so it needs no
-// work per step and undo comes for free (the clock is already put back
-// on every step back). `offset` is what writing mtime changes. A timer
-// interrupt therefore arrives at the same instruction on every run.
+// step clock (rv.step_clock, one tick per step, which no program can
+// write): mtime = clock * CLINT_TICKS_PER_STEP + mtime_offset. So it
+// needs no work per step, and undo comes for free (the clock is already
+// put back on every step back). `mtime_offset` is what writing mtime
+// changes. A timer interrupt therefore arrives at the same instruction on
+// every run.
 // (mcycle counts the same steps, but a program can write it, and on real
-// hardware that doesn't move the timer: rv.cpu_clock says how the two
+// hardware that doesn't move the timer: rv.step_clock says how the two
 // are kept apart.)
 //
 // mtimecmp starts as all ones: no alarm, nothing pending, until software
@@ -38,9 +39,9 @@ CLINT_TICKS_PER_STEP :: u64(1)
 // fit in a Device_State. A field that shouldn't be saved would need a
 // struct of its own for the saved part, as the UART has.
 Clint :: struct {
-	msip:     u32,
-	mtimecmp: u64,
-	offset:   u64, // mtime = clock * CLINT_TICKS_PER_STEP + offset
+	msip:         u32,
+	mtimecmp:     u64,
+	mtime_offset: u64, // mtime = clock * CLINT_TICKS_PER_STEP + mtime_offset
 }
 #assert(size_of(Clint) <= rv.DEVICE_STATE_SIZE)
 
@@ -73,7 +74,7 @@ clint_attach :: proc(bus: ^rv.Bus) -> ^Clint {
 // mtime when the step clock reads `now`. Wraps around past max(u64), as
 // a real 64-bit counter would.
 clint_mtime :: proc(clint: ^Clint, now: u64) -> u64 {
-	return now * CLINT_TICKS_PER_STEP + clint.offset
+	return now * CLINT_TICKS_PER_STEP + clint.mtime_offset
 }
 
 // How many more steps until the timer interrupt is pending, or false if
@@ -169,10 +170,11 @@ clint_store :: proc(data: rawptr, offset: u64, size: u64, value: u64, now: u64) 
 	case CLINT_MTIMECMP:
 		clint.mtimecmp = updated
 	case CLINT_MTIME:
-		// Setting the clock: mtime = now * TICKS + offset, so choose the
-		// offset that makes it read `updated` now; it keeps counting from
-		// there. (A negative offset just wraps round, which works out.)
-		clint.offset = updated - now * CLINT_TICKS_PER_STEP
+		// Setting the clock: mtime = now * TICKS + mtime_offset, so choose
+		// the mtime_offset that makes it read `updated` now; it keeps
+		// counting from there. (A negative offset just wraps round, which
+		// works out.)
+		clint.mtime_offset = updated - now * CLINT_TICKS_PER_STEP
 	}
 	return true
 }

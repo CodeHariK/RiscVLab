@@ -157,6 +157,24 @@ handle_docs_window :: proc(session: ^state.Session) {
 		return
 	}
 	if rl.IsMouseButtonPressed(.LEFT) {
+		switch target in view.docs_link_under_pointer(session) {
+		case view.Docs_Entry_Link:
+			// A Related link: show that entry, from its top or at the
+			// section it names, and find it in the list.
+			view.display.docs_pinned = target.entry
+			view.display.docs_scroll_pending = true
+			view.display.docs_page_scroll = {restore_pending = true}
+			view.display.docs_section_entry = target.entry
+			view.display.docs_section_pending = target.section
+			return
+		case view.Docs_Lesson_Link:
+			// A lesson about the entry: open it and close the window, so the
+			// lesson is on screen, ready to step.
+			open_program(session, target.lesson)
+			view.display.docs_pinned = target.entry   // D reopens on this entry
+			view.display.docs_open = false            // show the lesson
+			return
+		}
 		for index in view.docs_filtered() {
 			if clay.PointerOver(clay.ID(view.DOCS_ENTRY_ID, u32(index))) {
 				view.display.docs_pinned = index

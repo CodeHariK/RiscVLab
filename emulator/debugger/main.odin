@@ -16,7 +16,7 @@ import state "state"
 // rvdbg: step debugger for the RiscVOdin core (raylib window, Clay layout).
 //
 //   rvdbg [program] [--tests <tests folder>] [--windowed]
-//         [--steps N] [--tab <name>]... [--screenshot <file.png>]
+//         [--steps N] [--tab <name>]... [--docs <entry>] [--screenshot <file.png>]
 //
 // With --tests, the Programs window lists the lessons and tests found there.
 // --windowed opens a normal maximized window instead of native fullscreen
@@ -24,8 +24,11 @@ import state "state"
 //
 // Scripted runs, to look at the UI without clicking: --steps runs N
 // instructions after opening the program, --tab selects a tab by name
-// (Devices, Memory, Steps, ...; repeat for several), and --screenshot
-// saves the window as a PNG once the layout has settled, then quits.
+// (Devices, Memory, Steps, ...; repeat for several), --docs opens the Docs
+// window on an entry (a name from its heading: lw, mtvec, uart, ..., or
+// entry#Section for one of its "### " sections), and
+// --screenshot saves the window as a PNG once the layout has settled,
+// then quits.
 // A scripted run never saves the settings (settings_file.odin).
 //
 // Controls: Reset, Prev / Next (buttons, or the left / right arrow keys).
@@ -36,12 +39,13 @@ main :: proc() {
 run :: proc() -> int {
 	options, ok := parse_arguments(os.args)
 	if !ok {
-		fmt.eprintln("usage: rvdbg [program] [--tests <folder>] [--windowed] [--steps N] [--tab <name>]... [--screenshot <file.png>]")
+		fmt.eprintln("usage: rvdbg [program] [--tests <folder>] [--windowed] [--steps N] [--tab <name>]... [--docs <entry>] [--screenshot <file.png>]")
 		fmt.eprintln("  program              ELF or raw binary to open (default: the last one opened, or the first listed)")
 		fmt.eprintln("  --tests <folder>     list the lessons and tests found in that folder")
 		fmt.eprintln("  --windowed           a normal maximized window, not native fullscreen")
 		fmt.eprintln("  --steps N            run N instructions after opening the program")
 		fmt.eprintln("  --tab <name>         select a tab (Source, Steps, Memory, Devices, ...); repeatable")
+		fmt.eprintln("  --docs <entry>       open the Docs window on that entry (lw, mtvec, uart, ..., or entry#Section)")
 		fmt.eprintln("  --screenshot <file>  save the window as a PNG, then quit")
 		return 2
 	}
@@ -83,6 +87,30 @@ run :: proc() -> int {
 		}
 		for tab in options.tabs {
 			view.display.selected_tab[view.panel_of(tab)] = tab
+		}
+		if options.docs != "" {
+			name, section_name := options.docs, ""
+			if hash := strings.index_byte(name, '#'); hash >= 0 {
+				name, section_name = name[:hash], name[hash + 1:]
+			}
+			entry := reference.find(name)
+			if entry < 0 {
+				fmt.eprintfln("error: --docs: no entry called %s", name)
+				return 2
+			}
+			section := -1
+			if section_name != "" {
+				section = reference.find_section(entry, section_name)
+				if section < 0 {
+					fmt.eprintfln("error: --docs: %s has no section called %s", name, section_name)
+					return 2
+				}
+			}
+			view.display.docs_open = true
+			view.display.docs_pinned = entry
+			view.display.docs_scroll_pending = true
+			view.display.docs_section_entry = entry
+			view.display.docs_section_pending = section
 		}
 	}
 
@@ -178,8 +206,9 @@ Options :: struct {
 	windowed:     bool,
 	steps:        int,
 	tabs:         [dynamic]view.Tab,
+	docs:         string, // --docs: the entry to open the Docs window on
 	screenshot:   string,
-	// Any of --steps, --tab, --screenshot: a run that isn't the user's
+	// Any of --steps, --tab, --docs, --screenshot: a run that isn't the user's
 	// session, so it doesn't save the settings.
 	scripted:     bool,
 }
@@ -229,6 +258,10 @@ parse_arguments :: proc(args: []string) -> (options: Options, ok: bool) {
 				return {}, false
 			}
 			append(&options.tabs, tab)
+			options.scripted = true
+		case argument == "--docs" && has_value:
+			i += 1
+			options.docs = args[i]
 			options.scripted = true
 		case argument == "--screenshot" && has_value:
 			i += 1

@@ -13,7 +13,8 @@ import "core:strings"
 //   riscv-tests  tests/riscv-tests/build/rv64ui-p-*, rv64um-p-*, rv64ua-p-*  (if built)
 //
 // Titles and descriptions come from the first two comment lines of each
-// source file. Only programs that have been built are listed.
+// source file, and a lesson's Docs entries from its "# Docs:" line. Only
+// programs that have been built are listed.
 
 Catalog_Group :: enum {
 	Lessons,
@@ -32,6 +33,9 @@ Catalog_Entry :: struct {
 	title:       string,
 	description: string,
 	path:        string, // the ELF to load
+	// The names on the source's "# Docs:" line (lessons have one): the
+	// Docs entries it is about. The Docs window links each entry back.
+	docs:        []string,
 }
 
 Catalog :: struct {
@@ -69,8 +73,8 @@ add_programs :: proc(group: Catalog_Group, source_dir: string, build_dir: string
 			continue
 		}
 		elf = strings.clone(elf)
-		title, description := read_header(fmt.tprintf("%s/%s", source_dir, name), stem)
-		append(&catalog.entries, Catalog_Entry{group, title, description, elf})
+		header := read_header(fmt.tprintf("%s/%s", source_dir, name), stem)
+		append(&catalog.entries, Catalog_Entry{group = group, title = header.title, description = header.description, path = elf, docs = header.docs})
 	}
 }
 
@@ -87,10 +91,10 @@ add_riscv_tests :: proc(build_dir: string) {
 		append(
 			&catalog.entries,
 			Catalog_Entry {
-				.Riscv_Tests,
-				strings.clone(name),
-				fmt.aprintf("official test for: %s", instruction),
-				fmt.aprintf("%s/%s", build_dir, name),
+				group = .Riscv_Tests,
+				title = strings.clone(name),
+				description = fmt.aprintf("official test for: %s", instruction),
+				path = fmt.aprintf("%s/%s", build_dir, name),
 			},
 		)
 	}
@@ -113,21 +117,48 @@ sorted_file_names :: proc(dir: string, suffix: string) -> []string {
 	return names[:]
 }
 
-// Title and description from the first two "# " comment lines of a source
-// file; the file name stands in when there is no header.
+// What a source file's header says (a lesson's, for example):
+//
+//   # Lesson 19: Printing with the UART      title
+//   # A program prints by storing bytes ...   description
+//   # Expect: exit 13                         (for run_lessons.sh)
+//   # Docs: uart, mmio, lbu, sb               docs
 @(private = "file")
-read_header :: proc(path: string, fallback: string) -> (title: string, description: string) {
-	title = strings.clone(fallback)
+Header :: struct {
+	title:       string,
+	description: string,
+	docs:        []string,
+}
+
+// How far into a source file its header can reach.
+HEADER_LINES :: 10
+
+// Reads a source file's header; the file name stands in for a missing
+// title.
+@(private = "file")
+read_header :: proc(path: string, fallback: string) -> (header: Header) {
+	header.title = strings.clone(fallback)
 	data, error := os.read_entire_file(path, context.temp_allocator)
 	if error != nil {
-		return title, ""
+		return header
 	}
 	lines := strings.split_lines(string(data), context.temp_allocator)
 	if len(lines) > 0 && strings.has_prefix(lines[0], "# ") {
-		title = strings.clone(strings.trim_prefix(lines[0], "# "))
+		delete(header.title)
+		header.title = strings.clone(strings.trim_prefix(lines[0], "# "))
 	}
 	if len(lines) > 1 && strings.has_prefix(lines[1], "# ") {
-		description = strings.clone(strings.trim_prefix(lines[1], "# "))
+		header.description = strings.clone(strings.trim_prefix(lines[1], "# "))
 	}
-	return title, description
+	for line in lines[:min(len(lines), HEADER_LINES)] {
+		if strings.has_prefix(line, "# Docs:") {
+			names := strings.split(line[len("# Docs:"):], ",")
+			for &name in names {
+				name = strings.clone(strings.trim_space(name))
+			}
+			header.docs = names
+			break
+		}
+	}
+	return header
 }

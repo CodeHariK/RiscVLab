@@ -2,8 +2,9 @@
 #
 #   make              release build of the command-line runner -> build/rvemu
 #   make debug        debug build                              -> build/rvemu-debug
-#   make test         unit tests, then build the test programs, run them, check undo and the disassembler
+#   make test         unit tests and the docs check, then build the test programs, run them, check undo and the disassembler
 #   make unit         unit tests only (unit_tests/, `odin test`)
+#   make docs-check   check the docs: every Related item and lesson # Docs: name is an entry, plain ASCII
 #   make run PROGRAM=path/to/program.bin [ARGS=--trace]
 #   make riscv-tests  build and run the official rv64ui, rv64um and rv64ua tests (run ../tests/riscv-tests/fetch.sh once first)
 #   make debugger     build the step debugger -> build/rvdbg
@@ -29,7 +30,7 @@ PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
 PROGRAM      ?= $(PROGRAMS_BIN)/sum.elf
 
-.PHONY: all debug run programs test unit riscv-tests clean debugger debug-ui
+.PHONY: all debug run programs test unit docs-check riscv-tests clean debugger debug-ui
 
 all: $(BINARY)
 
@@ -68,7 +69,13 @@ unit:
 	@mkdir -p $(BUILD_DIR)
 	$(ODIN) test unit_tests -out:$(BUILD_DIR)/unit_tests $(VET)
 
-test: unit $(BINARY) programs
+# Checks on the docs (debugger/reference/reference_test.odin), with the
+# same parser the Docs window uses.
+docs-check:
+	@mkdir -p $(BUILD_DIR)
+	$(ODIN) test debugger/reference -out:$(BUILD_DIR)/docs_check $(VET)
+
+test: unit docs-check $(BINARY) programs
 	@for format in $(FORMATS); do \
 	  ./$(BINARY) $(PROGRAMS_BIN)/sum.$$format; code=$$?; \
 	  if [ $$code -eq 55 ]; then echo "PASS sum.$$format"; else echo "FAIL sum.$$format (exit $$code, expected 55)"; exit 1; fi; \

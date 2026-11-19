@@ -2,9 +2,9 @@
 
 RISC-V (RV64) emulator in Odin, modelled on QEMU's `virt` machine so it can eventually boot xv6.
 
-**Current state:** RV64IMA + Zicsr + Zifencei (what xv6 needs), one hart in machine mode, RAM only. Traps enter the handler at `mtvec`; while no handler is set up (`mtvec` = 0) a trap stops the machine, so simple programs end with `ebreak`.
+**Current state:** RV64IMA + Zicsr + Zifencei (what xv6 needs), one hart in machine mode, with RAM, the UART and the CLINT timer, and machine-mode interrupts. Traps enter the handler at `mtvec`; while no handler is set up (`mtvec`'s base is 0) a trap stops the machine, so simple programs end with `ebreak`. Every step can be undone.
 
-Docs: [architecture](../docs/emulator/architecture.md) and [supported instructions](../docs/emulator/instructions.md).
+Docs: [how the emulator is built](../docs/reference/emulator.md) and [instruction encodings](../docs/reference/encodings.md), also in the debugger's Docs window; the full list is in [docs/README.md](../docs/README.md).
 
 ## Build and run
 
@@ -24,7 +24,7 @@ make debug-ui                                              # opens the first les
 make debug-ui UI_PROGRAM=../tests/programs/build/rv64i_check.elf
 ```
 
-`rvdbg` options: `--windowed` opens a normal maximized window instead of native fullscreen (which on macOS is a Space of its own). For a picture of the UI without clicking: `--steps N` runs N instructions, `--tab <name>` selects a tab (repeatable), `--screenshot <file.png>` saves the window once the layout has settled and quits. Scripted runs don't save the settings.
+`rvdbg` options: `--windowed` opens a normal maximized window instead of native fullscreen (which on macOS is a Space of its own). For a picture of the UI without clicking: `--steps N` runs N instructions, `--tab <name>` selects a tab (repeatable), `--docs <entry>` opens the Docs window on an entry, `--screenshot <file.png>` saves the window once the layout has settled and quits. Scripted runs don't save the settings.
 
 ```
 ./build/rvdbg ../tests/programs/build/lessons/19_uart_hello.elf --steps 40 --tab Devices --tab Steps --screenshot build/ui.png
@@ -51,7 +51,7 @@ rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 - What the program prints (bytes stored to the UART at `0x10000000`) goes to stdout, as it runs. The report of how it stopped, and `--trace`, go to stderr.
 - `--trace` prints one line per instruction: `pc  bits  disassembly  [reg <- value]`.
 - `--disasm` lists the program's disassembly (objdump format) without running it.
-- `--check-undo` runs the program, steps back to the start, and checks every register, byte of RAM and device (the UART) is restored.
+- `--check-undo` runs the program, steps back to the start, and checks every register, CSR, byte of RAM and device (the UART and the CLINT) is restored.
 
 ## Source layout
 
@@ -75,7 +75,7 @@ No file access and no printing, so it compiles for any target.
 | File | Responsibility |
 |---|---|
 | `machine.odin` | Public API: create, `machine_step`, `machine_step_back`, `machine_run` |
-| `cpu.odin` | Hart state: registers, PC, `instret`, CSRs, the LR / SC reservation, the current undo record |
+| `cpu.odin` | Hart state: registers, PC, `instret`, `cycle`, CSRs, the LR / SC reservation, the current undo record; the step clock (`cpu_clock`) that devices keep time by |
 | `csr.odin` | Machine-mode CSRs: addresses, storage, read / write rules (WARL) |
 | `zicsr.odin` | The CSR instructions: CSRRW / CSRRS / CSRRC and immediate forms |
 | `bus.odin` | Physical address routing: RAM, or an attached device (`Device`, `bus_attach`); `bus_peek` reads without side effects; fetch is from RAM only |
@@ -122,15 +122,15 @@ No file access and no printing, so it compiles for any target.
 
 ### `debugger/` (package `rvdbg`): the step debugger
 
-The debugger links the core, `loader` and `disasm` into its own program and calls them directly. It is four packages, with dependencies pointing one way (`rvdbg` -> `view` -> `state` -> the emulator):
+The debugger links the core, `devices`, `loader` and `disasm` into its own program and calls them directly. It is five packages, with dependencies pointing one way: `rvdbg` -> `view` -> `state` -> the emulator, and `view` and `reference` draw with `ui`:
 
 | Folder | Package | What it is |
 |---|---|---|
 | `.` | `rvdbg` | `main.odin` (arguments, window, frame loop; native fullscreen in `window_mode_*.odin`), `input.odin` and `modal_input.odin` (buttons, keys, clicks), `settings_file.odin` (saving and restoring the settings, as JSON) |
 | `state/` | `state` | The model, no drawing: the session (open, Reset / Prev / Next, the preview of Next), the timeline of steps, memory access tracking, the program list, source and line map, symbols, reading the program file |
 | `view/` | `view` | Everything on screen, plus the view state (`display_state.odin`: tabs, scrolls, searches, open windows; the global is `display`) |
-| `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, tables (`table.odin`), the Markdown subset the docs use (`markdown.odin`), modal window frame, search box |
-| `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing, lookup, search |
+| `ui/` | `ui` | Generic UI on raylib + Clay: Clay renderer, theme, fonts, settings, buttons and tabs, tables (`table.odin`), the Markdown subset the docs use (`markdown.odin`), rows of links that wrap (`links.odin`), modal window frame, search box |
+| `reference/` | `reference` | The reference docs (`docs/reference/*.md`, embedded): parsing, lookup, search, Related items. `reference_test.odin` checks the docs (`make docs-check`, part of `make test`) |
 
 `view/` in more detail. Everything shown is a tab (`tab_*.odin`); a panel is just a box holding a list of tabs, drawn by one generic proc. `window_` files are windows over everything.
 
@@ -143,14 +143,14 @@ The debugger links the core, `loader` and `disasm` into its own program and call
 | `tab_registers.odin`, `tab_encoding.odin` | Registers with read / write tags; the next instruction's fields and effect |
 | `tab_csrs.odin` (with `csr_meaning.odin`), `tab_memory.odin`, `tab_stack.odin`, `tab_elf.odin` | CSRs, memory dump, stack, ELF info |
 | `tab_console.odin`, `tab_devices.odin`, `device_text.odin` | What the program printed through the UART; the devices' registers, decoded; device registers in the step text (`uart THR <- 0x48 'H'`) |
-| `window_programs.odin`, `window_docs.odin` | The Programs and Docs windows |
+| `window_programs.odin`, `window_docs.odin`, `docs_related.odin` | The Programs and Docs windows; an entry's Related and Lessons links (what they lead to, drawn with `ui.link_rows`) |
 | `step_detail.odin`, `step_execute.odin`, `timeline_text.odin`, `explain.odin`, `instruction_text.odin`, `number_format.odin` | Text: the stages of a step, step summaries, the status line, numbers in hex with decimals |
 | `encoding.odin`, `field_colors.odin` | An instruction as colour-coded fields, and the field colours per theme |
 | `display_state.odin`, `ids.odin` | The view state (global `display`), and the ids of buttons and tabs shared with the input handling |
 
 ### `unit_tests/` (package `rv_unit_tests`)
 
-Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`), the undo history (`history_test.odin`), the loader's checks (`loader_test.odin`), the UART and devices on the bus (`uart_test.odin`), the CLINT and interrupts (`clint_test.odin`). Run with `make unit`.
+Unit tests for core rules the test programs can't reach easily: CSR read / write rules (`csr_test.odin`), CSR instructions that trap (`zicsr_test.odin`), multiply / divide special cases (`muldiv_test.odin`), LR / SC reservations and atomics (`atomic_test.odin`), the undo history (`history_test.odin`), the loader's checks (`loader_test.odin`), the UART and devices on the bus (`uart_test.odin`), attaching devices (`bus_test.odin`), the CLINT, interrupts and the step clock (`clint_test.odin`). Run with `make unit`.
 
 ### `cli/` (package `rvemu`): the command-line runner
 

@@ -93,6 +93,19 @@ scroll_keep :: proc(saved: ^Saved_Scroll, area: clay.ElementId) {
 	}
 }
 
+// Scrolls a scrolling area so `row` is at its top (as far as it can go),
+// using last frame's layout. Returns false if either wasn't laid out.
+scroll_to_top :: proc(area: clay.ElementId, row: clay.ElementId) -> bool {
+	scroll := clay.GetScrollContainerData(area)
+	area_box := clay.GetElementData(area)
+	row_box := clay.GetElementData(row)
+	if !scroll.found || !area_box.found || !row_box.found {
+		return false
+	}
+	scroll.scrollPosition.y -= row_box.boundingBox.y - area_box.boundingBox.y
+	return true
+}
+
 // Scrolls a scrolling list so `row` is fully visible, using last frame's
 // layout. Returns false if either wasn't laid out last frame.
 scroll_into_view :: proc(list: clay.ElementId, row: clay.ElementId) -> bool {

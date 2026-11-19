@@ -31,6 +31,14 @@ View_State :: struct {
 	docs_scroll_pending: bool,
 	docs_list_scroll: ui.Saved_Scroll,
 	docs_page_scroll: ui.Saved_Scroll,
+	// Set by a link to "entry#Section": the entry and its section to scroll
+	// the page to, once it has been drawn; -1 = none. Forgotten if another
+	// entry is pinned first.
+	docs_section_entry:   int,
+	docs_section_pending: int,
+	// The entry the page showed pinned on the last frame (-1: none), so the
+	// scroll above waits until the new entry is on the page.
+	docs_page_drawn:  int,
 	// The Programs window (window_programs.odin): open or not, its search,
 	// and the chosen row (a position in the filtered list). Both windows
 	// keep their search, choice and scroll positions while closed, so they
@@ -53,6 +61,9 @@ display := View_State {
 	selected_program = -1,
 	program_failed   = -1,
 	docs_pinned      = -1,
+	docs_section_entry   = -1,
+	docs_section_pending = -1,
+	docs_page_drawn  = -1,
 }
 
 // The tab each panel starts on.

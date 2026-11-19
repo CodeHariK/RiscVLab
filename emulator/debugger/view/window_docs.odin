@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:slice"
 import "core:strings"
 import clay "../../vendor/clay-odin"
+import rl "vendor:raylib"
 import rv "../../core"
 import disasm "../../disasm"
 import ui "../ui"
@@ -27,16 +28,16 @@ import state "../state"
 //   - the instruction itself;
 //   - the CSR it reads or writes, for a CSR instruction;
 //   - the trap cause, when it will trap (from the preview).
-// Clicking an entry in the list pins that one instead, until "Follow next
-// instruction" is clicked.
+// Clicking an entry in the list, or a link on an entry's Related line
+// (docs_related.odin), pins that one instead, until "Follow next
+// instruction" is clicked. A link under "Lessons" opens that lesson
+// and closes the window.
 //
 // Entry bodies are Markdown, drawn by ui.markdown (ui/markdown.odin) with
 // the section labels below in a column of their own.
 
 DOCS_ENTRY_ID :: "DocsEntry" // + entry index
 DOCS_LESSON_ENTRY_ID :: "DocsLessonEntry" // + entry index, in the "This lesson" group
-// How far into a source file to look for its "# Docs:" line.
-LESSON_HEADER_LINES :: 10
 BUTTON_ID_DOCS_FOLLOW :: "DocsFollow"
 BUTTON_ID_DOCS_CLOSE :: "DocsClose"
 DOCS_LIST_WIDTH :: 420
@@ -74,6 +75,7 @@ docs_panes :: proc(data: rawptr) {
 			ui.modal_hint("Up / Down: entries   Left / Right: step")
 			ui.scroll_keep(&display.docs_list_scroll, clay.ID(DOCS_LIST_ID))
 			ui.scroll_keep(&display.docs_page_scroll, clay.ID(DOCS_PAGE_ID))
+			docs_scroll_to_section()
 			if display.docs_scroll_pending && shown >= 0 {
 				if ui.scroll_into_view(clay.ID(DOCS_LIST_ID), clay.ID(DOCS_ENTRY_ID, u32(shown))) {
 					display.docs_scroll_pending = false
@@ -96,6 +98,41 @@ docs_panes :: proc(data: rawptr) {
 	}
 }
 
+// After a link to "entry#Section": once the entry is on the page, scroll
+// so that section's heading is at the top.
+@(private)
+docs_scroll_to_section :: proc() {
+	section := display.docs_section_pending
+	if section < 0 {
+		return
+	}
+	if display.docs_pinned != display.docs_section_entry {
+		display.docs_section_pending = -1 // another entry was chosen first
+		return
+	}
+	if display.docs_page_drawn != display.docs_pinned {
+		return // not on the page yet
+	}
+	if ui.scroll_to_top(clay.ID(DOCS_PAGE_ID), clay.ID(docs_heading_id(0), u32(section))) {
+		display.docs_section_pending = -1
+	}
+}
+
+// The id of the "### " headings of the entry in page slot `slot` (+ the
+// section's number in the entry).
+docs_heading_id :: proc(slot: u32) -> string {
+	return fmt.tprintf("DocsHeading%d", slot)
+}
+
+// How wide the entry page is: the window, less its margins, padding and
+// border, the list on the left and the gap after it. Worked out from the
+// screen rather than read from the layout: content too wide for the page
+// would widen it, and a width read back from it would never shrink.
+docs_page_width :: proc() -> f32 {
+	window := f32(rl.GetScreenWidth()) - 2 * (ui.MODAL_MARGIN + ui.PANEL_PADDING + ui.BORDER_WIDTH)
+	return window - DOCS_LIST_WIDTH - 16 // 16: the gap between list and page (docs_panes)
+}
+
 // The entry the list highlights: the pinned one, or the next instruction's.
 docs_shown_entry :: proc(session: ^state.Session) -> int {
 	if display.docs_pinned >= 0 {
@@ -104,35 +141,57 @@ docs_shown_entry :: proc(session: ^state.Session) -> int {
 	return reference.find(next_mnemonic(session))
 }
 
+// The entries on the page, by slot: the pinned one alone in slot 0, or
+// those for the next instruction (see the top of this file): its
+// pseudo-instruction, the instruction, its CSR, its trap. -1 = empty slot.
+// The slot keeps each entry's element ids apart.
+docs_page_entries :: proc(session: ^state.Session) -> [4]int {
+	if display.docs_pinned >= 0 {
+		return {display.docs_pinned, -1, -1, -1}
+	}
+	mnemonic := next_mnemonic(session)
+	return {
+		docs_pseudo_entry(session, mnemonic),
+		reference.find(mnemonic),
+		reference.find(next_csr_name(session)),
+		reference.find(next_trap_name(session)),
+	}
+}
+
+// The entry for the pseudo-instruction the source line uses for the next
+// instruction (`la` for an auipc), or -1 if the source says the same as
+// the disassembly.
+@(private)
+docs_pseudo_entry :: proc(session: ^state.Session, mnemonic: string) -> int {
+	written := source_word(session)
+	if written == "" || written == mnemonic {
+		return -1
+	}
+	if found := reference.find(written); found >= 0 && reference.entries[found].group != .Instructions {
+		return found
+	}
+	return -1
+}
+
 @(private)
 docs_content :: proc(session: ^state.Session) {
 	colors := ui.palette()
-	if display.docs_pinned >= 0 {
-		docs_entry(reference.entries[display.docs_pinned], 0)
-		return
-	}
-
-	mnemonic := next_mnemonic(session)
-	written := source_word(session)
-	pseudo := -1
-	if written != "" && written != mnemonic {
-		if found := reference.find(written); found >= 0 && reference.entries[found].group != .Instructions {
-			pseudo = found
+	shown := docs_page_entries(session)
+	display.docs_page_drawn = display.docs_pinned
+	if display.docs_pinned < 0 {
+		mnemonic := next_mnemonic(session)
+		following := fmt.tprintf("Following the next instruction: %s", mnemonic)
+		if shown[0] >= 0 {
+			following = fmt.tprintf("%s (the source says %s)", following, source_word(session))
 		}
-	}
-	following := fmt.tprintf("Following the next instruction: %s", mnemonic)
-	if pseudo >= 0 {
-		following = fmt.tprintf("%s (the source says %s)", following, written)
-	}
-	clay.TextDynamic(following, ui.text_config(.Code_Small, colors.text_dim))
-
-	shown := [4]int{pseudo, reference.find(mnemonic), reference.find(next_csr_name(session)), reference.find(next_trap_name(session))}
-	if shown[1] < 0 && mnemonic != "" {
-		clay.TextDynamic(fmt.tprintf("No entry for %s yet.", mnemonic), ui.text_config(.Text, colors.text))
+		clay.TextDynamic(following, ui.text_config(.Code_Small, colors.text_dim))
+		if shown[1] < 0 && mnemonic != "" {
+			clay.TextDynamic(fmt.tprintf("No entry for %s yet.", mnemonic), ui.text_config(.Text, colors.text))
+		}
 	}
 	for index, slot in shown {
 		if index >= 0 {
-			docs_entry(reference.entries[index], u32(slot))
+			docs_entry(index, u32(slot))
 		}
 	}
 }
@@ -214,13 +273,42 @@ next_mnemonic :: proc(session: ^state.Session) -> string {
 	return strings.clone(mnemonic, context.temp_allocator)
 }
 
-// `slot` keeps the ids of the (up to four) entries shown apart.
+// Entry `index`; `slot` keeps the ids of the (up to four) entries shown
+// apart. The body is Markdown, except the Related line, drawn as links
+// where it stands, followed by links to the lessons about the entry
+// (docs_related.odin).
 @(private)
-docs_entry :: proc(entry: reference.Entry, slot: u32) {
+docs_entry :: proc(index: int, slot: u32) {
 	colors := ui.palette()
+	entry := reference.entries[index]
 	if clay.UI(clay.ID("DocsEntryShown", slot))({layout = {sizing = {width = clay.SizingGrow()}, layoutDirection = .TopToBottom, padding = {top = 8, bottom = 16}, childGap = 3}}) {
 		clay.TextDynamic(reference.entry_heading(entry), ui.text_config(.Title, colors.title))
-		ui.markdown(fmt.tprintf("DocsEntry%d", slot), entry.lines, doc_labels[:], DOCS_LABEL_WIDTH)
+		related := -1
+		for line, at in entry.lines {
+			if strings.has_prefix(line, reference.RELATED_LABEL) {
+				related = at
+				break
+			}
+		}
+		if related < 0 {
+			ui.markdown(fmt.tprintf("DocsEntry%d", slot), entry.lines, doc_labels[:], DOCS_LABEL_WIDTH, docs_page_width(), docs_heading_id(slot))
+			docs_lesson_links(index, slot)
+			return
+		}
+		// Two Markdown parts need two ids, for their tables' ids.
+		// The headings after the Related line go on numbering from the
+		// ones before it.
+		before := entry.lines[:related]
+		headings_before: u32 = 0
+		for line in before {
+			if strings.has_prefix(line, reference.SECTION_PREFIX) {
+				headings_before += 1
+			}
+		}
+		ui.markdown(fmt.tprintf("DocsEntry%d", slot), before, doc_labels[:], DOCS_LABEL_WIDTH, docs_page_width(), docs_heading_id(slot))
+		docs_related_links(entry, slot)
+		docs_lesson_links(index, slot)
+		ui.markdown(fmt.tprintf("DocsEntry%dAfter", slot), entry.lines[related + 1:], doc_labels[:], DOCS_LABEL_WIDTH, docs_page_width(), docs_heading_id(slot), headings_before)
 	}
 }
 
@@ -291,7 +379,7 @@ lesson_doc_entries :: proc(session: ^state.Session) -> []int {
 	}
 	entries := make([dynamic]int, context.temp_allocator)
 	for line, number in session.source.lines {
-		if number >= LESSON_HEADER_LINES {
+		if number >= state.HEADER_LINES {
 			break
 		}
 		text := strings.trim_space(line)

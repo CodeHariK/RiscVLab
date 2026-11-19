@@ -11,6 +11,20 @@ package rv
 // back restores those old values.
 //
 // Interrupts and supervisor mode will add fields when they arrive.
+//
+// Recording costs time on every step (about a fifth of a tight loop's), so
+// it can be left out of a build: compile with -define:DEBUG_RECORD_STEPS=false
+// and every `when DEBUG_RECORD_STEPS { ... }` below and in the handlers is gone
+// from the program. Such a build runs programs and nothing more: no undo,
+// and no "what did this step write" for --trace (Cpu.last_write). The
+// debugger, the unit tests and build/rvemu-check record; build/rvemu, the
+// one for plain runs, doesn't (Makefile).
+//
+// Watch out: Odin doesn't type-check a `when` branch that is switched off,
+// so code inside one is only checked by a build that has it on. `make
+// test` builds both kinds.
+
+DEBUG_RECORD_STEPS :: #config(DEBUG_RECORD_STEPS, true)
 
 Undo_Record :: struct {
 	// Where the step started (restored on undo).

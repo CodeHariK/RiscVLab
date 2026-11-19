@@ -78,11 +78,15 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	// so the step clock doesn't jump: csr.odin). A read-only CSR refuses
 	// the write: illegal, and nothing to undo.
 	if writes {
-		cpu.undo.csr_changed = true
-		cpu.undo.csr_address = address
-		cpu.undo.csr_old = old
+		when DEBUG_RECORD_STEPS {
+			cpu.undo.csr_changed = true
+			cpu.undo.csr_address = address
+			cpu.undo.csr_old = old
+		}
 		if !csr_write(cpu, address, new_value) {
-			cpu.undo.csr_changed = false
+			when DEBUG_RECORD_STEPS {
+				cpu.undo.csr_changed = false
+			}
 			return illegal_instruction(instruction)
 		}
 	}

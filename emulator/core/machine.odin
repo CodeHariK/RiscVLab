@@ -75,11 +75,13 @@ machine_destroy :: proc(machine: ^Machine) {
 // (cpu_clock); minstret counts only the instructions that completed.
 machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu := &machine.cpu
-	cpu.undo = Undo_Record {
-		pc        = cpu.pc,
-		instret   = cpu.instret,
-		cycle     = cpu.cycle,
-		privilege = cpu.privilege,
+	when DEBUG_RECORD_STEPS {
+		cpu.undo = Undo_Record {
+			pc        = cpu.pc,
+			instret   = cpu.instret,
+			cycle     = cpu.cycle,
+			privilege = cpu.privilege,
+		}
 	}
 	machine.last_trap = nil
 	machine.bus.touched = {}
@@ -94,32 +96,40 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		cause, take = interrupt_to_take(cpu)
 	}
 	if take {
-		cpu.last_write = {}
+		when DEBUG_RECORD_STEPS {
+			cpu.last_write = {}
+		}
 		result = trap_make(cause, 0) // mtval is 0 for interrupts
 	} else {
 		result = cpu_step(cpu, &machine.bus)
 	}
-	if touch := machine.bus.touched; touch.touched {
-		cpu.undo.device_changed = true
-		cpu.undo.device_index = u8(touch.index)
-		cpu.undo.device_state = touch.state
+	when DEBUG_RECORD_STEPS {
+		if touch := machine.bus.touched; touch.touched {
+			cpu.undo.device_changed = true
+			cpu.undo.device_index = u8(touch.index)
+			cpu.undo.device_state = touch.state
+		}
 	}
 	if trap, has_trap := result.?; has_trap {
 		if !trap_has_handler(cpu) {
 			return result
 		}
-		cpu.undo.trap_taken = true
-		cpu.undo.trap_mstatus = cpu.csr.mstatus
-		cpu.undo.trap_mepc = cpu.csr.mepc
-		cpu.undo.trap_mcause = cpu.csr.mcause
-		cpu.undo.trap_mtval = cpu.csr.mtval
+		when DEBUG_RECORD_STEPS {
+			cpu.undo.trap_taken = true
+			cpu.undo.trap_mstatus = cpu.csr.mstatus
+			cpu.undo.trap_mepc = cpu.csr.mepc
+			cpu.undo.trap_mcause = cpu.csr.mcause
+			cpu.undo.trap_mtval = cpu.csr.mtval
+		}
 		trap_enter(cpu, trap)
 		machine.last_trap = trap
 		cpu.cycle += 1 // cpu_step counts only instructions that completed
 	}
 
-	if history_is_enabled(&machine.history) {
-		history_push(&machine.history, cpu.undo)
+	when DEBUG_RECORD_STEPS {
+		if history_is_enabled(&machine.history) {
+			history_push(&machine.history, cpu.undo)
+		}
 	}
 	// Look again if a device register was used or an alarm time came.
 	// (mie and mstatus.MIE don't change mip: they are checked when the

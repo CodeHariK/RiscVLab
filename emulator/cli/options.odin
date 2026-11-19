@@ -2,6 +2,7 @@ package rvemu
 
 import "core:fmt"
 import "core:strconv"
+import rv "../core"
 
 // Upper bound on executed instructions, so a buggy program can't hang the
 // emulator forever. Override with --max-steps (0 means no limit).
@@ -67,4 +68,17 @@ print_usage :: proc() {
 	fmt.eprintln("  --disasm         print the program's disassembly instead of running it")
 	fmt.eprintln("  --check-undo     run, then undo every step and check the state matches the start")
 	fmt.eprintln("  --max-steps N    stop after N instructions (0 = no limit)")
+}
+
+// False (with a message) if the options need something this build left
+// out: a build without step recording (rv.DEBUG_RECORD_STEPS, core/history.odin)
+// has nothing to undo and doesn't note what each step wrote.
+options_fit_build :: proc(options: Options) -> bool {
+	when !rv.DEBUG_RECORD_STEPS {
+		if options.trace || options.mode == .Check_Undo {
+			fmt.eprintln("error: this rvemu doesn't record steps, so it can't --trace or --check-undo: use build/rvemu-check")
+			return false
+		}
+	}
+	return true
 }

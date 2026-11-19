@@ -49,13 +49,18 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 	// shown (the debugger): undo puts back the device's own saved state
 	// instead (machine_step_back). So the peek may fail, for a register
 	// that can't be read back, without stopping the store.
-	old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+	// (Not recording: no old bytes to save, just the store.)
+	when DEBUG_RECORD_STEPS {
+		old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+	}
 	if !bus_store(bus, address, size, reg_read(cpu, rs2(instruction)), cpu_clock(cpu)) {
 		return trap_make(.Store_Access_Fault, address)
 	}
-	cpu.undo.memory_changed = true
-	cpu.undo.memory_address = address
-	cpu.undo.memory_size = size
-	cpu.undo.memory_old = old_value
+	when DEBUG_RECORD_STEPS {
+		cpu.undo.memory_changed = true
+		cpu.undo.memory_address = address
+		cpu.undo.memory_size = size
+		cpu.undo.memory_old = old_value
+	}
 	return nil
 }

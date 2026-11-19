@@ -5,11 +5,15 @@
 # newline), so the lessons keep working as the emulator grows. Also checks
 # that every lesson can be stepped all the way back (undo).
 #
-#   run_lessons.sh <rvemu> <lessons source dir> <lessons build dir>
+#   run_lessons.sh <rvemu> <lessons source dir> <lessons build dir> [<rvemu for --check-undo>]
+#
+# The undo check needs a build that records steps (build/rvemu-check);
+# without a fourth argument, <rvemu> is used for it too.
 
 emulator=$1
 sources=$2
 build=$3
+checker=${4:-$1}
 status=0
 
 for source in "$sources"/*.s; do
@@ -19,7 +23,7 @@ for source in "$sources"/*.s; do
     output=$("$emulator" "$build/$name.elf" 2> /dev/null)
     actual=$?
     # (A lesson without the line must print nothing: both are empty.)
-    if [ "$actual" = "$expected" ] && [ "$output" = "$expected_output" ] && "$emulator" "$build/$name.elf" --check-undo > /dev/null 2>&1; then
+    if [ "$actual" = "$expected" ] && [ "$output" = "$expected_output" ] && "$checker" "$build/$name.elf" --check-undo > /dev/null 2>&1; then
         echo "PASS lesson $name"
     else
         echo "FAIL lesson $name (exit $actual, expected $expected; printed \"$output\", expected \"$expected_output\"; or undo check failed)"

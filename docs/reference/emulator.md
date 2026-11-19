@@ -102,7 +102,7 @@ Prev puts the machine back exactly as it was before the last step: registers, me
 | trap entry | copied back | machine_step, saving mstatus, mepc, mcause and mtval before trap_enter |
 | always | copied back | machine_step: the pc, the privilege level, minstret, mcycle |
 A device puts its own state back because storing the old value again would act again: storing the old byte to THR would send a second byte.
-The records go into a ring buffer, the history. The debugger keeps the last 262144 steps (256K); when it is full, the oldest are forgotten and Prev stops there. The debugger also uses undo to show what Next will do: it runs the step, notes the result and undoes it straight away. mip isn't recorded: it follows from the devices and the clock, so it is worked out again after each step back. The command line records nothing unless it runs `rvemu --check-undo`, which runs a whole program, undoes every step and checks the machine is back where it started; `make test` does that for every test program and lesson.
+The records go into a ring buffer, the history. The debugger keeps the last 262144 steps (256K); when it is full, the oldest are forgotten and Prev stops there. The debugger also uses undo to show what Next will do: it runs the step, notes the result and undoes it straight away. mip isn't recorded: it follows from the devices and the clock, so it is worked out again after each step back. Recording costs about a fifth of a tight loop's time, so it is a compile-time switch (`DEBUG_RECORD_STEPS`, history.odin): every piece of it sits in a `when DEBUG_RECORD_STEPS { ... }` block, and a build with `-define:DEBUG_RECORD_STEPS=false` leaves them all out. `build/rvemu`, for plain runs, is built that way; `build/rvemu-check` records, for `--trace` and `--check-undo`, which runs a whole program, undoes every step and checks the machine is back where it started. `make test` does that for every test program and lesson, and builds both kinds (Odin doesn't check code in a switched-off `when`).
 
 Real hardware can't step back; this is something an emulator can offer. It only works because nothing leaves the machine for real: the UART's output exists only in the Console, so Prev can take a byte back off it. A real serial line couldn't.
 
@@ -131,6 +131,7 @@ Rules the bus applies to every device: instructions are fetched from RAM only, a
 - Little-endian host assumed. RISC-V is little-endian, and so are Apple Silicon and x86, so multi-byte accesses are direct (unaligned) loads and stores.
 - Misaligned data accesses are allowed in RAM (as on QEMU). Misaligned jump targets trap, because without the C extension instructions must be 4-byte aligned; atomics must be naturally aligned.
 - The hot loop is measured. A 500M-step loop is the benchmark for changes to machine_step and Cpu: even the size of Cpu shows up in it.
+- Anything that only serves undo or the trace goes inside `when DEBUG_RECORD_STEPS { ... }`, so the fast build (build/rvemu) leaves it out.
 
 ### Adding an instruction
 

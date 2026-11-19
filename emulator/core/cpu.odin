@@ -78,9 +78,11 @@ Reservation :: struct {
 // Changes the reservation, keeping the old one in the undo record (the
 // first change in a step is the one to restore).
 reservation_set :: proc(cpu: ^Cpu, reservation: Reservation) {
-	if !cpu.undo.reservation_changed {
-		cpu.undo.reservation_changed = true
-		cpu.undo.reservation_old = cpu.reservation
+	when DEBUG_RECORD_STEPS {
+		if !cpu.undo.reservation_changed {
+			cpu.undo.reservation_changed = true
+			cpu.undo.reservation_old = cpu.reservation
+		}
 	}
 	cpu.reservation = reservation
 }
@@ -96,9 +98,11 @@ reg_write :: #force_inline proc(cpu: ^Cpu, index: u32, value: u64) {
 	if index == 0 {
 		return
 	}
-	cpu.undo.register_changed = true
-	cpu.undo.register_index = index
-	cpu.undo.register_old = cpu.regs[index]
+	when DEBUG_RECORD_STEPS {
+		cpu.undo.register_changed = true
+		cpu.undo.register_index = index
+		cpu.undo.register_old = cpu.regs[index]
+		cpu.last_write = Register_Write{valid = true, index = index, value = value}
+	}
 	cpu.regs[index] = value
-	cpu.last_write = Register_Write{valid = true, index = index, value = value}
 }

@@ -200,13 +200,19 @@ unsigned_value :: proc(value: u64, size: u64) -> u64 {
 // Stores and records the old bytes for undo, as exec_store does.
 @(private = "file")
 amo_store :: proc(cpu: ^Cpu, bus: ^Bus, address: u64, size: u64, value: u64) -> bool {
-	old_value, readable := bus_peek(bus, address, size, cpu_clock(cpu))
-	if !readable || !bus_store(bus, address, size, value, cpu_clock(cpu)) {
+	// Atomics only reach RAM (exec_* check bus_is_ram), where a peek
+	// always works. (Not recording: no old bytes to save.)
+	when DEBUG_RECORD_STEPS {
+		old_value, _ := bus_peek(bus, address, size, cpu_clock(cpu))
+	}
+	if !bus_store(bus, address, size, value, cpu_clock(cpu)) {
 		return false
 	}
-	cpu.undo.memory_changed = true
-	cpu.undo.memory_address = address
-	cpu.undo.memory_size = size
-	cpu.undo.memory_old = old_value
+	when DEBUG_RECORD_STEPS {
+		cpu.undo.memory_changed = true
+		cpu.undo.memory_address = address
+		cpu.undo.memory_size = size
+		cpu.undo.memory_old = old_value
+	}
 	return true
 }

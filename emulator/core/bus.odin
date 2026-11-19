@@ -127,8 +127,10 @@ note_touch :: proc(bus: ^Bus, device: ^Device, index: int) {
 		return
 	}
 	bus.touched = {touched = true, index = index}
-	if device.save != nil {
-		bus.touched.state = device.save(device.data)
+	when DEBUG_RECORD_STEPS {
+		if device.save != nil {
+			bus.touched.state = device.save(device.data)
+		}
 	}
 }
 

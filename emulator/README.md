@@ -9,7 +9,8 @@ Docs: [how the emulator is built](../docs/reference/emulator.md) and [instructio
 ## Build and run
 
 ```
-make                 # release build -> build/rvemu
+make                 # release build -> build/rvemu (no step recording: fastest, no --trace / --check-undo)
+make check-build     # release build that records steps -> build/rvemu-check
 make debug           # debug build   -> build/rvemu-debug
 make test            # unit tests, test programs, undo self-test, disassembler diff
 make unit            # unit tests only (unit_tests/)
@@ -45,6 +46,8 @@ Needs `odin` and the RISC-V binutils (`riscv64-elf-as`, `-ld`, `-objcopy`, `-obj
 ```
 rvemu <program> [--trace] [--disasm] [--check-undo] [--max-steps N]
 ```
+
+`build/rvemu` is built without step recording (`-define:DEBUG_RECORD_STEPS=false`, see `core/history.odin`): about a fifth faster, but it can't undo or say what each step wrote, so `--trace` and `--check-undo` need `build/rvemu-check`. The debugger always records.
 
 - The program is an ELF executable (loaded by its segments, started at its entry point) or a raw binary (loaded and started at `0x80000000`).
 - After `ebreak`, the exit code is the low 8 bits of `a0`, so test programs can report results. Programs with a `tohost` symbol (riscv-tests) report their exit code by writing to it.

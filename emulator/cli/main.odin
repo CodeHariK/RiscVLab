@@ -21,6 +21,9 @@ run :: proc() -> int {
 		print_usage()
 		return 2
 	}
+	if !options_fit_build(options) {
+		return 2
+	}
 
 	image, image_ok := read_program(options.program_path)
 	if !image_ok {

@@ -1,11 +1,13 @@
 # Build and run the RiscVOdin emulator.
 #
 #   make              release build of the command-line runner -> build/rvemu
-#   make debug        debug build                              -> build/rvemu-debug
+#                     (without step recording: fastest, but no --trace or --check-undo)
+#   make check-build  the same, recording steps                -> build/rvemu-check
+#   make debug        debug build, recording steps             -> build/rvemu-debug
 #   make test         unit tests and the docs check, then build the test programs, run them, check undo and the disassembler
 #   make unit         unit tests only (unit_tests/, `odin test`)
 #   make docs-check   check the docs: every Related item and lesson # Docs: name is an entry, plain ASCII
-#   make run PROGRAM=path/to/program.bin [ARGS=--trace]
+#   make run PROGRAM=path/to/program.bin [ARGS=--trace]   (uses build/rvemu-check)
 #   make riscv-tests  build and run the official rv64ui, rv64um and rv64ua tests (run ../tests/riscv-tests/fetch.sh once first)
 #   make debugger     build the step debugger -> build/rvdbg
 #   make debug-ui     open the debugger with the lessons and tests listed
@@ -21,6 +23,9 @@ ODIN      ?= odin
 VET       := -vet
 BUILD_DIR := build
 BINARY    := $(BUILD_DIR)/rvemu
+# The same runner with step recording (core/history.odin, DEBUG_RECORD_STEPS):
+# what --trace and --check-undo need. build/rvemu is built without it.
+CHECK_BIN := $(BUILD_DIR)/rvemu-check
 DEBUG_BIN := $(BUILD_DIR)/rvemu-debug
 SOURCES   := $(wildcard core/*.odin devices/*.odin loader/*.odin disasm/*.odin cli/*.odin)
 DEBUGGER  := $(BUILD_DIR)/rvdbg
@@ -30,20 +35,26 @@ PROGRAMS_DIR := ../tests/programs
 PROGRAMS_BIN := $(PROGRAMS_DIR)/build
 PROGRAM      ?= $(PROGRAMS_BIN)/sum.elf
 
-.PHONY: all debug run programs test unit docs-check riscv-tests clean debugger debug-ui
+.PHONY: all check-build debug run programs test unit docs-check riscv-tests clean debugger debug-ui
 
 all: $(BINARY)
 
 $(BINARY): $(SOURCES)
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build cli -out:$(BINARY) -o:speed $(VET)
+	$(ODIN) build cli -out:$(BINARY) -o:speed $(VET) -define:DEBUG_RECORD_STEPS=false
+
+check-build: $(CHECK_BIN)
+
+$(CHECK_BIN): $(SOURCES)
+	@mkdir -p $(BUILD_DIR)
+	$(ODIN) build cli -out:$(CHECK_BIN) -o:speed $(VET)
 
 debug: $(SOURCES)
 	@mkdir -p $(BUILD_DIR)
 	$(ODIN) build cli -out:$(DEBUG_BIN) -debug $(VET)
 
-run: $(BINARY)
-	./$(BINARY) $(PROGRAM) $(ARGS)
+run: $(CHECK_BIN)
+	./$(CHECK_BIN) $(PROGRAM) $(ARGS)
 
 debugger: $(DEBUGGER)
 
@@ -75,7 +86,10 @@ docs-check:
 	@mkdir -p $(BUILD_DIR)
 	$(ODIN) test debugger/reference -out:$(BUILD_DIR)/docs_check $(VET)
 
-test: unit docs-check $(BINARY) programs
+# Both builds: plain runs use build/rvemu (no step recording), the undo
+# checks build/rvemu-check, so code on both sides of `when DEBUG_RECORD_STEPS`
+# is compiled and run.
+test: unit docs-check $(BINARY) $(CHECK_BIN) programs
 	@for format in $(FORMATS); do \
 	  ./$(BINARY) $(PROGRAMS_BIN)/sum.$$format; code=$$?; \
 	  if [ $$code -eq 55 ]; then echo "PASS sum.$$format"; else echo "FAIL sum.$$format (exit $$code, expected 55)"; exit 1; fi; \
@@ -84,9 +98,9 @@ test: unit docs-check $(BINARY) programs
 	    if [ $$code -eq 0 ]; then echo "PASS $$program.$$format"; else echo "FAIL $$program.$$format (check $$code failed)"; exit 1; fi; \
 	  done; \
 	done
-	@sh ../tests/run_lessons.sh ./$(BINARY) $(PROGRAMS_DIR)/lessons $(PROGRAMS_BIN)/lessons
+	@sh ../tests/run_lessons.sh ./$(BINARY) $(PROGRAMS_DIR)/lessons $(PROGRAMS_BIN)/lessons ./$(CHECK_BIN)
 	@for program in $(TEST_PROGRAMS); do \
-	  ./$(BINARY) $(PROGRAMS_BIN)/$$program.elf --check-undo || exit 1; \
+	  ./$(CHECK_BIN) $(PROGRAMS_BIN)/$$program.elf --check-undo || exit 1; \
 	done
 	@for program in $(TEST_PROGRAMS); do for format in $(FORMATS); do \
 	  sh ../tests/compare_disasm.sh ./$(BINARY) $(PROGRAMS_BIN)/$$program.$$format $(PROGRAMS_BIN)/$$program.dis || exit 1; \

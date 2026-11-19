@@ -26,7 +26,9 @@ INSTRUCTION_SIZE :: u64(4)
 // On a trap the PC stays on the faulting instruction, which is where
 // `mepc` points.
 cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
-	cpu.last_write = {}
+	when DEBUG_RECORD_STEPS {
+		cpu.last_write = {}
+	}
 	cpu.instret_written = false
 	cpu.cycle_written = false
 

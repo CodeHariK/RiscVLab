@@ -139,7 +139,7 @@ For: hardware that needs aligned addresses.
 
 Watch out: `.align 4` aligns to 16 bytes, not 4. `.balign` takes the number of bytes directly, which is why the lessons use it.
 
-Related: csrrw (mtvec), .space
+Related: mtvec, .space
 
 Example:
 ```

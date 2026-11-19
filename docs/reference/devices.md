@@ -13,6 +13,15 @@ written for QEMU (and later xv6) use them unchanged.
 Does: a device's registers sit at addresses of their own, outside RAM. A program reads and writes them with ordinary loads and stores: there are no special I/O instructions in RISC-V.
 
 How it works: the bus looks at every address. RAM addresses go to memory; an address in a device's range goes to that device, which decides what a load returns and what a store does:
+```
+            load / store at an address
+  hart  ------------------------------->  bus
+                                           |
+          0x80000000 - 0x87ffffff  --------+-->  RAM (128 MiB)
+          0x02000000 - 0x0200ffff  --------+-->  CLINT
+          0x10000000 - 0x100000ff  --------+-->  UART
+          anything else            --------+-->  access fault
+```
 - a store can make something happen: storing to the UART's THR sends a byte.
 - a load can change the device: loading the UART's RBR takes the received byte out of it, so the next load gets the next one.
 - some registers mean different things for loads and stores (offset 0 of the UART is RBR to a load, THR to a store).
@@ -107,6 +116,19 @@ A timer interrupt, step by step:
 3. When mtime reaches mtimecmp, the CLINT sets mip.MTIP. If mie.MTIE and mstatus.MIE are on, the hart traps between two instructions, with mcause 0x8000000000000007.
 4. The handler sets the next alarm (mtimecmp += 1000000), which clears MTIP, and returns with `mret`.
 MTIP stays 1 for as long as mtime >= mtimecmp: the only way to stop the interrupt is to move the alarm on (or turn MTIE off).
+The path from the device to the trap:
+```
+  CLINT (device)                   hart (CSRs)
+  mtime >= mtimecmp  ---wire--->   mip.MTIP      the device asks       \
+                                   mie.MTIE      software allows it     > all on?
+                                   mstatus.MIE   interrupts are on     /
+                                                      |
+                                                      | yes: at the next instruction boundary
+                                                      v
+                                   trap: mepc   = the next instruction (not run yet)
+                                         mcause = 0x8000000000000007
+                                         pc     = mtvec (vectored: + 4 * 7)
+```
 
 For:
 - preemptive multitasking: without a timer, a program that never makes a system call keeps the CPU for ever. The timer interrupt gives the kernel control back every few milliseconds, so it can switch to another program. xv6's scheduler and its sleep() depend on it.

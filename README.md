@@ -6,8 +6,8 @@ A learning project: a RISC-V emulator and an xv6 port, both written in [Odin](ht
 |---|---|---|
 | `emulator/` | RISC-V emulator modelled on QEMU's `virt` board | macOS (host) |
 | `Xv6Odin/` | Port of MIT's xv6-riscv kernel and user programs | riscv64, freestanding |
-| `tests/` | ISA conformance (`riscv-tests`) runner and trace-diff scripts | host |
-| `docs/` | Notes per milestone | — |
+| `tests/` | Lessons, our own test programs, the official `riscv-tests` runner | host |
+| `docs/` | How the emulator is built, and reference pages (also in the debugger's Docs window) | - |
 
 ## Emulator target
 
@@ -18,11 +18,11 @@ A learning project: a RISC-V emulator and an xv6 port, both written in [Odin](ht
 
 ## Milestones
 
-1. **Emulator core:** a simple step-by-step interpreter, RV64I first. *Done: RV64I, Zicsr, machine-mode traps, ELF loading, step debugger.*
-2. **Conformance:** pass `riscv-tests` (unprivileged + privileged). *rv64ui-p: all 54 pass.*
-3. **Boot stock xv6-riscv (C)** on RiscVOdin, reaching a shell prompt.
+1. **Emulator core:** a simple step-by-step interpreter. *Done: RV64IMA, Zicsr, Zifencei, machine-mode traps and interrupts, ELF loading, undo (step back), the UART and the CLINT timer, a step debugger with 21 lessons and reference docs.*
+2. **Conformance:** pass `riscv-tests` (unprivileged + privileged). *rv64ui-p, rv64um-p, rv64ua-p: all 86 pass. Privileged suites come with supervisor mode.*
+3. **Boot stock xv6-riscv (C)** on RiscVOdin, reaching a shell prompt. Still needed: supervisor and user modes, Sv39 paging, the PLIC, the virtio disk (see [TODO.md](TODO.md)).
 4. **Odin freestanding test:** "hello" over the UART on QEMU `virt`.
-5. **Port xv6 to Odin, one subsystem at a time:** console/UART → traps → allocator → virtual memory → processes/scheduler → syscalls → file system → virtio disk.
+5. **Port xv6 to Odin, one subsystem at a time:** console/UART -> traps -> allocator -> virtual memory -> processes/scheduler -> syscalls -> file system -> virtio disk.
    Each step runs on both QEMU and RiscVOdin. Works on QEMU but not RiscVOdin = emulator bug; fails on both = kernel bug.
 
 ## References

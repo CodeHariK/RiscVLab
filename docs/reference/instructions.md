@@ -31,7 +31,7 @@ Watch out:
 - `addi` sign-extends its 12 bits, so a lower part of 0x800 or more counts as negative. The upper part must then be one higher: 0x12345800 is `lui 0x12346` then `addi -0x800`.
 - Lesson 04 shows this step by step.
 
-Related: auipc, addi, li
+Related: auipc, addi, li, encodings#Upper immediates
 
 Example:
 ```
@@ -53,7 +53,7 @@ For: finding addresses relative to the code, without knowing where the program w
 
 Watch out: the lower 12 bits come from the next instruction and are signed, so `addi -0x40` after `auipc 0x1` lands 0x1000 - 0x40 = 0xfc0 past the `auipc`. See `la` for the whole calculation.
 
-Related: lui, addi, jalr, la
+Related: lui, addi, jalr, la, encodings#Upper immediates
 
 Example:
 ```
@@ -83,7 +83,7 @@ nop            ->  addi zero, zero, 0x0
 
 Watch out: there is no `subi`; subtract with a negative immediate: `addi t0, t0, -0x1`.
 
-Related: add, addiw, lui
+Related: add, addiw, lui, encodings#Register-immediate arithmetic
 
 Example:
 ```
@@ -108,7 +108,7 @@ seqz rd, rs   ->  sltiu rd, rs, 0x1     # is it zero?
 
 Watch out: `sltiu` sign-extends the immediate and then compares unsigned, so `sltiu t0, t1, -0x1` compares with 0xffffffffffffffff: true for every value except that one.
 
-Related: slt, sltu, blt, bltu
+Related: slt, sltu, blt, bltu, encodings#Register-immediate arithmetic
 
 Example:
 ```
@@ -136,7 +136,7 @@ not rd, rs   ->  xori rd, rs, -0x1
 
 Watch out: because of sign extension, immediates 0x800 to 0xfff can't be written; -0x800 to -0x1 have all the high bits set. `andi t0, t0, -0x8` clears the low 3 bits (rounds down to a multiple of 8).
 
-Related: and, or, xor
+Related: and, or, xor, encodings#Register-immediate arithmetic
 
 Example:
 ```
@@ -164,7 +164,7 @@ For:
 
 Watch out: `srai` rounds toward minus infinity: -0x5 >> 1 is -0x3, while dividing -5 by 2 in C (or with `div`) gives -2.
 
-Related: sll, srl, sra, slliw
+Related: sll, srl, sra, slliw, encodings#Register-immediate arithmetic
 
 Example:
 ```
@@ -189,7 +189,7 @@ neg rd, rs   ->  sub rd, zero, rs
 
 Watch out: the same instruction serves signed and unsigned numbers; the bits come out the same either way. Lesson 02 shows the wrap-around.
 
-Related: addi, addw, subw
+Related: addi, addw, subw, encodings#Register-register arithmetic
 
 Example:
 ```
@@ -218,7 +218,7 @@ sgtz rd, rs   ->  slt  rd, zero, rs
 
 Watch out: pick signed or unsigned to match the data. Addresses are always unsigned. Lesson 06 compares both.
 
-Related: slti, sltiu, blt, bltu
+Related: slti, sltiu, blt, bltu, encodings#Register-register arithmetic
 
 Example:
 ```
@@ -236,7 +236,7 @@ How it works: `xor` gives 0 exactly where the bits are the same, so `xor t0, a0,
 
 For: masks that don't fit an immediate, combining flags, comparing bit patterns.
 
-Related: andi, ori, xori
+Related: andi, ori, xori, encodings#Register-register arithmetic
 
 Example:
 ```
@@ -254,7 +254,7 @@ For: shifts by an amount known only while running, e.g. building the mask 1 << n
 
 Watch out: shifting by 0x40 is shifting by 0, since only the low 6 bits of rs2 count.
 
-Related: slli, srli, srai, sllw
+Related: slli, srli, srai, sllw, encodings#Register-register arithmetic
 
 Example:
 ```
@@ -282,7 +282,7 @@ negw   rd, rs   ->  subw  rd, zero, rs
 
 Watch out: the result is always sign-extended, even for `srliw`: `srliw t0, t0, 0x0` on 0x80000000 gives 0xffffffff80000000. Lesson 10 shows this.
 
-Related: addi, add, sub, slli, sll
+Related: addi, add, sub, slli, sll, encodings#32-bit word arithmetic
 
 Example:
 ```
@@ -304,7 +304,7 @@ Watch out:
 - The low half is the same whether the numbers are signed or unsigned, so there is only one `mul`. The high half differs: see `mulh`.
 - A product that needs more than 64 bits silently wraps: 2^40 * 2^40 gives 0x0. Use `mulh` to see the part that didn't fit.
 
-Related: mulh mulhsu mulhu, mulw, slli (multiplying by a power of two)
+Related: mulh mulhsu mulhu, mulw, slli (multiplying by a power of two), encodings#M extension: multiply and divide
 
 Example:
 ```
@@ -350,7 +350,7 @@ For:
 
 Watch out: there are no 32-bit (W) forms of these.
 
-Related: mul, div divu rem remu
+Related: mul, div divu rem remu, encodings#M extension: multiply and divide
 
 Example:
 ```
@@ -390,7 +390,7 @@ Watch out:
 - Division is slow on real hardware (tens of cycles); compilers avoid it for constants (see `mulh`) and powers of two (`srli` / `srai`).
 - `srai` by 1 is not the same as `div` by 2 for negative numbers: -7 >> 1 is -4, -7 / 2 is -3.
 
-Related: mul, mulh mulhsu mulhu, divw, two's-complement
+Related: mul, mulh mulhsu mulhu, divw, two's-complement, encodings#M extension: multiply and divide
 
 Example:
 ```
@@ -428,7 +428,7 @@ How it works:
 
 For: C's 32-bit `int` and `unsigned` arithmetic on a 64-bit machine.
 
-Related: mul, div divu rem remu, addiw slliw srliw sraiw addw subw sllw srlw sraw
+Related: mul, div divu rem remu, addiw slliw srliw sraiw addw subw sllw srlw sraw, encodings#M extension: multiply and divide
 
 Example:
 ```
@@ -457,7 +457,7 @@ Watch out:
 - Pick the signed or unsigned form to match the data (lesson 07 shows both).
 - The address is rs1 + imm; the register holds an address, not the value.
 
-Related: sb sh sw sd, la, auipc
+Related: sb sh sw sd, la, auipc, encodings#Loads and stores
 
 Example:
 ```
@@ -480,7 +480,7 @@ Watch out:
 - The operand order looks backwards: the value comes first, the address second.
 - A store changes no register, so the Registers panel stays the same; watch the Memory tab instead.
 
-Related: lb lh lw ld
+Related: lb lh lw ld, encodings#Loads and stores
 
 Example:
 ```
@@ -506,7 +506,7 @@ bnez rs, label  ->  bne rs, zero, label
 
 Watch out: RISC-V has no condition flags: every branch compares two registers itself.
 
-Related: blt bge bltu bgeu, jal
+Related: blt bge bltu bgeu, jal, encodings#Jumps and branches
 
 Example:
 ```
@@ -530,7 +530,7 @@ ble  a, b, label  ->  bge  b, a, label
 bltz rs, label    ->  blt  rs, zero, label
 ```
 
-Related: beq bne, slt sltu
+Related: beq bne, slt sltu, encodings#Jumps and branches
 
 Example:
 ```
@@ -557,7 +557,7 @@ call label  ->  jal ra, label    # when the linker finds it close enough
 
 Watch out: a function that calls another overwrites `ra`, so it must save its own `ra` first, usually on the stack. Lessons 08 and 09.
 
-Related: jalr, auipc, ret
+Related: jalr, auipc, ret, encodings#Jumps and branches
 
 Example:
 ```
@@ -582,7 +582,7 @@ jr rs   ->  jalr zero, 0(rs)
 
 Watch out: the target is worked out before rd is written, so `jalr ra, 0(ra)` works.
 
-Related: jal, auipc, ret
+Related: jal, auipc, ret, encodings#Jumps and branches
 
 Example:
 ```
@@ -614,7 +614,7 @@ Watch out:
 - Keep the code between `lr` and `sc` short and simple (no other loads, stores or calls); the spec only promises eventual success for short loops like the one above.
 - `sc` writes rd: 0 means success, the opposite of most "true" flags.
 
-Related: amoswap.w amoadd.w (the AMOs), locks, memory-ordering, fence
+Related: amoswap.w amoadd.w (the AMOs), locks, memory-ordering, fence, encodings#A extension: atomics
 
 Example:
 ```
@@ -649,7 +649,7 @@ Watch out:
 - The suffixes `.aq` / `.rl` / `.aqrl` (e.g. `amoswap.w.aq`) add memory ordering: see memory-ordering. They don't change what the instruction computes.
 - Atomics are for RAM. Each region of a real memory map says whether it supports them, and device regions often don't. This emulator raises an access fault for lr, sc or an AMO on a device address (Store_Access_Fault, or Load_Access_Fault for lr).
 
-Related: lr.w lr.d sc.w sc.d, locks, memory-ordering, add sub, mmio
+Related: lr.w lr.d sc.w sc.d, locks, memory-ordering, add sub, mmio, encodings#A extension: atomics
 
 Example:
 ```
@@ -668,7 +668,7 @@ For: multi-core code and device drivers, e.g. writing data before setting the fl
 
 Watch out: this emulator has one hart that does everything in order, so `fence` does nothing here. It matters on real multi-core CPUs and with devices; see memory-ordering for why.
 
-Related: fence.i, memory-ordering, locks
+Related: fence.i, memory-ordering, locks, encodings#Fences and system
 
 Example:
 ```
@@ -685,7 +685,7 @@ For: code that writes code (loaders, JIT compilers). A CPU with an instruction c
 
 Watch out: this emulator has no instruction cache, so it does nothing here.
 
-Related: fence
+Related: fence, encodings#Fences and system
 
 Example:
 ```
@@ -710,7 +710,7 @@ Watch out:
 - The handler must add 4 to mepc before `mret`, or it returns to the `ecall` and runs it again.
 - With no handler (mtvec's base address is 0) this emulator stops instead. Lessons 12 and 13.
 
-Related: mret, ebreak, csrrw (mtvec), system-call
+Related: mret, ebreak, mtvec, system-call, encodings#Fences and system
 
 Example:
 ```
@@ -726,7 +726,7 @@ Does: raises a `Breakpoint` trap (mcause = 0x3).
 
 For: debuggers place it where execution should stop. The programs here end with it: with no trap handler set up, the emulator stops, and a0 holds the result.
 
-Related: ecall
+Related: ecall, encodings#Fences and system
 
 Example:
 ```
@@ -751,7 +751,7 @@ Watch out:
 - After an `ecall`, mepc points at the `ecall` itself; add 4 first or it runs again. Lesson 13.
 - A plain `jr` to mepc + 4 gets back to the right place but leaves interrupts off and the privilege level raised. See trap-return.
 
-Related: ecall, csrrw (mepc, mstatus), trap-return, system-call
+Related: ecall, mepc, mstatus, trap-return, system-call, encodings#Fences and system
 
 Example:
 ```
@@ -781,7 +781,7 @@ Emulator: a nop. Time counts steps here (see emulator-time), so a loop around wf
 
 Watch out: wfi doesn't turn interrupts on. If none can be taken (mie or mstatus.MIE off), a real hart may sleep for ever, or keep going: code mustn't rely on either.
 
-Related: interrupt, clint, emulator-time
+Related: interrupt, clint, emulator-time, encodings#Fences and system
 ## csrrw csrrwi - CSR read and write
 
 *I-type (CSR), Zicsr*
@@ -800,7 +800,7 @@ csrwi csr, n   ->  csrrwi zero, csr, n
 
 Watch out: CSRs keep only the bits they support (WARL: "write any, read legal"). Reading back can give something else than what was written; here mstatus.MPP always stays machine mode. The step details say when this happens.
 
-Related: csrrs, csrrc, mret
+Related: csrrs, csrrc, mret, encodings#CSR instructions
 
 Example:
 ```
@@ -827,7 +827,7 @@ csrsi csr, n   ->  csrrsi zero, csr, n
 
 Watch out: reading some CSRs means something by itself: `minstret` counts the instructions finished so far.
 
-Related: csrrw, csrrc
+Related: csrrw, csrrc, encodings#CSR instructions
 
 Example:
 ```
@@ -851,7 +851,7 @@ csrc  csr, rs  ->  csrrc  zero, csr, rs
 csrci csr, n   ->  csrrci zero, csr, n
 ```
 
-Related: csrrw, csrrs
+Related: csrrw, csrrs, encodings#CSR instructions
 
 Example:
 ```

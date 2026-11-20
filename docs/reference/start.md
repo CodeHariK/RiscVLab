@@ -27,6 +27,7 @@ The lessons:
 | 16-18 | atomics and locks (the A extension) |
 | 19-20 | printing through the UART, and setting it up |
 | 21 | a timer interrupt |
+| 22 | copying memory: a byte or 8 bytes at a time, and what each costs |
 
 For: anyone new to RISC-V, to assembly, or to how an operating system works with the hardware underneath it. No assembly is needed to start; some C helps.
 

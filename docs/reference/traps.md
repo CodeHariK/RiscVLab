@@ -217,7 +217,7 @@ Fields: three switches decide whether an interrupt is taken now. All must be on:
 - mip bit: the interrupt is pending (the device is asking). Devices set it.
 - mie bit: this kind of interrupt is enabled. Software sets it.
 - mstatus.MIE: interrupts are enabled at all. Trap entry clears it; mret restores it.
-A pending interrupt that isn't enabled just waits in mip until it is.
+A pending interrupt that isn't enabled just waits in mip until it is. mie mip explains why there are two enable switches, and that taking an interrupt doesn't clear its mip bit.
 
 For:
 - the timer: an OS gets control back every few milliseconds, even from a program that never gives up the CPU, and switches to another program.

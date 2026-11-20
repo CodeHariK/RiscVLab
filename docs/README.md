@@ -7,6 +7,12 @@ entries it is about on its `# Docs:` line, and every entry links to its
 related entries and to the lessons that use it. `make docs-check` (part
 of `make test`) checks those links.
 
+One file sits outside `reference/`, because the Docs window can't draw
+Mermaid diagrams: [How the machine works](machine_flow.md), flowcharts
+of the whole emulator, grouped by file and function (start-up, the run
+loop, one step, one instruction, the bus, interrupts, trap entry and
+mret, step back). GitHub and mermaid.live render them.
+
 - [Start here](reference/start.md): how to learn with the lessons and the Docs window, and what the lessons teach, in order.
 - [Instruction encodings](reference/encodings.md): the six formats and the major opcodes, what the emulator supports, and every instruction's opcode and funct values.
 - [The emulator](reference/emulator.md): how it is built: the packages, the machine, what one step does, how Prev undoes any step, devices on the bus, design rules, and how to add an instruction or a device.

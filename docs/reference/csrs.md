@@ -226,20 +226,55 @@ csrr t4, mscratch        # read it back
 
 *CSR 0x304 (mie) and 0x344 (mip), machine, read / write*
 
-Does: per-interrupt switches. In mie, a 1 bit allows that interrupt; in mip, a 1 bit means that interrupt is waiting.
+Does: per-interrupt switches, one bit per interrupt. In mip, a 1 bit means that interrupt is pending: a device is asking. In mie, a 1 bit means software wants that interrupt. mip never turns into mie: the hardware sets one and software sets the other, and an interrupt is taken only when both bits are 1 and the main switch, mstatus.MIE, allows it.
 
-Fields: the same bit positions in both.
-- MSI (bit 3): software interrupt, sent by another hart.
-- MTI (bit 7): timer interrupt.
-- MEI (bit 11): external interrupt, from a device through the interrupt controller.
+Fields: both registers have the same layout. Bit n is interrupt n, the number that goes into mcause (with bit 63 set) when it is taken. They are 64 bits wide only because every CSR is on RV64; there aren't 64 interrupts. The spec defines a few low bits:
+| Bit | In mip | In mie | Interrupt | Comes from |
+|---|---|---|---|---|
+| 1 | SSIP | SSIE | supervisor software | supervisor mode (later) |
+| 3 | MSIP | MSIE | machine software | the CLINT's msip register (another hart) |
+| 5 | STIP | STIE | supervisor timer | supervisor mode (later) |
+| 7 | MTIP | MTIE | machine timer | the CLINT, when mtime reaches mtimecmp |
+| 9 | SEIP | SEIE | supervisor external | supervisor mode (later) |
+| 11 | MEIP | MEIE | machine external | the PLIC (later), for the UART, the disk, ... |
+Bits 16 and up are left for platform-specific interrupts. The rest are reserved and read 0.
 
-How it works: an interrupt is taken when its mip bit and its mie bit are both 1 and mstatus.MIE is 1.
+How it works: three switches decide whether an interrupt is taken. All three must be on:
+| Switch | Who sets it | What it means |
+|---|---|---|
+| mip bit | the hardware: a wire from a device | this interrupt is pending: the timer reached its alarm |
+| mie bit | software, usually once | this interrupt is wanted: timer interrupts are allowed |
+| mstatus.MIE | software, and trap entry / mret | machine mode may be interrupted right now |
+```
+ CLINT alarm --> mip.MTIP ---+
+                             AND ---+
+ software    --> mie.MTIE ---+      |
+                                    AND --> taken: mcause = 0x8000000000000007
+ mstatus.MIE -----------------------+
+ (or running below machine mode)
+```
+A pending interrupt that isn't enabled waits in mip, and is taken as soon as the other two switches are on. When several are ready at once, external goes first, then software, then timer.
+
+Why a main switch, when mie exists: the two do different jobs. mie is the long-term choice ("I handle the timer and the UART"). mstatus.MIE is a quick off switch for a short while: trap entry clears it, so a second interrupt can't overwrite mepc and mcause in the middle of a handler, and mret turns it back on. Code can also turn it off around a critical section with `csrci mstatus, 8`. Flipping one bit is cheaper than saving, clearing and restoring all of mie, and the handler never loses track of which interrupts were wanted. In a house, mie is the light switch in each room and mstatus.MIE is the main breaker.
+| | mie | mstatus.MIE |
+|---|---|---|
+| How many bits | one per interrupt | one for all of them |
+| Set by | software | software; trap entry turns it off, mret back on |
+| Changes | rarely: when the OS starts using a device | on every trap and every return |
+| Applies in | every mode | machine mode only |
+The main switch applies only in machine mode: running in a lower mode, machine interrupts are always taken, whatever mstatus.MIE says, so a user program can't block the timer.
+
+Taking an interrupt doesn't clear mip. The bit follows the device: the timer's stays 1 while mtime >= mtimecmp. The handler must clear the source, by writing a later mtimecmp or writing 0 to msip; otherwise the same interrupt is taken again right after mret.
 
 For: choosing which interrupt sources matter, e.g. an OS enables the timer to switch between programs.
 
-Emulator: mip shows what the devices drive: MTIP and MSIP from the CLINT (MEIP waits for the PLIC). Software writes to mip are ignored. mie keeps only the three bits above. The CSRs tab spells out both: "software=0 timer=1 external=0".
+Emulator: this hart has the three machine interrupts so far (MACHINE_INTERRUPT_BITS, interrupts.odin): mie keeps only those three bits, the others read 0. mip shows what the devices drive: MTIP and MSIP from the CLINT (MEIP waits for the PLIC). It is worked out again whenever a device could have changed it, and software writes to it are ignored, since its bits are wires. The CSRs tab spells out both: "software=0 timer=1 external=0".
 
-Related: interrupt, interrupt-sources, mstatus, mcause
+Watch out:
+- A handler that doesn't clear the source is interrupted again as soon as it returns, forever.
+- In machine mode a bit in mie does nothing while mstatus.MIE = 0, so lesson 21 sets both: `csrs mie, t0` (MTIE), then `csrsi mstatus, 8` (MIE).
+
+Related: interrupt, interrupt-sources, mstatus, mcause, clint
 
 ## misa - Machine ISA
 
@@ -291,7 +326,13 @@ Does: two counters, each with two names. The m name is for machine mode, which c
 | instructions retired | minstret, 0xb02 | instret, 0xc02 | every instruction that finished since reset |
 So there is no separate "cycle" register: `csrr t0, cycle` and `csrr t0, mcycle` read the same number. The m prefix is the usual one for machine-mode CSRs (mstatus, mepc, ...); supervisor ones start with s.
 
-How it works: a counter goes up by itself, without any instruction asking. A program reads it twice and subtracts to see how long something took. Machine mode may write a counter, for example to start it from 0; lower modes can only read (and on real hardware only if machine mode allows it, through mcounteren).
+How it works: a counter goes up by itself, without any instruction asking. A program reads it twice and subtracts to see how long something took. Machine mode may write a counter; lower modes can only read (and on real hardware only if machine mode allows it, through mcounteren). After a write the counter carries on going up from the new value. Most programs never write one; machine-mode software does, for a few reasons:
+| Why write it | Who does it |
+|---|---|
+| start a measurement from 0, so the value read later is the answer, with no subtraction | benchmark harnesses, firmware |
+| give each process its own count: on a switch, save this process's value and load the next one's, so a program sees only the cycles it ran for | an OS that virtualizes the counters |
+| put back a saved machine state (resume after suspend, move a virtual machine) | firmware, hypervisors |
+| check that the CSR is writable | test suites (riscv-tests) |
 
 For: measuring how long code takes, and how many instructions it ran.
 

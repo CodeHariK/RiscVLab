@@ -176,7 +176,13 @@ What the step clock changes, compared with real time:
 | Idle (wfi, wait for interrupt) | no instructions run, so mtime would never reach the alarm: wfi must jump mtime forward to mtimecmp (and so wastes no time spinning) |
 | Waiting for a key | the hard case: with only the UART left to wait for, the emulator must wait for real input from you, not jump ahead |
 
-Emulator: the step clock, at one tick per step: an instruction, or a trap or interrupt taken into a handler. mtime = the step clock + an offset that writing mtime changes. The step clock is not mcycle itself: they count the same steps, but a program can write mcycle, and on real hardware that doesn't move mtime. It is worked out as mcycle + an offset, and writing mcycle changes the offset by just enough that the step clock carries on as if nothing happened. wfi is a nop for now; the jump forward to the next alarm, and the host clock for xv6's shell in rvemu, come later.
+Emulator: the step clock, at one tick per step: an instruction, or a trap or interrupt taken into a handler. mtime = the step clock + an offset that writing mtime changes. The step clock is not mcycle itself: they count the same steps, but a program can write mcycle, and on real hardware that doesn't move mtime. It is worked out as mcycle + an offset, and writing mcycle changes the offset by just enough that the step clock carries on as if nothing happened (the arithmetic is in csr_write, core/csr.odin). Real hardware gets this for free, since mtime is a separate clock; here there is no other clock, so without the offset `csrw mcycle, zero` would also send mtime back and push a pending alarm far into the future. For example, with mcycle = 100:
+| Step | Instruction | mcycle | Step clock (mtime follows it) |
+|---|---|---|---|
+| 100 | ... | 100 | 100 |
+| 101 | csrw mcycle, zero | 0 | 101 |
+| 102 | ... | 1 | 102 |
+The offset is 0 until a program writes mcycle, which is rare. wfi is a nop for now; the jump forward to the next alarm, and the host clock for xv6's shell in rvemu, come later.
 
 Watch out: with the step clock, "seconds" in a program are only as real as the ratio says. Timing measured inside the emulator (how long a loop takes) tells you about instructions, not about real hardware.
 

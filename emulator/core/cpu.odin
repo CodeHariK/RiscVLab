@@ -126,7 +126,7 @@ cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	cpu.minstret_written = false
 	cpu.mcycle_written = false
 
-	instruction, fetched := bus_fetch(bus, cpu.pc)
+	instruction, fetched := bus_fetch_instruction(bus, cpu.pc)
 	if !fetched {
 		return trap_make(.Instruction_Access_Fault, cpu.pc)
 	}

@@ -334,9 +334,24 @@ How it works: a counter goes up by itself, without any instruction asking. A pro
 | put back a saved machine state (resume after suspend, move a virtual machine) | firmware, hypervisors |
 | check that the CSR is writable | test suites (riscv-tests) |
 
-For: measuring how long code takes, and how many instructions it ran.
+What each one counts:
+| | mcycle (cycles: how long) | minstret (instructions: how much work) |
+|---|---|---|
+| an instruction that completes | +1 here (more on real hardware, see below) | +1 |
+| an instruction that traps (it never completes) | +1: the trap still takes time | +0 |
+| an interrupt taken | +1 | +0 |
+| used by the emulator itself | yes: the step clock, which mtime follows, is mcycle + an offset | no: only programs read it |
 
-Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. Both are fields of Csr_File (core/csr.odin). There is no mcounteren yet, so user mode can always read cycle and instret. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
+Why a CPU has both: on real hardware a cycle is a tick of the clock, and one instruction can take many of them: a divide 10 to 40, a load that misses the cache 100 or more, a mispredicted branch a few. A wide CPU can also finish several instructions in one cycle. So the two counters together say how efficiently code runs, as cycles per instruction:
+| Code | mcycle | minstret | Cycles per instruction |
+|---|---|---|---|
+| a tight loop, all in the cache | 1,000 | 2,000 | 0.5 (two at once) |
+| walking a big linked list | 50,000 | 2,000 | 25 (waiting for memory) |
+The same amount of work takes 50 times as long. minstret alone can't tell those two apart, and neither can mcycle alone.
+
+For: measuring how long code takes (mcycle), and how much work it did (minstret). Lesson 22 compares two copy loops with minstret: 385 instructions against 49.
+
+Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. Both are fields of Csr_File (core/csr.odin). There is no mcounteren yet, so user mode can always read cycle and instret. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. With no writes, mcycle - minstret is the number of traps and interrupts taken so far. Every step costs exactly one cycle here, so cycles per instruction is always about 1: the emulator doesn't model cache misses, slow divides or branch prediction, and timing measured inside it tells you about instructions, not about real hardware. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
 
 Watch out:
 - reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).

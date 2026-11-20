@@ -173,7 +173,7 @@ bus_ram_slice :: proc(bus: ^Bus, addr: u64, size: u64) -> (bytes: []u8, ok: bool
 // Fetches an instruction: from RAM only. Executing a device's registers
 // would read them with side effects; it raises an access fault instead,
 // as on real hardware, where device regions aren't executable.
-bus_fetch :: proc(bus: ^Bus, addr: u64) -> (instruction: u32, ok: bool) {
+bus_fetch_instruction :: proc(bus: ^Bus, addr: u64) -> (instruction: u32, ok: bool) {
 	value := ram_load(bus, addr, 4) or_return
 	return u32(value), true
 }

@@ -153,7 +153,7 @@ flowchart TD
   subgraph CPU["core/cpu.odin : cpu_step"]
     direction TB
     C0["minstret_written = mcycle_written = false"]
-    C0 --> C1["bus_fetch(pc) (section 5)"]
+    C0 --> C1["bus_fetch_instruction(pc) (section 5)"]
     C1 --> C2{"fetched?<br/>(pc in RAM)"}
     C2 -- no --> CIAF["Instruction_Access_Fault, value = pc"]
     C2 -- yes --> C3["next_pc = pc + 4"]
@@ -300,7 +300,7 @@ flowchart TD
     W2 -- yes --> W4["note_touch, then device.store"]
   end
 
-  subgraph FETCH["core/bus.odin : bus_fetch(addr)"]
+  subgraph FETCH["core/bus.odin : bus_fetch_instruction(addr)"]
 
     direction TB
     F0{"4 bytes in RAM?"}

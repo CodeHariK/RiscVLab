@@ -39,6 +39,12 @@ trap_is_interrupt :: proc(cause: Trap_Cause) -> bool {
 	return u64(cause) & INTERRUPT_BIT != 0
 }
 
+// The cause's number without the interrupt bit: 7 for the timer
+// interrupt (mcause 0x8000000000000007), 2 for Illegal_Instruction.
+trap_cause_number :: #force_inline proc(cause: Trap_Cause) -> u64 {
+	return u64(cause) &~ INTERRUPT_BIT
+}
+
 // A raised exception: why it happened, plus the value that will go into
 // the `mtval` CSR (the faulting address, or the bad instruction bits).
 Trap :: struct {

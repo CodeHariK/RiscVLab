@@ -61,6 +61,27 @@ CSR_INSTRET :: 0xC02
 MSTATUS_MIE :: u64(1) << 3
 MSTATUS_MPIE :: u64(1) << 7
 
+// mtvec, where traps go: the handler's address (BASE), with the mode in
+// its low 2 bits. A handler is 4-byte aligned, so those bits are free.
+//
+//   bit:   63 ... 2 | 1 0
+//   field:   BASE   | MODE   0 = direct: every trap goes to BASE
+//                            1 = vectored: interrupt n goes to BASE + 4 * n
+//                            (2 and 3 are reserved)
+MTVEC_MODE :: u64(0b11)
+MTVEC_DIRECT :: u64(0)
+MTVEC_VECTORED :: u64(1)
+
+// The handler's address, without the mode bits.
+mtvec_base :: #force_inline proc(mtvec: u64) -> u64 {
+	return mtvec &~ MTVEC_MODE
+}
+
+// MTVEC_DIRECT or MTVEC_VECTORED.
+mtvec_mode :: #force_inline proc(mtvec: u64) -> u64 {
+	return mtvec & MTVEC_MODE
+}
+
 // misa: MXL = 2 (64-bit) in bits 63:62, then one bit per extension letter
 // (bit 0 = A, ..., bit 8 = I, bit 12 = M, bit 20 = U): RV64IMA, with user
 // mode. Zicsr and Zifencei have no letter.
@@ -163,8 +184,9 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MIE:
 		csr.mie = value & MACHINE_INTERRUPT_BITS // the bits that exist (interrupts.odin)
 	case CSR_MTVEC:
-		// Mode (bits 1:0): 0 = direct, 1 = vectored; 2 and 3 are reserved,
-		// so bit 1 is kept at 0. The base must stay 4-byte aligned.
+		// MODE 2 and 3 are reserved, so bit 1 of MTVEC_MODE is kept at 0:
+		// only MTVEC_DIRECT and MTVEC_VECTORED can be stored. BASE is
+		// kept as written.
 		csr.mtvec = value & ~u64(0b10)
 	case CSR_MSCRATCH:
 		csr.mscratch = value
@@ -180,10 +202,16 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		// and software interrupts; interrupts.odin): software writes are
 		// ignored.
 	case CSR_MCYCLE:
-		// The step clock (step_clock = mcycle + step_clock_offset) must not
-		// jump: like any step, this one moves it on by exactly one. So the
-		// offset takes up the difference between the new mcycle and the
-		// one it would have counted to (mcycle + 1).
+		// step_clock = mcycle + step_clock_offset, and the step clock must
+		// go up by exactly 1 each step, even when software writes mcycle
+		// (the CLINT's mtime follows it). So after this step:
+		//
+		//   new mcycle + new offset  =  old mcycle + old offset + 1
+		//   value      + new offset  =  old mcycle + old offset + 1
+		//   new offset               =  old offset + (old mcycle + 1 - value)
+		//
+		// The + 1 is this step's tick: cpu_step skips its mcycle += 1 on a
+		// step that wrote mcycle (mcycle_written).
 		cpu.step_clock_offset += cpu.csr.mcycle + 1 - value
 		cpu.csr.mcycle = value
 		cpu.mcycle_written = true

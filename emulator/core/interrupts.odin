@@ -54,10 +54,12 @@ bus_interrupt_lines :: proc(bus: ^Bus, now: u64) -> (lines: u64, changes_at: u64
 
 // The interrupt to take before the next instruction, if any.
 interrupt_to_take :: proc(cpu: ^Cpu) -> (cause: Trap_Cause, take: bool) {
-	ready := cpu.csr.mip & cpu.csr.mie
+	ready := cpu.csr.mip & cpu.csr.mie // pending and enabled
 	if ready == 0 {
 		return {}, false
 	}
+	// In machine mode, mstatus.MIE = 0 holds every interrupt back. A lower
+	// mode can always be interrupted into machine mode.
 	if cpu.privilege == .Machine && cpu.csr.mstatus & MSTATUS_MIE == 0 {
 		return {}, false
 	}

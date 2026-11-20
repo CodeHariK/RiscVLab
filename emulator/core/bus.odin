@@ -12,9 +12,14 @@ Bus :: struct {
 	ram:          []u8,
 	devices:      [MAX_DEVICES]Device,
 	device_count: int,
-	// The device this step's load or store changed, with its state from
-	// before, for undo (machine_step copies it to the undo record).
-	touched:      Device_Touch,
+	// A load or store reached a device this step: its interrupt lines
+	// may have changed (a store to mtimecmp), so machine_step asks the
+	// devices again afterwards. Needed in every build.
+	device_accessed: bool,
+	// Undo only: the first device this step reached, with its state from
+	// before (machine_step copies it to the undo record). Written only
+	// when DEBUG_RECORD_STEPS is on.
+	debug_touched: Device_Touch,
 	// The step clock time (step_clock) at which the devices' interrupt
 	// lines change next by themselves (the CLINT's alarm); until then mip
 	// stays as it is.
@@ -56,9 +61,8 @@ Device :: struct {
 }
 
 Device_Touch :: struct {
-	touched: bool,
-	index:   int,
-	state:   Device_State,
+	index: int,
+	state: Device_State,
 }
 
 // RAM comes straight from the OS (zeroed_pages.odin), so untouched RAM
@@ -119,17 +123,19 @@ ranges_overlap :: proc(a: u64, a_size: u64, b: u64, b_size: u64) -> bool {
 	return a - b < b_size
 }
 
-// Before a load or store that may change device `index`: keep its state
-// for undo (the first one in a step is the one to restore).
+// Before a load or store that may change device `index`: note that a
+// device was reached, and keep its state for undo (the first one in a
+// step is the one to restore).
 @(private = "file")
 note_touch :: proc(bus: ^Bus, device: ^Device, index: int) {
-	if bus.touched.touched {
+	if bus.device_accessed {
 		return
 	}
-	bus.touched = {touched = true, index = index}
+	bus.device_accessed = true
 	when DEBUG_RECORD_STEPS {
+		bus.debug_touched = {index = index}
 		if device.save != nil {
-			bus.touched.state = device.save(device.data)
+			bus.debug_touched.state = device.save(device.data)
 		}
 	}
 }

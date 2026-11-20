@@ -84,13 +84,14 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		}
 	}
 	machine.last_trap = nil
-	machine.bus.touched = {}
+	machine.bus.device_accessed = false
 
 	if step_clock(cpu) >= machine.bus.interrupts_change_at {
 		machine_update_interrupts(machine) // an alarm time has come
 	}
 	result: Step_Result
-	// The common case, nothing pending and enabled, costs one test.
+	// Interrupts both pending (mip) and enabled (mie). The common case,
+	// none, costs one test.
 	cause, take := Trap_Cause{}, false
 	if cpu.csr.mip & cpu.csr.mie != 0 {
 		cause, take = interrupt_to_take(cpu)
@@ -104,7 +105,8 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		result = cpu_step(cpu, &machine.bus)
 	}
 	when DEBUG_RECORD_STEPS {
-		if touch := machine.bus.touched; touch.touched {
+		if machine.bus.device_accessed {
+			touch := machine.bus.debug_touched
 			cpu.undo.device_changed = true
 			cpu.undo.device_index = u8(touch.index)
 			cpu.undo.device_state = touch.state
@@ -138,7 +140,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	// Look again if a device register was used or an alarm time came.
 	// (mie and mstatus.MIE don't change mip: they are checked when the
 	// interrupt is about to be taken, above.)
-	if machine.bus.touched.touched || step_clock(cpu) >= machine.bus.interrupts_change_at {
+	if machine.bus.device_accessed || step_clock(cpu) >= machine.bus.interrupts_change_at {
 		machine_update_interrupts(machine)
 	}
 	return nil
@@ -262,8 +264,8 @@ machine_store :: proc(machine: ^Machine, address: u64, size: u64, value: u64) ->
 // step) and look at the interrupt lines again.
 @(private = "file")
 after_front_end_access :: proc(machine: ^Machine) {
-	if machine.bus.touched.touched {
-		machine.bus.touched = {}
+	if machine.bus.device_accessed {
+		machine.bus.device_accessed = false
 		machine_update_interrupts(machine)
 	}
 }

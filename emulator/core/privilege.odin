@@ -67,10 +67,6 @@ privilege_implemented :: proc(privilege: Privilege) -> bool {
 //      MPP = the privilege level it was running at
 //   5. switches to machine mode and jumps to the handler at mtvec
 //
-// mtvec's low two bits are its mode: 0 = direct (every trap goes to the
-// base address), 1 = vectored (interrupts go to base + 4 * their number;
-// exceptions still go to the base).
-//
 // Emulator convention, not hardware: if mtvec's base address is 0, no
 // handler has been set up, so the trap stops the machine instead (real
 // hardware would jump to address 0). That keeps simple test programs,
@@ -78,7 +74,7 @@ privilege_implemented :: proc(privilege: Privilege) -> bool {
 // mtvec = 1 (vectored, base 0) has no handler either.
 
 trap_has_handler :: proc(cpu: ^Cpu) -> bool {
-	return (cpu.csr.mtvec &~ 0b11) != 0
+	return mtvec_base(cpu.csr.mtvec) != 0
 }
 
 // Enters the trap handler: what the hardware does the moment a trap is
@@ -115,11 +111,10 @@ trap_enter :: proc(cpu: ^Cpu, trap: Trap) {
 	//      1 vectored: interrupts go to base + 4 * their number, so each
 	//                  kind gets its own entry point (the timer, number 7,
 	//                  to base + 28). Exceptions still go to the base.
-	//    `&~ INTERRUPT_BIT` takes bit 63 off mcause to leave that number.
 	cpu.privilege = .Machine
-	cpu.pc = csr.mtvec &~ 0b11
-	if csr.mtvec & 0b11 == 1 && trap_is_interrupt(trap.cause) {
-		cpu.pc += 4 * (u64(trap.cause) &~ INTERRUPT_BIT)
+	cpu.pc = mtvec_base(csr.mtvec)
+	if mtvec_mode(csr.mtvec) == MTVEC_VECTORED && trap_is_interrupt(trap.cause) {
+		cpu.pc += 4 * trap_cause_number(trap.cause)
 	}
 
 	// 4. Cancel any LR reservation: an SC after the handler returns must

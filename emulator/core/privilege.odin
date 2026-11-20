@@ -167,9 +167,9 @@ exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	new_mstatus = mstatus_with_mpp(new_mstatus, LEAST_PRIVILEGED_MODE)
 
 	when DEBUG_RECORD_STEPS {
-		cpu.undo.csr_changed = true
-		cpu.undo.csr_address = CSR_MSTATUS
-		cpu.undo.csr_old = old_mstatus
+		cpu.debug_undo.csr_changed = true
+		cpu.debug_undo.csr_address = CSR_MSTATUS
+		cpu.debug_undo.csr_old = old_mstatus
 	}
 	csr.mstatus = new_mstatus
 	cpu.privilege = previous

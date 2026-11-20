@@ -79,13 +79,13 @@ exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	// the write: illegal, and nothing to undo.
 	if writes {
 		when DEBUG_RECORD_STEPS {
-			cpu.undo.csr_changed = true
-			cpu.undo.csr_address = address
-			cpu.undo.csr_old = old
+			cpu.debug_undo.csr_changed = true
+			cpu.debug_undo.csr_address = address
+			cpu.debug_undo.csr_old = old
 		}
 		if !csr_write(cpu, address, new_value) {
 			when DEBUG_RECORD_STEPS {
-				cpu.undo.csr_changed = false
+				cpu.debug_undo.csr_changed = false
 			}
 			return illegal_instruction(instruction)
 		}

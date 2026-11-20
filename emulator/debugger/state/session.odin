@@ -141,7 +141,7 @@ session_next :: proc(session: ^Session) {
 		session_update_preview(session)
 		return
 	}
-	session.last_step = session.machine.cpu.undo
+	session.last_step = session.machine.cpu.debug_undo
 	timeline_record(session, pc, u32(instruction), inputs)
 	entry := &session.timeline[len(session.timeline) - 1]
 	last_writes_record(session, session.timeline_dropped + len(session.timeline), entry.record, device_register, &entry.writes)
@@ -191,7 +191,7 @@ TIMELINE_TRIM_CHUNK :: 4096
 // heading; its words are still shown.)
 @(private)
 timeline_trim :: proc(session: ^Session) {
-	limit := len(session.machine.history.records) + TIMELINE_TRIM_CHUNK
+	limit := len(session.machine.debug_history.records) + TIMELINE_TRIM_CHUNK
 	if len(session.timeline) <= limit {
 		return
 	}
@@ -221,8 +221,8 @@ session_update_preview :: proc(session: ^Session) {
 	}
 	instruction := u32(raw)
 	inputs := step_inputs_capture(session, instruction)
-	oldest := rv.history_save_oldest(&machine.history)
-	defer rv.history_restore_oldest(&machine.history, oldest)
+	oldest := rv.history_save_oldest(&machine.debug_history)
+	defer rv.history_restore_oldest(&machine.debug_history, oldest)
 	if trap, stops := rv.machine_step(machine).?; stops {
 		// No handler: the step changed nothing, so there is nothing to undo.
 		session.preview = Timeline_Entry {

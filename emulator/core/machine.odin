@@ -7,15 +7,16 @@ package rv
 // runner, the debugger UI). Nothing in the core reads files or prints,
 // so the same core can later be compiled to WebAssembly.
 Machine :: struct {
-	cpu:       Cpu,
-	bus:       Bus,
-	history:   History,
+	cpu:           Cpu,
+	bus:           Bus,
+	debug_history: History,
 	// The trap the last step took into a handler, if any (for traces and
-	// the debugger; the step itself reports success).
-	last_trap: Maybe(Trap),
+	// the debugger; the step itself reports success). Set only when
+	// DEBUG_RECORD_STEPS is on.
+	debug_last_trap: Maybe(Trap),
 	// Address of the program's `tohost` variable, if it has one (set by
 	// loader.load_program). See machine_host_exit.
-	tohost:    Maybe(u64),
+	tohost:        Maybe(u64),
 }
 
 // Why `machine_run` returned.
@@ -46,8 +47,8 @@ Step_Observer :: #type proc(machine: ^Machine, pc: u64, result: Step_Result)
 // RAM_BASE. `history_capacity` is how many steps can be undone (0 = none).
 machine_create :: proc(ram_size: u64, history_capacity: int) -> Machine {
 	machine := Machine {
-		bus     = bus_create(ram_size),
-		history = history_create(history_capacity),
+		bus           = bus_create(ram_size),
+		debug_history = history_create(history_capacity),
 	}
 	machine.cpu.pc = RAM_BASE
 	machine.cpu.privilege = .Machine
@@ -56,7 +57,7 @@ machine_create :: proc(ram_size: u64, history_capacity: int) -> Machine {
 }
 
 machine_destroy :: proc(machine: ^Machine) {
-	history_destroy(&machine.history)
+	history_destroy(&machine.debug_history)
 	bus_destroy(&machine.bus)
 }
 
@@ -67,8 +68,8 @@ machine_destroy :: proc(machine: ^Machine) {
 // the pc doesn't run (it runs after the handler's mret).
 //
 // If the instruction traps and a handler is set up (mtvec's base != 0),
-// the trap is taken: the hart jumps to the handler, `last_trap` is set and
-// the step counts as done (nil). If there is no handler, nothing changed,
+// the trap is taken: the hart jumps to the handler, `debug_last_trap` is
+// set and the step counts as done (nil). If there is no handler, nothing changed,
 // so nothing is recorded and the trap is returned: the machine stops.
 //
 // Every step that is done moves mcycle, and so the step clock, on by one
@@ -76,14 +77,16 @@ machine_destroy :: proc(machine: ^Machine) {
 machine_step :: proc(machine: ^Machine) -> Step_Result {
 	cpu := &machine.cpu
 	when DEBUG_RECORD_STEPS {
-		cpu.undo = Undo_Record {
+		cpu.debug_undo = Undo_Record {
 			pc        = cpu.pc,
 			minstret  = cpu.csr.minstret,
 			mcycle    = cpu.csr.mcycle,
 			privilege = cpu.privilege,
 		}
 	}
-	machine.last_trap = nil
+	when DEBUG_RECORD_STEPS {
+		machine.debug_last_trap = nil
+	}
 	machine.bus.device_accessed = false
 
 	if step_clock(cpu) >= machine.bus.interrupts_change_at {
@@ -98,7 +101,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	}
 	if take {
 		when DEBUG_RECORD_STEPS {
-			cpu.last_write = {}
+			cpu.debug_last_write = {}
 		}
 		result = trap_make(cause, 0) // mtval is 0 for interrupts
 	} else {
@@ -107,9 +110,9 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	when DEBUG_RECORD_STEPS {
 		if machine.bus.device_accessed {
 			touch := machine.bus.debug_touched
-			cpu.undo.device_changed = true
-			cpu.undo.device_index = u8(touch.index)
-			cpu.undo.device_state = touch.state
+			cpu.debug_undo.device_changed = true
+			cpu.debug_undo.device_index = u8(touch.index)
+			cpu.debug_undo.device_state = touch.state
 		}
 	}
 	if trap, has_trap := result.?; has_trap {
@@ -117,14 +120,16 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 			return result
 		}
 		when DEBUG_RECORD_STEPS {
-			cpu.undo.trap_taken = true
-			cpu.undo.trap_mstatus = cpu.csr.mstatus
-			cpu.undo.trap_mepc = cpu.csr.mepc
-			cpu.undo.trap_mcause = cpu.csr.mcause
-			cpu.undo.trap_mtval = cpu.csr.mtval
+			cpu.debug_undo.trap_taken = true
+			cpu.debug_undo.trap_mstatus = cpu.csr.mstatus
+			cpu.debug_undo.trap_mepc = cpu.csr.mepc
+			cpu.debug_undo.trap_mcause = cpu.csr.mcause
+			cpu.debug_undo.trap_mtval = cpu.csr.mtval
 		}
 		trap_enter(cpu, trap)
-		machine.last_trap = trap
+		when DEBUG_RECORD_STEPS {
+			machine.debug_last_trap = trap
+		}
 		// A trap or interrupt taken into a handler is a step too, and
 		// takes a cycle. cpu_step only counts instructions that completed
 		// (an interrupt doesn't even reach it), so this step's cycle is
@@ -133,8 +138,8 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	}
 
 	when DEBUG_RECORD_STEPS {
-		if history_is_enabled(&machine.history) {
-			history_push(&machine.history, cpu.undo)
+		if history_is_enabled(&machine.debug_history) {
+			history_push(&machine.debug_history, cpu.debug_undo)
 		}
 	}
 	// Look again if a device register was used or an alarm time came.
@@ -156,7 +161,7 @@ machine_update_interrupts :: proc(machine: ^Machine) {
 // Undoes the most recent recorded step. Returns false when there is
 // nothing left to undo (start of the program, or history full and wrapped).
 machine_step_back :: proc(machine: ^Machine) -> bool {
-	record, ok := history_pop(&machine.history)
+	record, ok := history_pop(&machine.debug_history)
 	if !ok {
 		return false
 	}
@@ -190,8 +195,8 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 	machine.cpu.csr.minstret = record.minstret
 	machine.cpu.csr.mcycle = record.mcycle
 	machine.cpu.privilege = record.privilege
-	machine.cpu.last_write = {}
-	machine.last_trap = nil
+	machine.cpu.debug_last_write = {}
+	machine.debug_last_trap = nil
 	machine_update_interrupts(machine)
 	return true
 }

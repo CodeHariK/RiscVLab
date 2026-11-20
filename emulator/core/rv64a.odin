@@ -209,10 +209,10 @@ amo_store :: proc(cpu: ^Cpu, bus: ^Bus, address: u64, size: u64, value: u64) -> 
 		return false
 	}
 	when DEBUG_RECORD_STEPS {
-		cpu.undo.memory_changed = true
-		cpu.undo.memory_address = address
-		cpu.undo.memory_size = size
-		cpu.undo.memory_old = old_value
+		cpu.debug_undo.memory_changed = true
+		cpu.debug_undo.memory_address = address
+		cpu.debug_undo.memory_size = size
+		cpu.debug_undo.memory_old = old_value
 	}
 	return true
 }

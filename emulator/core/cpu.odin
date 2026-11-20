@@ -41,12 +41,12 @@ Cpu :: struct {
 	// Control and status registers (csr.odin).
 	csr:        Csr_File,
 	// Last register write, for tracing. Cleared at the start of each step.
-	last_write: Register_Write,
+	debug_last_write: Register_Write,
 	// The address LR reserved for the next SC (rv64a.odin).
 	reservation: Reservation,
 	// What the current instruction overwrote, so it can be undone.
 	// Filled in during the step; `machine_step` saves it to the history.
-	undo:       Undo_Record,
+	debug_undo: Undo_Record,
 }
 
 // The step clock: one tick per step, like mcycle, but no program can
@@ -76,9 +76,9 @@ Reservation :: struct {
 // first change in a step is the one to restore).
 reservation_set :: proc(cpu: ^Cpu, reservation: Reservation) {
 	when DEBUG_RECORD_STEPS {
-		if !cpu.undo.reservation_changed {
-			cpu.undo.reservation_changed = true
-			cpu.undo.reservation_old = cpu.reservation
+		if !cpu.debug_undo.reservation_changed {
+			cpu.debug_undo.reservation_changed = true
+			cpu.debug_undo.reservation_old = cpu.reservation
 		}
 	}
 	cpu.reservation = reservation
@@ -96,10 +96,10 @@ reg_write :: #force_inline proc(cpu: ^Cpu, index: u32, value: u64) {
 		return
 	}
 	when DEBUG_RECORD_STEPS {
-		cpu.undo.register_changed = true
-		cpu.undo.register_index = index
-		cpu.undo.register_old = cpu.regs[index]
-		cpu.last_write = Register_Write{valid = true, index = index, value = value}
+		cpu.debug_undo.register_changed = true
+		cpu.debug_undo.register_index = index
+		cpu.debug_undo.register_old = cpu.regs[index]
+		cpu.debug_last_write = Register_Write{valid = true, index = index, value = value}
 	}
 	cpu.regs[index] = value
 }
@@ -121,7 +121,7 @@ INSTRUCTION_SIZE :: u64(4)
 // counts that one.
 cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	when DEBUG_RECORD_STEPS {
-		cpu.last_write = {}
+		cpu.debug_last_write = {}
 	}
 	cpu.minstret_written = false
 	cpu.mcycle_written = false

@@ -75,13 +75,13 @@ timeline_record :: proc(session: ^Session, pc: u64, instruction: u32, inputs: St
 // captured before it ran), what it changed and where it went.
 timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs: Step_Inputs) -> Timeline_Entry {
 	machine := &session.machine
-	record := machine.cpu.undo
+	record := machine.cpu.debug_undo
 	entry := Timeline_Entry {
 		pc          = pc,
 		instruction = instruction,
 		next_pc     = machine.cpu.pc,
 		record      = record,
-		trap        = machine.last_trap,
+		trap        = machine.debug_last_trap,
 		inputs      = inputs,
 	}
 	if record.register_changed {

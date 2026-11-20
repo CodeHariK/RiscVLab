@@ -16,7 +16,7 @@ package rv
 // it can be left out of a build: compile with -define:DEBUG_RECORD_STEPS=false
 // and every `when DEBUG_RECORD_STEPS { ... }` below and in the handlers is gone
 // from the program. Such a build runs programs and nothing more: no undo,
-// and no "what did this step write" for --trace (Cpu.last_write). The
+// and no "what did this step write" for --trace (Cpu.debug_last_write). The
 // debugger, the unit tests and build/rvemu-check record; build/rvemu, the
 // one for plain runs, doesn't (Makefile).
 //

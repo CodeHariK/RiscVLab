@@ -43,11 +43,11 @@ step_and_undo_keeps_a_full_history :: proc(t: ^testing.T) {
 		rv.machine_step(&machine)
 	}
 
-	oldest := rv.history_save_oldest(&machine.history)
+	oldest := rv.history_save_oldest(&machine.debug_history)
 	testing.expect(t, oldest.full)
 	rv.machine_step(&machine)
 	rv.machine_step_back(&machine)
-	rv.history_restore_oldest(&machine.history, oldest)
+	rv.history_restore_oldest(&machine.debug_history, oldest)
 
 	undone := 0
 	for rv.machine_step_back(&machine) {

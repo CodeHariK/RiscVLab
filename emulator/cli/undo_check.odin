@@ -34,7 +34,7 @@ check_undo :: proc(machine: ^rv.Machine, max_steps: u64) -> int {
 		recorded -= 1
 	}
 	// Every step must still be in the history to be undone.
-	capacity := u64(len(machine.history.records))
+	capacity := u64(len(machine.debug_history.records))
 	if recorded > capacity {
 		fmt.printfln(
 			"undo check FAILED: the program ran %d steps, but the history holds only the last %d (use --max-steps %d or less)",

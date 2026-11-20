@@ -34,7 +34,7 @@ print_trace_line :: proc(machine: ^rv.Machine, pc: u64, result: rv.Step_Result) 
 		return
 	}
 
-	if trap, took_trap := machine.last_trap.?; took_trap {
+	if trap, took_trap := machine.debug_last_trap.?; took_trap {
 		if rv.trap_is_interrupt(trap.cause) {
 			fmt.eprintfln(
 				"%016x  %08x  %-28s interrupt %v before this instruction -> handler %016x",
@@ -58,7 +58,7 @@ print_trace_line :: proc(machine: ^rv.Machine, pc: u64, result: rv.Step_Result) 
 		return
 	}
 
-	write := machine.cpu.last_write
+	write := machine.cpu.debug_last_write
 	if write.valid {
 		fmt.eprintfln("%016x  %08x  %-28s %s <- %016x", pc, instruction, text, disasm.register_name(write.index), write.value)
 	} else {

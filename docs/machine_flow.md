@@ -114,8 +114,8 @@ handler (mtvec = 0) stops the machine and changes nothing.
 flowchart TD
   subgraph STEP["core/machine.odin : machine_step"]
     direction TB
-    S0["when DEBUG_RECORD_STEPS:<br/>cpu.undo = {pc, minstret, mcycle, privilege}"]
-    S0 --> S1["last_trap = nil<br/>bus.device_accessed = false"]
+    S0["when DEBUG_RECORD_STEPS:<br/>cpu.debug_undo = {pc, minstret, mcycle, privilege}"]
+    S0 --> S1["debug_last_trap = nil<br/>bus.device_accessed = false"]
     S1 --> S2{"step_clock >= bus.interrupts_change_at?<br/>(the CLINT alarm time has come)"}
     S2 -- yes --> S3["machine_update_interrupts<br/>(section 6)"]
     S2 -- no --> S4
@@ -133,8 +133,8 @@ flowchart TD
     S9 -- no --> S12
     S9 -- yes --> S10{"trap_has_handler?<br/>mtvec base != 0"}
     S10 -- no --> SSTOP["return the trap: the machine stops<br/>nothing recorded, nothing changed"]
-    S10 -- yes --> S11["undo: save mstatus, mepc, mcause, mtval<br/>trap_enter (section 7)<br/>last_trap = trap<br/>mcycle += 1 (the trap's step)"]
-    S11 --> S12["when DEBUG_RECORD_STEPS:<br/>history_push(cpu.undo) if history enabled"]
+    S10 -- yes --> S11["undo: save mstatus, mepc, mcause, mtval<br/>trap_enter (section 7)<br/>debug_last_trap = trap<br/>mcycle += 1 (the trap's step)"]
+    S11 --> S12["when DEBUG_RECORD_STEPS:<br/>history_push(cpu.debug_undo) if history enabled"]
     S12 --> S13{"bus.device_accessed, or<br/>step_clock >= interrupts_change_at?"}
     S13 -- yes --> S14["machine_update_interrupts"]
     S13 -- no --> SOK["return nil"]
@@ -466,7 +466,7 @@ flowchart TD
     U11 --> U12{"trap_taken?"}
     U12 -- yes --> U13["mstatus, mepc, mcause, mtval = saved"]
     U12 -- no --> U14
-    U13 --> U14["pc, minstret, mcycle, privilege = saved<br/>last_write = {}, last_trap = nil"]
+    U13 --> U14["pc, minstret, mcycle, privilege = saved<br/>debug_last_write = {}, debug_last_trap = nil"]
     U14 --> U15["machine_update_interrupts<br/>(mip isn't recorded: it is worked out again)"]
   end
 ```

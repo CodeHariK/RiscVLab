@@ -57,10 +57,10 @@ exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 		return trap_make(.Store_Access_Fault, address)
 	}
 	when DEBUG_RECORD_STEPS {
-		cpu.undo.memory_changed = true
-		cpu.undo.memory_address = address
-		cpu.undo.memory_size = size
-		cpu.undo.memory_old = old_value
+		cpu.debug_undo.memory_changed = true
+		cpu.debug_undo.memory_address = address
+		cpu.debug_undo.memory_size = size
+		cpu.debug_undo.memory_old = old_value
 	}
 	return nil
 }

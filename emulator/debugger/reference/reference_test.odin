@@ -102,6 +102,7 @@ docs_are_plain_ascii :: proc(t: ^testing.T) {
 		{"traps.md", embedded_trap_docs},
 		{"concurrency.md", embedded_concurrency_docs},
 		{"elf.md", embedded_elf_docs},
+		{"memory.md", embedded_memory_docs},
 		{"devices.md", embedded_device_docs},
 		{"emulator.md", embedded_emulator_docs},
 		{"terms.md", embedded_term_docs},

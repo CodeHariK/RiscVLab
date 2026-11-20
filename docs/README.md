@@ -22,6 +22,7 @@ mret, step back). GitHub and mermaid.live render them.
 - [CSRs](reference/csrs.md): every CSR the emulator has, its fields, and what it is for.
 - [Traps and privilege](reference/traps.md): what happens on a trap, interrupts and where they come from, writing a handler, privilege levels, and every trap cause.
 - [Devices](reference/devices.md): memory-mapped I/O, polling, the UART, the CLINT, where time comes from and how the emulator counts it.
-- [ELF and memory](reference/elf.md): ELF files, segments and sections, symbols, the linker script, the memory map, raw binaries, `tohost`.
+- [ELF files](reference/elf.md): ELF files, segments and sections, symbols, the linker script, raw binaries, `tohost`.
+- [Memory](reference/memory.md): the memory map (where RAM and the devices are), copying and filling memory (memcpy, memset) with loops of loads and stores, and where a program's memory comes from (malloc, sbrk).
 - [Terms](reference/terms.md): hart, registers and the ABI, the stack, sign extension, little-endian, WARL and other words the docs use.
 - [Concurrency](reference/concurrency.md): race conditions, locks, and memory ordering (fence, acquire and release), from beginner to advanced.

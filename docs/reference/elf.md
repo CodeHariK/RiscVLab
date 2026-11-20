@@ -1,7 +1,7 @@
-# ELF files and the memory map
+# ELF files
 
-How a program gets from a file into the emulator's memory, and where
-things live in that memory. The ELF tab in the debugger shows what the
+How a program gets from a file into the emulator's memory (where things
+live in that memory is memory-map, in memory.md). The ELF tab in the debugger shows what the
 loader found in the program that is open. Same format as
 instructions.md.
 
@@ -79,27 +79,6 @@ For: putting the program where the machine starts running. On QEMU `virt` (and h
 Watch out: putting data on its own page keeps code and data in separate segments, so the code can stay read / execute only. Without the ALIGN the linker warns about a segment that is readable, writable and executable at once.
 
 Related: section, segment, memory-map
-
-## memory-map - Physical memory map
-
-*where things are*
-
-Does: which physical addresses hold RAM and which hold devices. This emulator copies QEMU's `virt` board, so the same programs (and later xv6) run on both.
-
-How it works:
-| Address | What | In this emulator |
-|---|---|---|
-| 0x00001000 | boot ROM on QEMU | no |
-| 0x02000000 | CLINT: timer and software interrupts (see clint) | yes |
-| 0x0c000000 | PLIC: device interrupt controller | coming |
-| 0x10000000 | UART: serial port, for printing (see uart) | yes |
-| 0x10001000 | virtio disk | coming |
-| 0x80000000-0x87ffffff | RAM, 128 MiB: programs are loaded here | yes |
-Anything else is empty: a load or store there raises an access fault.
-
-For: devices are used with ordinary loads and stores to their addresses (memory-mapped I/O, see mmio); the bus decides whether an address means RAM or a device.
-
-Related: link.ld, Load_Access_Fault Store_Access_Fault, segment, mmio, uart, clint
 
 ## raw-binary - Raw binary files (.bin)
 

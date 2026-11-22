@@ -3,7 +3,8 @@
 Where things are in the physical address space, what programs do with
 memory beyond a single load or store (copying and filling it with loops
 of loads and stores), and where a program's memory comes from. Lesson 22
-counts what a copy costs. Same format as instructions.md.
+counts what a copy costs; lesson 23 builds a full memcpy and memset. Same
+format as instructions.md.
 
 ## memory-map - Physical memory map
 
@@ -49,11 +50,11 @@ What copying one 4096-byte page costs:
 | a byte per trip | 4096 | 24,600 |
 | 8 bytes per trip | 512 | 3,100 |
 | 8 bytes, unrolled 4 times (4 ld + 4 sd, then each pointer moved once by 32) | 128 | 1,500 |
-A real memcpy (libc's) works in three parts: single bytes until dst is 8-byte aligned, 8 bytes at a time for the middle, and single bytes for the last 0 to 7. Unrolling cuts the branches and pointer updates per byte. Chips with the V (vector) extension move 16 to 64 or more bytes per instruction instead.
+A real memcpy (libc's) works in three parts: single bytes until dst is 8-byte aligned, 8 bytes at a time for the middle, and single bytes for the last 0 to 7. The middle needs dst and src aligned at the same time, so their low 3 bits must match: (dst ^ src) & 7 == 0. When they don't, a simple memcpy copies every byte singly; libc instead loads aligned 8-byte words from src and shifts and merges each pair into place, so even then each store moves 8 bytes. Unrolling cuts the branches and pointer updates per byte. Chips with the V (vector) extension move 16 to 64 or more bytes per instruction instead.
 
 memset is the same loop with a store and no load. To store 8 bytes at a time, it first repeats the byte across a register: for c = 0xab, c * 0x0101010101010101 = 0xabababababababab, then `sd` of that. A big memset(p, 0, n) can use `cbo.zero` (the Zicboz extension), which zeroes a whole 64-byte cache block in one instruction.
 
-For: every program that moves data: copying a string or a struct, a kernel copying a page or a system call's arguments, zeroing a new buffer. xv6 keeps its own memmove and memset simple: one byte per trip (kernel/string.c).
+For: every program that moves data: copying a string or a struct, a kernel copying a page or a system call's arguments, zeroing a new buffer. xv6 keeps its own memmove and memset simple: one byte per trip (kernel/string.c). Lesson 22 compares the two loops (385 instructions against 49); lesson 23 builds the full memcpy and memset, where 47 bytes with matching alignment cost 111 instructions and with mismatched alignment 342.
 
 Emulator: each load or store is one bus access of 1, 2, 4 or 8 bytes. Misaligned ones just work, as on QEMU (a real chip may be slower, or trap so software does the access in pieces). An instruction stores at most once, 8 bytes at most, which is why one undo record per step can hold what it overwrote.
 

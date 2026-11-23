@@ -215,6 +215,15 @@ The fences, ecall, ebreak, and the privileged mret and wfi.
 ### CSR instructions (Zicsr, zicsr.odin)
 
 The six CSR instructions. Opcode 1110011 (SYSTEM), I-type with the CSR address in bits 31:20. Each puts the CSR's old value in rd. The CSRs themselves and their write rules are in `csr.odin`.
+```
+ bits:  31 .. 20       | 19 .. 15 | 14 .. 12 | 11 .. 7 | 6 .. 0
+ field: csr            | rs1/uimm | funct3   | rd      | opcode
+
+ 0x300029f3 = csrrs s3, mstatus, zero
+        0011 0000 0000 | 00000    | 010      | 10011   | 1110011
+        0x300, mstatus | zero     | csrrs    | s3 (19) | SYSTEM
+```
+In the i forms (CSRRWI, CSRRSI, CSRRCI) the rs1 field holds a 5-bit constant, uimm (0 to 31), instead of a register number.
 | Instruction | funct3 | Effect |
 |---|---|---|
 | CSRRW rd, csr, rs1 | 001 | rd = csr; csr = rs1 (no read if rd = x0) |

@@ -45,10 +45,18 @@ Related: csr-addresses, csrrw, csrrs, trap
 Does: every CSR has a 12-bit number (0x000 to 0xfff); the assembler accepts names instead.
 
 How it works: the top four bits of the number say who may use the CSR.
-- Bits 11..10 = 0b11 means read-only: writing it raises Illegal_Instruction.
-- Bits 9..8 give the lowest privilege level allowed: 0b00 user, 0b01 supervisor, 0b11 machine.
+```
+  bit:          11 10  | 9 8   | 7 ......... 0
+  field:        access | level | number
 
-For example, mhartid is 0xf14 = 0b1111_0001_0100: bits 11..10 are 0b11 (read-only) and bits 9..8 are 0b11 (machine only). mstatus is 0x300: writable, machine only. cycle is 0xc00: read-only, usable from user mode (it is the user name of mcycle, see mcycle).
+  mstatus 0x300 00     | 11    | 0000 0000     read/write, machine only
+  cycle   0xc00 11     | 00    | 0000 0000     read-only, anyone
+  mhartid 0xf14 11     | 11    | 0001 0100     read-only, machine only
+```
+- Bits 11..10 = 0b11 means read-only: writing it raises Illegal_Instruction.
+- Bits 9..8 give the lowest privilege level allowed (00 user, 01 supervisor, 11 machine): the hart's level must be at least this (csr_allowed, core/csr.odin). These are the same numbers as the privilege levels and mstatus.MPP.
+
+cycle is the user-mode name of mcycle (see mcycle).
 
 Watch out: using a CSR that does not exist, writing a read-only one, or using one from too low a privilege level all raise Illegal_Instruction.
 

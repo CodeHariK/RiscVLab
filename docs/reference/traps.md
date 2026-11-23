@@ -179,12 +179,16 @@ ecall                    # into the kernel...
 
 *machine, supervisor, user*
 
-Does: decides what the running code may do. Each level can use its own CSRs and those of the levels below it.
-- Machine (M, 3): everything. Firmware runs here; the hart starts here after reset.
-- Supervisor (S, 1): the OS kernel. Manages page tables and handles most traps of user programs.
-- User (U, 0): ordinary programs. No CSRs except a few counters; anything else needs an `ecall` to the kernel.
+Does: decides what the running code may do. Each level can use its own CSRs and those of the levels below it. Each level has a number, and that number is exactly what mstatus.MPP (bits 12..11) holds for it:
+| Level | Number | MPP bits | mstatus with only MPP set | Who runs there |
+|---|---|---|---|---|
+| User (U) | 0 | 00 | 0x0000 | ordinary programs: no CSRs except a few counters; anything else needs an `ecall` to the kernel |
+| Supervisor (S) | 1 | 01 | 0x0800 | the OS kernel: manages page tables and handles most traps of user programs |
+| (reserved) | 2 | 10 | 0x1000 | nothing: MPP can't hold it |
+| Machine (M) | 3 | 11 | 0x1800 | firmware; the hart starts here after reset. Everything is allowed |
+The same numbers appear in a CSR's address: bits 9..8 are the lowest level that may use it (mstatus is 0x300: 11, machine only; cycle is 0xc00: 00, anyone). Supervisor mode's own field, mstatus.SPP (bit 8), is one bit, because `sret` can only go back to user (0) or supervisor (1).
 
-How it works: traps go up (to machine mode, or to supervisor mode when delegated), and `mret` / `sret` come back down to the level saved in mstatus.MPP / SPP. That is the only way to change level.
+How it works: traps go up (to machine mode, or to supervisor mode when delegated), and `mret` / `sret` come back down to the level saved in mstatus.MPP / SPP. That is the only way to change level. MPP holds the level the last trap came from, not the current one: no CSR holds the level the hart is running at (the debugger's CSRs tab shows it on its first line, "privilege"). To enter user mode, machine code clears MPP and runs `mret`: `li t0, 0x1800`, `csrc mstatus, t0`, `mret` (lesson 24).
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 

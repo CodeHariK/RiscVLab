@@ -29,6 +29,7 @@ The lessons:
 | 21 | a timer interrupt |
 | 22 | copying memory: a byte or 8 bytes at a time, and what each costs |
 | 23 | a real memcpy and memset: any length and alignment (head, body, tail) |
+| 24 | user mode: down with mret, what user code may not do, back up with ecall |
 
 For: anyone new to RISC-V, to assembly, or to how an operating system works with the hardware underneath it. No assembly is needed to start; some C helps.
 

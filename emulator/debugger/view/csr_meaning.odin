@@ -27,7 +27,7 @@ csr_view_order := [?]u32 {
 }
 
 // A short reading of the value, e.g. "MIE=1 MPIE=0 MPP=Machine".
-csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
+csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string {
 	switch address {
 	case rv.CSR_MSTATUS:
 		return fmt.tprintf(
@@ -43,7 +43,11 @@ csr_meaning :: proc(cpu: ^rv.Cpu, address: u32, value: u64) -> string {
 		mode := "vectored" if value & 0b11 == 1 else "direct"
 		return fmt.tprintf("handler at 0x%x (%s)", value &~ 0b11, mode)
 	case rv.CSR_MCAUSE:
-		if cpu.csr.mepc == 0 && value == 0 {
+		// mcause is 0 at reset, and 0 is also a real cause
+		// (Instruction_Address_Misaligned). Nothing has written it since
+		// Reset, neither a trap nor a csrw, so the 0 is the reset value.
+		// (Prev keeps this right: it takes back the write too.)
+		if state.last_write_csr(session, rv.CSR_MCAUSE) == 0 {
 			return "no trap yet"
 		}
 		return cause_text(value)

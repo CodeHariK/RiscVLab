@@ -38,7 +38,7 @@ tab_csrs :: proc(session: ^state.Session) {
 			background = highlight,
 		})
 		append(&rows, ui.Table_Row{
-			cells = ui.cells({text = csr_meaning(cpu, address, value), color = colors.text_dim}),
+			cells = ui.cells({text = csr_meaning(session, address, value), color = colors.text_dim}),
 			background = highlight,
 			span = true,
 			span_from = 1, // under the name, not the "#N" column

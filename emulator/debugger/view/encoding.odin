@@ -61,7 +61,7 @@ encoding_of :: proc(instruction: u32) -> Encoding {
 		if rv.funct3(instruction) != 0 {
 			csr_type(&encoding, rv.funct3(instruction) & 0b100 != 0)
 		} else {
-			i_type(&encoding)
+			system_type(&encoding)
 		}
 	case rv.OPCODE_AMO:
 		encoding.format = "R-type (atomic)"
@@ -143,32 +143,114 @@ field_value_text :: proc(instruction: u32, field: Encoding_Field) -> string {
 	return value_text(u64(value))
 }
 
-// One line under the fields: the format and the assembled immediate.
+// The first line under the fields: the format, the instruction, and
+// the fields that picked it. The opcode only names a group (SYSTEM holds
+// ecall, mret and the six CSR instructions); funct3, and in some groups
+// funct7 / funct6 / funct5, pick the instruction within it; ecall,
+// ebreak, mret and wfi share opcode and funct3, and funct12 tells them
+// apart.
+encoding_name_line :: proc(pc: u64, instruction: u32, encoding: Encoding) -> string {
+	buffer: [96]u8
+	text := disasm.disassemble(buffer[:], pc, instruction)
+	builder := strings.builder_make(context.temp_allocator)
+	fmt.sbprintf(&builder, "%s: %s   (opcode %s", encoding.format, text, opcode_name(rv.opcode(instruction)))
+	for index in 0 ..< encoding.field_count {
+		field := encoding.fields[index]
+		if field.kind != .Funct || field.label == "aq" || field.label == "rl" {
+			continue // aq / rl are ordering hints, not part of the choice
+		}
+		fmt.sbprintf(&builder, " + %s %s", field.label, field_bits_text(instruction, field))
+	}
+	strings.write_string(&builder, ")")
+	return strings.to_string(builder)
+}
+
+// The second line: what the immediate (or the CSR field) works out to.
+// "" when the format has nothing more to say.
 encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> string {
 	switch encoding.format {
 	case "R-type (atomic)":
 		width := "32-bit (.w)" if rv.funct3(instruction) == rv.AMO_WORD else "64-bit (.d)"
-		return fmt.tprintf("R-type (atomic): funct5 picks the operation, %s; aq / rl are ordering hints; address = rs1, no offset", width)
+		return fmt.tprintf("funct5 picks the operation, %s; aq / rl are ordering hints; address = rs1, no offset", width)
 	case "I-type":
-		return fmt.tprintf("I-type: imm = %s (12 bits, sign-extended)", signed_text(i64(rv.imm_i(instruction))))
+		return fmt.tprintf("imm = %s (12 bits, sign-extended)", signed_text(i64(rv.imm_i(instruction))))
 	case "I-type (CSR)":
-		address := rv.csr_address(instruction)
-		name := disasm.csr_name(address)
-		return fmt.tprintf("I-type (CSR): csr = 0x%03x (%s)", address, name if name != "" else "not implemented")
+		return csr_field_text(instruction)
+	case "I-type (system)":
+		return "funct12 picks the instruction: 0x000 ecall, 0x001 ebreak, 0x302 mret, 0x105 wfi (rs1 and rd are 0)"
 	case "I-type (shift)":
-		return fmt.tprintf("I-type (shift): shift amount = %s", value_text(u64((instruction >> 20) & 0x3F)))
+		return fmt.tprintf("shift amount = %s", value_text(u64((instruction >> 20) & 0x3F)))
 	case "S-type":
-		return fmt.tprintf("S-type: imm = imm[11:5] imm[4:0] = %s", signed_text(i64(rv.imm_s(instruction))))
+		return fmt.tprintf(
+			"imm = imm[11:5] imm[4:0] = %s %s = %s",
+			bits_of(instruction, encoding, "imm[11:5]"),
+			bits_of(instruction, encoding, "imm[4:0]"),
+			signed_text(i64(rv.imm_s(instruction))),
+		)
 	case "B-type":
 		offset := rv.imm_b(instruction)
-		return fmt.tprintf("B-type: offset = %s (bit 0 is always 0) -> target 0x%x", signed_text(i64(offset)), pc + offset)
+		return fmt.tprintf(
+			"offset = imm[12] imm[11] imm[10:5] imm[4:1] 0 = %s %s %s %s 0 = %s (bit 0 is always 0, so not stored) -> target 0x%x",
+			bits_of(instruction, encoding, "imm[12]"),
+			bits_of(instruction, encoding, "imm[11]"),
+			bits_of(instruction, encoding, "imm[10:5]"),
+			bits_of(instruction, encoding, "imm[4:1]"),
+			signed_text(i64(offset)),
+			pc + offset,
+		)
 	case "U-type":
-		return fmt.tprintf("U-type: imm = 0x%x << 12 = 0x%x", instruction >> 12, rv.imm_u(instruction))
+		return fmt.tprintf("imm = 0x%x << 12 = 0x%x", instruction >> 12, rv.imm_u(instruction))
 	case "J-type":
 		offset := rv.imm_j(instruction)
-		return fmt.tprintf("J-type: offset = %s (bit 0 is always 0) -> target 0x%x", signed_text(i64(offset)), pc + offset)
+		return fmt.tprintf(
+			"offset = imm[20] imm[19:12] imm[11] imm[10:1] 0 = %s %s %s %s 0 = %s (bit 0 is always 0, so not stored) -> target 0x%x",
+			bits_of(instruction, encoding, "imm[20]"),
+			bits_of(instruction, encoding, "imm[19:12]"),
+			bits_of(instruction, encoding, "imm[11]"),
+			bits_of(instruction, encoding, "imm[10:1]"),
+			signed_text(i64(offset)),
+			pc + offset,
+		)
 	}
-	return encoding.format
+	return ""
+}
+
+// The bits of the field labelled `label`, as a binary string: the
+// pieces of a scattered immediate, put back in order by the summary.
+@(private)
+bits_of :: proc(instruction: u32, encoding: Encoding, label: string) -> string {
+	for index in 0 ..< encoding.field_count {
+		if encoding.fields[index].label == label {
+			return field_bits_text(instruction, encoding.fields[index])
+		}
+	}
+	return "?"
+}
+
+// A CSR instruction's csr field read as the CSR's number: its name, and
+// the two rules in its top bits (docs: csr-addresses). For the i forms,
+// also the 5-bit constant in the rs1 field.
+//   csr = 0x300 (mstatus): bits 11..10 = 00 read/write, bits 9..8 = 11 machine only
+@(private)
+csr_field_text :: proc(instruction: u32) -> string {
+	LEVELS := [4]string{"any level", "supervisor and up", "reserved", "machine only"}
+	address := rv.csr_address(instruction)
+	name := disasm.csr_name(address)
+	access := (address >> 10) & 0b11
+	level := rv.csr_level(address)
+	text := fmt.tprintf(
+		"csr = 0x%03x (%s): bits 11..10 = %02b %s, bits 9..8 = %02b %s",
+		address,
+		name if name != "" else "not implemented",
+		access,
+		"read-only" if access == 0b11 else "read/write",
+		level,
+		LEVELS[level],
+	)
+	if rv.funct3(instruction) & 0b100 != 0 {
+		text = fmt.tprintf("%s; uimm = %d (a constant, not a register)", text, (instruction >> 15) & 0x1f)
+	}
+	return text
 }
 
 // ------------------------------------------------------------- builders
@@ -200,6 +282,19 @@ r_type :: proc(encoding: ^Encoding) {
 i_type :: proc(encoding: ^Encoding) {
 	encoding.format = "I-type"
 	add_field(encoding, 31, 20, "imm[11:0]", .Immediate)
+	add_field(encoding, 19, 15, "rs1", .Rs1)
+	add_field(encoding, 14, 12, "funct3", .Funct)
+	add_field(encoding, 11, 7, "rd", .Rd)
+	add_field(encoding, 6, 0, "opcode", .Opcode)
+}
+
+// ecall, ebreak, mret, wfi: I-type whose 12 top bits are not an
+// immediate but a code (funct12) saying which of them it is; rs1 and rd
+// are 0.
+@(private)
+system_type :: proc(encoding: ^Encoding) {
+	encoding.format = "I-type (system)"
+	add_field(encoding, 31, 20, "funct12", .Funct)
 	add_field(encoding, 19, 15, "rs1", .Rs1)
 	add_field(encoding, 14, 12, "funct3", .Funct)
 	add_field(encoding, 11, 7, "rd", .Rd)

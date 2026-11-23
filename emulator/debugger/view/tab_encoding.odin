@@ -28,7 +28,10 @@ tab_encoding :: proc(session: ^state.Session) {
 			encoding_field(instruction, field, u32(index))
 		}
 	}
-	clay.TextDynamic(encoding_summary(pc, instruction, encoding), ui.text_config(.Text, colors.text))
+	wrapped_text(encoding_name_line(pc, instruction, encoding), ui.text_config(.Text, colors.text))
+	if summary := encoding_summary(pc, instruction, encoding); summary != "" {
+		wrapped_text(summary, ui.text_config(.Text, colors.text))
+	}
 	instruction_effect(session)
 }
 
@@ -64,12 +67,24 @@ encoding_field :: proc(instruction: u32, field: Encoding_Field, index: u32) {
 }
 
 @(private)
+DETAIL_LABEL_WIDTH :: 80
+DETAIL_GAP :: 10
+
 detail_line :: proc(label: string, text: string, color: clay.Color) {
 	colors := ui.palette()
-	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = 10, padding = {top = 2, bottom = 2}}}) {
-		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(80)}}}) {
+	if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}, childGap = DETAIL_GAP, padding = {top = 2, bottom = 2}}}) {
+		if clay.UI()({layout = {sizing = {width = clay.SizingFixed(DETAIL_LABEL_WIDTH)}}}) {
 			clay.TextDynamic(label, ui.text_config(.Text, colors.accent))
 		}
-		clay.TextDynamic(text, ui.text_config(.Text, color))
+		// The text wraps in the rest of the tab area's width (see
+		// wrapped_text: in a clipping area, text only wraps in a box
+		// given a width).
+		sizing := clay.Sizing{width = clay.SizingGrow()}
+		if width, found := tab_area_width(); found {
+			sizing.width = clay.SizingFixed(max(width - DETAIL_LABEL_WIDTH - DETAIL_GAP, 100))
+		}
+		if clay.UI()({layout = {sizing = sizing}}) {
+			clay.TextDynamic(text, ui.text_config(.Text, color))
+		}
 	}
 }

@@ -188,11 +188,29 @@ Does: decides what the running code may do. Each level can use its own CSRs and 
 | Machine (M) | 3 | 11 | 0x1800 | firmware; the hart starts here after reset. Everything is allowed |
 The same numbers appear in a CSR's address: bits 9..8 are the lowest level that may use it (mstatus is 0x300: 11, machine only; cycle is 0xc00: 00, anyone). Supervisor mode's own field, mstatus.SPP (bit 8), is one bit, because `sret` can only go back to user (0) or supervisor (1).
 
-How it works: traps go up (to machine mode, or to supervisor mode when delegated), and `mret` / `sret` come back down to the level saved in mstatus.MPP / SPP. That is the only way to change level. MPP holds the level the last trap came from, not the current one: no CSR holds the level the hart is running at (the debugger's CSRs tab shows it on its first line, "privilege"). To enter user mode, machine code clears MPP and runs `mret`: `li t0, 0x1800`, `csrc mstatus, t0`, `mret` (lesson 24).
+How it works: traps go up (to machine mode, or to supervisor mode when delegated), and `mret` / `sret` come back down to the level saved in mstatus.MPP / SPP. That is the only way to change level. Two things hold a level, and they mean different things:
+| | The current level | mstatus.MPP |
+|---|---|---|
+| Holds | the level the hart is running at right now | where the next `mret` goes: the level the last trap came from |
+| Set by | trap entry (to machine) and `mret` (to MPP) | trap entry (to the current level) and `mret` (to the least privileged level) |
+| Seen by | no CSR: the hardware keeps it to itself | machine-mode code, in mstatus |
+| Like | the pc | ra: a saved place to return to |
+In this emulator the current level is Cpu.privilege, and the debugger's CSRs tab shows it on its first line ("privilege"), next to mstatus.MPP.
+
+How they move, starting from machine code that set MPP to supervisor and runs `mret`:
+| Moment | Current level | MPP |
+|---|---|---|
+| before the `mret` | machine | supervisor (set by the program, as if a trap had come from there) |
+| after the `mret` | supervisor (taken from MPP) | user (`mret` clears it to the least privileged level, see mret) |
+| after an `ecall` in supervisor mode | machine (every trap goes up) | supervisor (the trap saved where it came from) |
+| after the handler's `mret` | supervisor | user |
+To enter user mode, machine code clears MPP and runs `mret`: `li t0, 0x1800`, `csrc mstatus, t0`, `mret` (lesson 24).
+
+Why no CSR shows the current level: so a program can't simply check which level it really runs at. That keeps virtualization possible: a hypervisor can run a kernel one level lower than the kernel thinks, and catch (trap) whatever the kernel isn't allowed to do there. Code finds out what it may do only by trying and seeing whether it traps. Machine code never needs the current level anyway: inside a trap handler it is machine, and MPP says where the trap came from.
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 
-Emulator: machine and user mode so far. `mret` with MPP = 0b00 drops into user mode, where the machine CSRs, `mret` and the machine-only instructions raise Illegal_Instruction, `ecall` traps with cause 0x8, and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Every trap goes back to machine mode. Supervisor mode comes next, on the way to xv6.
+Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Supervisor mode has no CSRs of its own yet, and nothing is delegated to it, so every trap still goes to machine mode; the S CSRs, delegation and `sret` come next, on the way to xv6.
 
 Related: mstatus, mret, ecall, csr-addresses
 

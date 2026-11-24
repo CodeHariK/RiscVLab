@@ -1,6 +1,7 @@
 package view
 
 import "core:fmt"
+import "core:strings"
 import rv "../../core"
 import state "../state"
 
@@ -56,7 +57,7 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 	case rv.CSR_MIP:
 		return interrupt_bits_text(value, "pending (driven by the devices)")
 	case rv.CSR_MISA:
-		return "RV64IMA"
+		return misa_text(value)
 	case rv.CSR_MINSTRET:
 		return "instructions retired"
 	case rv.CSR_MCYCLE:
@@ -110,4 +111,27 @@ csr_changed_by_last_step :: proc(session: ^state.Session, address: u32) -> bool 
 		}
 	}
 	return false
+}
+
+// misa read from its bits: the width (MXL), the extension letters in the
+// usual order, and the modes below machine (S and U are bits too, but
+// modes, not instruction sets). "RV64IMA, modes: machine, supervisor, user"
+@(private = "file")
+misa_text :: proc(value: u64) -> string {
+	builder := strings.builder_make(context.temp_allocator)
+	widths := [4]string{"?", "32", "64", "128"}
+	fmt.sbprintf(&builder, "RV%s", widths[value >> 62])
+	for letter in "IEMAFDQCV" {
+		if value & (u64(1) << u64(letter - 'A')) != 0 {
+			strings.write_rune(&builder, letter)
+		}
+	}
+	strings.write_string(&builder, ", modes: machine")
+	if value & (u64(1) << u64('S' - 'A')) != 0 {
+		strings.write_string(&builder, ", supervisor")
+	}
+	if value & (u64(1) << u64('U' - 'A')) != 0 {
+		strings.write_string(&builder, ", user")
+	}
+	return strings.to_string(builder)
 }

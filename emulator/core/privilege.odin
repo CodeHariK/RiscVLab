@@ -2,8 +2,8 @@ package rv
 
 // Privilege levels, and moving between them: trap entry goes up to
 // machine mode, MRET comes back down (privileged spec, "Machine-Mode
-// Exception Handling" and "Trap-Return Instructions"). Supervisor mode,
-// SRET and delegation will join them here.
+// Exception Handling" and "Trap-Return Instructions"). SRET and
+// delegation to supervisor mode will join them here.
 //
 // The hart is always in one mode (Cpu.privilege). It only changes on a
 // trap (up to machine mode) or an MRET (down to the mode in mstatus.MPP).
@@ -50,10 +50,10 @@ MSTATUS_RESET :: u64(Privilege.Machine) << MSTATUS_MPP_SHIFT
 // stale MPP can't send a later MRET back up.
 LEAST_PRIVILEGED_MODE :: Privilege.User
 
-// The modes this hart has: machine and user so far (supervisor comes
-// next). mstatus.MPP can only hold one of these (csr_write).
+// The modes this hart has: all three. Only 2, the reserved code, is not
+// a mode. mstatus.MPP can only hold one of these (csr_write).
 privilege_implemented :: proc(privilege: Privilege) -> bool {
-	return privilege == .User || privilege == .Machine
+	return privilege == .User || privilege == .Supervisor || privilege == .Machine
 }
 
 // ------------------------------------------------------------ trap entry

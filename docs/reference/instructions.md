@@ -745,6 +745,8 @@ How it works:
 3. Interrupts go back to how they were: MIE = MPIE, then MPIE = 1.
 4. MPP = the least privileged mode.
 
+Why step 4: MPP is a return slot, and `mret` empties it after using it, by setting it to the least powerful mode rather than leaving the old value. So a second `mret`, or one where machine code forgot to set MPP, can only drop to user mode: never back up to supervisor or machine mode by accident. To go anywhere else, the code must set MPP again on purpose. (On a hart without user mode the least privileged mode is machine, so MPP becomes machine.)
+
 For: the last instruction of a trap handler. Also how a kernel starts a user program the first time: set mepc to the program and MPP to user mode, then `mret`.
 
 Watch out:

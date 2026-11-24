@@ -83,9 +83,9 @@ mtvec_mode :: #force_inline proc(mtvec: u64) -> u64 {
 }
 
 // misa: MXL = 2 (64-bit) in bits 63:62, then one bit per extension letter
-// (bit 0 = A, ..., bit 8 = I, bit 12 = M, bit 20 = U): RV64IMA, with user
-// mode. Zicsr and Zifencei have no letter.
-MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A') | u64(1) << ('U' - 'A')
+// (bit 0 = A, ..., bit 8 = I, bit 12 = M, bit 18 = S, bit 20 = U): RV64IMA,
+// with supervisor and user mode. Zicsr and Zifencei have no letter.
+MISA_VALUE :: u64(2) << 62 | u64(1) << ('A' - 'A') | u64(1) << ('I' - 'A') | u64(1) << ('M' - 'A') | u64(1) << ('S' - 'A') | u64(1) << ('U' - 'A')
 
 // The CSRs that need their own storage (the read-only machine
 // information CSRs are constants).
@@ -171,9 +171,9 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	csr := &cpu.csr
 	switch address {
 	case CSR_MSTATUS:
-		// MPP can only hold a mode the hart has (WARL): user (0) or
-		// machine (3) so far. Writing 1 (supervisor, not here yet) or 2
-		// (reserved) leaves MPP as it was.
+		// MPP can only hold a mode the hart has (WARL): user (0),
+		// supervisor (1) or machine (3). Writing 2 (reserved) leaves MPP
+		// as it was.
 		mpp := mstatus_mpp(value)
 		if !privilege_implemented(mpp) {
 			mpp = mstatus_mpp(csr.mstatus)

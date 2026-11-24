@@ -1,0 +1,128 @@
+package rv_unit_tests
+
+import "core:testing"
+import rv "../core"
+
+// Unit tests for supervisor mode existing (core/privilege.odin, csr.odin):
+// MRET into it, what it may and may not touch, and ECALL back up. There
+// are no supervisor CSRs or delegation yet, so every trap still goes to
+// machine mode.
+
+@(private = "file")
+MRET :: u32(0x3020_0073)
+@(private = "file")
+ECALL :: u32(0x0000_0073)
+@(private = "file")
+CSRR_T0_MSTATUS :: u32(0x3000_22f3) // csrrs t0, mstatus, zero
+@(private = "file")
+CSRR_T0_CYCLE :: u32(0xc000_22f3) // csrrs t0, cycle, zero
+@(private = "file")
+S_CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
+@(private = "file")
+HANDLER :: rv.RAM_BASE + 0x800 // mtvec
+
+// A machine whose first instruction is MRET, with mepc = S_CODE and
+// MPP = supervisor, so one step drops into supervisor mode; `code` is
+// placed at S_CODE.
+@(private = "file")
+machine_entering_supervisor_mode :: proc(code: ..u32) -> rv.Machine {
+	machine := rv.machine_create(64 * 1024, 16)
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(MRET))
+	for instruction, index in code {
+		rv.machine_store(&machine, S_CODE + u64(index) * 4, 4, u64(instruction))
+	}
+	machine.cpu.csr.mepc = S_CODE
+	machine.cpu.csr.mtvec = HANDLER
+	machine.cpu.csr.mstatus = rv.mstatus_with_mpp(0, .Supervisor)
+	return machine
+}
+
+// Step 1 is always the MRET at RAM_BASE (machine mode), dropping into
+// supervisor mode at S_CODE; step 2 is the instruction under test.
+
+@(test)
+mret_drops_into_supervisor_mode :: proc(t: ^testing.T) {
+	// A NOP waits at S_CODE: this test only checks where MRET lands.
+	machine := machine_entering_supervisor_mode(NOP)
+	defer rv.machine_destroy(&machine)
+
+	// MRET: privilege = MPP (supervisor), pc = mepc (S_CODE).
+	testing.expect(t, rv.machine_step(&machine) == nil) // no trap
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor)
+	testing.expect_value(t, machine.cpu.pc, S_CODE)
+	// MRET also empties the return slot: MPP = the least privileged
+	// mode, user (docs: mret, "Why step 4").
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.User)
+}
+
+@(test)
+supervisor_mode_reads_cycle :: proc(t: ^testing.T) {
+	machine := machine_entering_supervisor_mode(CSRR_T0_CYCLE)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into S
+
+	// Step 2: csrr t0, cycle. cycle is 0xc00: bits 9..8 = 00, so any
+	// level may read it (csr_allowed: 1 >= 0).
+	testing.expect(t, rv.machine_step(&machine) == nil) // no trap
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor) // still in S
+	// t0 (x5) got mcycle as it was when the csrr ran: one step (the
+	// mret) had passed; the csrr's own cycle counted after.
+	testing.expect_value(t, machine.cpu.regs[5], machine.cpu.csr.mcycle - 1)
+}
+
+@(test)
+machine_csr_from_supervisor_mode_is_illegal :: proc(t: ^testing.T) {
+	machine := machine_entering_supervisor_mode(CSRR_T0_MSTATUS)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into S
+
+	// Step 2: csrr t0, mstatus. mstatus is 0x300: bits 9..8 = 11,
+	// machine only (csr_allowed: 1 >= 3 is false), so Illegal_Instruction.
+	rv.machine_step(&machine)
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	// The trap took the hart up to machine mode...
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
+	// ...and saved where it came from, for the handler's mret.
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.Supervisor)
+}
+
+@(test)
+ecall_from_supervisor_mode_is_cause_9 :: proc(t: ^testing.T) {
+	machine := machine_entering_supervisor_mode(ECALL)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into S
+
+	// Step 2: ecall. The cause says which level called: 8 from user,
+	// 9 from supervisor (ecall_cause), so the handler knows who asked.
+	rv.machine_step(&machine)
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Ecall_From_S_Mode))
+	// mepc = the ecall itself; the handler adds 4 before returning.
+	testing.expect_value(t, machine.cpu.csr.mepc, S_CODE)
+	// Up to machine mode, at the handler (no delegation yet: every trap
+	// goes to machine mode).
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
+	testing.expect_value(t, machine.cpu.pc, HANDLER)
+	// MPP remembers where the trap came from, for the handler's mret.
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.Supervisor)
+}
+
+@(test)
+mret_from_supervisor_mode_is_illegal :: proc(t: ^testing.T) {
+	// A second MRET waits at S_CODE.
+	machine := machine_entering_supervisor_mode(MRET)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into S (allowed: machine mode)
+
+	// Step 2: mret again, now from S. MRET sets the level to MPP, so it
+	// is a "change privilege" instruction: only machine mode may run it
+	// (exec_mret: privilege != .Machine -> Illegal_Instruction), or a
+	// kernel could jump itself into machine mode. S mode gets sret.
+	rv.machine_step(&machine)
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine) // the trap took it up
+	// It was this mret that trapped: mepc points at it, mtval holds its
+	// bits, and MPP says it ran in supervisor mode.
+	testing.expect_value(t, machine.cpu.csr.mepc, S_CODE)
+	testing.expect_value(t, machine.cpu.csr.mtval, u64(MRET))
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.Supervisor)
+}

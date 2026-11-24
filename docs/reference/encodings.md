@@ -233,6 +233,6 @@ In the i forms (CSRRWI, CSRRSI, CSRRCI) the rs1 field holds a 5-bit constant, ui
 | CSRRSI rd, csr, uimm | 110 | as CSRRS (no write if uimm = 0) |
 | CSRRCI rd, csr, uimm | 111 | as CSRRC (no write if uimm = 0) |
 Assembler shorthands: `csrr rd, csr` = CSRRS rd, csr, x0; `csrw csr, rs1` = CSRRW x0, csr, rs1. A CSR that isn't implemented, or a write to a read-only one, raises `Illegal_Instruction`.
-Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64IMA with U, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle (= steps: instructions, and traps and interrupts taken), minstret (= instructions retired); cycle, instret (read-only copies).
+Implemented CSRs: mvendorid, marchid, mimpid, mhartid (read-only, 0); mstatus (MIE, MPIE, MPP); misa (RV64IMA with S and U, writes ignored); mie; mtvec; mscratch; mepc; mcause; mtval; mip (writes ignored); mcycle (= steps: instructions, and traps and interrupts taken), minstret (= instructions retired); cycle, instret (read-only copies).
 
 Related: lui, addi, add, lb, beq, jal, mul, lr.w, csrrw, immediate, sign-extension, two's-complement, emulator

@@ -91,7 +91,7 @@ Why mret restores it, instead of the handler doing `csrsi mstatus, 8` (MIE = 1) 
 
 For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`), and choosing which mode `mret` enters: an OS sets MPP to user mode, then `mret`s into a user program.
 
-Emulator: machine and user mode exist so far, so MPP holds 0b11 (machine) or 0b00 (user); writing 0b01 (supervisor) or 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
+Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
 
 Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
 
@@ -294,7 +294,7 @@ Fields:
 - MXL (bits 63..62): register width: 1 = 32-bit, 2 = 64-bit.
 - Extensions (bits 25..0): one bit per letter: bit 0 = A, bit 8 = I, bit 12 = M, and so on.
 
-How it works: here misa = 0x8000000000101101: MXL = 2 (RV64), bit 0 (A), bit 8 (I), bit 12 (M) and bit 20 (U: user mode).
+How it works: here misa = 0x8000000000141101: MXL = 2 (RV64), bit 0 (A), bit 8 (I), bit 12 (M), bit 18 (S: supervisor mode) and bit 20 (U: user mode).
 
 For: software that adapts to the hardware it runs on.
 

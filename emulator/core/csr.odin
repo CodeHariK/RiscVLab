@@ -39,6 +39,17 @@ CSR_MCAUSE :: 0x342 // why the trap happened (Trap_Cause, or an interrupt)
 CSR_MTVAL :: 0x343 // extra trap information: bad address or instruction
 CSR_MIP :: 0x344 // which interrupts are pending
 
+// Supervisor trap setup and handling: supervisor mode's own copies of the
+// machine trap CSRs, at the same numbers with bits 9..8 = 01 instead of
+// 11, so supervisor and machine mode may use them (csr_allowed). They
+// hold what a trap delegated to supervisor mode records (docs: stvec).
+// Nothing is delegated yet, so for now they are only storage.
+CSR_STVEC :: 0x105 // supervisor trap handler address (and mode), like mtvec
+CSR_SSCRATCH :: 0x140 // free for the supervisor trap handler, like mscratch
+CSR_SEPC :: 0x141 // where the supervisor trap happened, like mepc
+CSR_SCAUSE :: 0x142 // why, like mcause
+CSR_STVAL :: 0x143 // extra information, like mtval
+
 // Counters. mcycle / minstret are read/write; cycle / instret are their
 // read-only copies for less privileged code.
 CSR_MCYCLE :: 0xB00
@@ -110,6 +121,13 @@ Csr_File :: struct {
 	mcycle:   u64,
 	// Instructions completed ("retired").
 	minstret: u64,
+	// Supervisor trap CSRs (after the counters, so the fields every step
+	// touches keep their place).
+	stvec:    u64,
+	sscratch: u64,
+	sepc:     u64,
+	scause:   u64,
+	stval:    u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
@@ -158,6 +176,16 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return cpu.csr.mcycle, true
 	case CSR_MINSTRET, CSR_INSTRET:
 		return cpu.csr.minstret, true
+	case CSR_STVEC:
+		return csr.stvec, true
+	case CSR_SSCRATCH:
+		return csr.sscratch, true
+	case CSR_SEPC:
+		return csr.sepc, true
+	case CSR_SCAUSE:
+		return csr.scause, true
+	case CSR_STVAL:
+		return csr.stval, true
 	}
 	return 0, false
 }
@@ -218,6 +246,18 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MINSTRET:
 		cpu.csr.minstret = value
 		cpu.minstret_written = true
+	case CSR_STVEC:
+		// The same layout and rule as mtvec: MODE 2 and 3 are reserved.
+		csr.stvec = value & ~u64(0b10)
+	case CSR_SSCRATCH:
+		csr.sscratch = value
+	case CSR_SEPC:
+		// Instructions are 4-byte aligned (no C extension), as for mepc.
+		csr.sepc = value & ~u64(0b11)
+	case CSR_SCAUSE:
+		csr.scause = value
+	case CSR_STVAL:
+		csr.stval = value
 	case:
 		return false
 	}
@@ -254,6 +294,16 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		cpu.csr.mcycle = value
 	case CSR_MINSTRET:
 		cpu.csr.minstret = value
+	case CSR_STVEC:
+		csr.stvec = value
+	case CSR_SSCRATCH:
+		csr.sscratch = value
+	case CSR_SEPC:
+		csr.sepc = value
+	case CSR_SCAUSE:
+		csr.scause = value
+	case CSR_STVAL:
+		csr.stval = value
 	}
 }
 

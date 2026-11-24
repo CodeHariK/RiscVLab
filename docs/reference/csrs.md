@@ -8,8 +8,9 @@ with the CSR instructions (`csrrw`, `csrrs`, `csrrc` and their shorthands
 
 The debugger's Docs window shows a CSR's entry when the next instruction
 reads or writes it, and the CSRs tab shows their values. This file
-covers the CSRs the emulator has today; the supervisor CSRs (`sstatus`,
-`stvec`, `satp`, ...) arrive with supervisor mode.
+covers the CSRs the emulator has today: the machine CSRs, and supervisor
+mode's trap CSRs (`stvec`, `sepc`, ...). More supervisor CSRs
+(`sstatus`, `sie`, `satp`, ...) arrive as supervisor mode grows.
 
 Same format as instructions.md, plus two labels: `Fields:` for the bits
 of a CSR, and `Emulator:` for what this emulator does differently from
@@ -47,16 +48,63 @@ Does: every CSR has a 12-bit number (0x000 to 0xfff); the assembler accepts name
 How it works: the top four bits of the number say who may use the CSR.
 ```
   bit:          11 10  | 9 8   | 7 ......... 0
-  field:        access | level | number
+  field:        region | level | number
 
   mstatus 0x300 00     | 11    | 0000 0000     read/write, machine only
   cycle   0xc00 11     | 00    | 0000 0000     read-only, anyone
   mhartid 0xf14 11     | 11    | 0001 0100     read-only, machine only
 ```
-- Bits 11..10 = 0b11 means read-only: writing it raises Illegal_Instruction.
+- Bits 11..10 = 0b11 means read-only: writing it raises Illegal_Instruction (csr_is_read_only, core/csr.odin). 00, 01 and 10 are all read/write.
 - Bits 9..8 give the lowest privilege level allowed (00 user, 01 supervisor, 11 machine): the hart's level must be at least this (csr_allowed, core/csr.odin). These are the same numbers as the privilege levels and mstatus.MPP.
 
+Why bits 11..10 have three read/write values: together with the level they split the numbers into regions, one block per family of CSRs. Only 11 means something to the hardware (read-only); the rest is how the spec keeps families apart:
+| Top bits (11..8) | Range | Region | Examples |
+|---|---|---|---|
+| 00 00 | 0x000 - 0x0ff | user, standard | the floating-point CSRs (not here) |
+| 11 00 | 0xc00 - 0xcff | user, read-only | cycle, time, instret |
+| 00 01 | 0x100 - 0x1ff | supervisor, standard | sstatus, stvec, sepc, satp |
+| 00 11 | 0x300 - 0x3ff | machine, standard | mstatus, mtvec, mepc |
+| 01 11 | 0x700 - 0x7ff | machine: debug and trace; custom from 0x7c0 | 0x7c0, the custom CSR the unit tests try (this hart has none) |
+| 10 11 | 0xb00 - 0xbff | machine counters; custom from 0xbc0 | mcycle, minstret |
+| 11 11 | 0xf00 - 0xfff | machine, read-only | mhartid and the other IDs |
+The other combinations are more custom ranges (a chip maker's own CSRs: 0x8xx for user, parts of 0x5xx and 0x9xx for supervisor) and hypervisor mode (level 10), which this hart doesn't have. The counters show the regions at work: mcycle (0xb00, region 10) and cycle (0xc00, region 11) are the same counter, writable under the machine name and read-only under the user name.
+
 cycle is the user-mode name of mcycle (see mcycle).
+
+Every CSR this emulator has, and the ones the supervisor plan adds next, by number (the low bits are grouped by job: 0x00..0x06 trap setup, 0x40..0x44 trap handling, the same at each level):
+| Number | Binary: region, level, number | Name | Level | Access | Group | In the emulator |
+|---|---|---|---|---|---|---|
+| 0x100 | 00 01 0000 0000 | sstatus | supervisor | read/write | trap setup | coming (step 5) |
+| 0x104 | 00 01 0000 0100 | sie | supervisor | read/write | trap setup | coming (step 8) |
+| 0x105 | 00 01 0000 0101 | stvec | supervisor | read/write | trap setup | yes |
+| 0x140 | 00 01 0100 0000 | sscratch | supervisor | read/write | trap handling | yes |
+| 0x141 | 00 01 0100 0001 | sepc | supervisor | read/write | trap handling | yes |
+| 0x142 | 00 01 0100 0010 | scause | supervisor | read/write | trap handling | yes |
+| 0x143 | 00 01 0100 0011 | stval | supervisor | read/write | trap handling | yes |
+| 0x144 | 00 01 0100 0100 | sip | supervisor | read/write | trap handling | coming (step 8) |
+| 0x14d | 00 01 0100 1101 | stimecmp | supervisor | read/write | timer (Sstc) | coming (step 9) |
+| 0x180 | 00 01 1000 0000 | satp | supervisor | read/write | memory protection | later (paging) |
+| 0x300 | 00 11 0000 0000 | mstatus | machine | read/write | trap setup | yes |
+| 0x301 | 00 11 0000 0001 | misa | machine | read/write (writes ignored) | trap setup | yes |
+| 0x302 | 00 11 0000 0010 | medeleg | machine | read/write | trap setup | coming (step 6) |
+| 0x303 | 00 11 0000 0011 | mideleg | machine | read/write | trap setup | coming (step 8) |
+| 0x304 | 00 11 0000 0100 | mie | machine | read/write | trap setup | yes |
+| 0x305 | 00 11 0000 0101 | mtvec | machine | read/write | trap setup | yes |
+| 0x340 | 00 11 0100 0000 | mscratch | machine | read/write | trap handling | yes |
+| 0x341 | 00 11 0100 0001 | mepc | machine | read/write | trap handling | yes |
+| 0x342 | 00 11 0100 0010 | mcause | machine | read/write | trap handling | yes |
+| 0x343 | 00 11 0100 0011 | mtval | machine | read/write | trap handling | yes |
+| 0x344 | 00 11 0100 0100 | mip | machine | read/write (writes ignored) | trap handling | yes |
+| 0xb00 | 10 11 0000 0000 | mcycle | machine | read/write | counters | yes |
+| 0xb02 | 10 11 0000 0010 | minstret | machine | read/write | counters | yes |
+| 0xc00 | 11 00 0000 0000 | cycle | user | read-only | counters | yes |
+| 0xc01 | 11 00 0000 0001 | time | user | read-only | counters | coming (step 9) |
+| 0xc02 | 11 00 0000 0010 | instret | user | read-only | counters | yes |
+| 0xf11 | 11 11 0001 0001 | mvendorid | machine | read-only | machine information | yes |
+| 0xf12 | 11 11 0001 0010 | marchid | machine | read-only | machine information | yes |
+| 0xf13 | 11 11 0001 0011 | mimpid | machine | read-only | machine information | yes |
+| 0xf14 | 11 11 0001 0100 | mhartid | machine | read-only | machine information | yes |
+Using a CSR marked coming or later, or one not in the table, raises Illegal_Instruction here: it doesn't exist yet.
 
 Watch out: using a CSR that does not exist, writing a read-only one, or using one from too low a privilege level all raise Illegal_Instruction.
 
@@ -283,6 +331,37 @@ Watch out:
 - In machine mode a bit in mie does nothing while mstatus.MIE = 0, so lesson 21 sets both: `csrs mie, t0` (MTIE), then `csrsi mstatus, 8` (MIE).
 
 Related: interrupt, interrupt-sources, mstatus, mcause, clint
+
+## stvec sepc scause stval sscratch - Supervisor trap CSRs
+
+*CSRs 0x105, 0x141, 0x142, 0x143, 0x140, supervisor, read / write*
+
+Does: supervisor mode's own copies of the machine trap CSRs. When a trap is handed to supervisor mode instead of machine mode (delegated, see medeleg), the hardware records it in these, and the supervisor's handler reads them, exactly as a machine handler reads the m ones.
+
+Fields: each works like its machine twin, at the same number with bits 9..8 = 01 (supervisor) instead of 11 (machine):
+| S CSR | Number | Machine twin | Holds |
+|---|---|---|---|
+| stvec | 0x105 | mtvec (0x305) | where supervisor traps go: BASE and MODE, the same layout |
+| sepc | 0x141 | mepc (0x341) | the instruction that trapped (the one not yet run, for an interrupt) |
+| scause | 0x142 | mcause (0x342) | why: the same cause numbers, bit 63 for an interrupt |
+| stval | 0x143 | mtval (0x343) | the bad address or instruction bits |
+| sscratch | 0x140 | mscratch (0x340) | nothing by itself: free for the supervisor handler |
+
+How it works: supervisor and machine mode may use them; user mode may not (Illegal_Instruction). They are separate registers from the m ones: a trap into supervisor mode writes sepc and scause and leaves mepc and mcause alone, so a machine handler's state survives a supervisor trap and the other way round.
+
+For: an OS kernel in supervisor mode handling its programs' traps itself. Without its own set, every system call and page fault from a user program would go to machine mode first (the firmware), which would have to pass it on. With them, machine mode delegates those traps once at boot, and from then on they go straight to the kernel. xv6's kernel sets stvec to its trap handler and reads scause, sepc and stval there.
+
+Emulator: all five exist and keep their values (stvec clears bit 1 and sepc its low 2 bits, as mtvec and mepc do), and undo restores them. Nothing is delegated yet, so no trap writes them: for now they are only storage that software can read and write. Delegation (medeleg) and `sret`, which returns from a supervisor trap, come next.
+
+Related: mtvec, mepc, mcause, mtval, mscratch, privilege, csr-addresses
+
+Example:
+```
+la    t0, s_handler
+csrw  stvec, t0          # supervisor traps will go to s_handler
+csrr  t1, scause         # in the handler: why
+csrr  t2, sepc           # and where
+```
 
 ## misa - Machine ISA
 

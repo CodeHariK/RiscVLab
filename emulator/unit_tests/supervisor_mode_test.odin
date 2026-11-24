@@ -17,6 +17,10 @@ CSRR_T0_MSTATUS :: u32(0x3000_22f3) // csrrs t0, mstatus, zero
 @(private = "file")
 CSRR_T0_CYCLE :: u32(0xc000_22f3) // csrrs t0, cycle, zero
 @(private = "file")
+CSRW_SSCRATCH_T1 :: u32(0x1403_1073) // csrrw zero, sscratch, t1
+@(private = "file")
+CSRR_T0_SSCRATCH :: u32(0x1400_22f3) // csrrs t0, sscratch, zero
+@(private = "file")
 S_CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
 @(private = "file")
 HANDLER :: rv.RAM_BASE + 0x800 // mtvec
@@ -125,4 +129,41 @@ mret_from_supervisor_mode_is_illegal :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.mepc, S_CODE)
 	testing.expect_value(t, machine.cpu.csr.mtval, u64(MRET))
 	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.Supervisor)
+}
+
+@(test)
+supervisor_mode_uses_its_own_trap_csrs :: proc(t: ^testing.T) {
+	// csrw sscratch, t1 then csrr t0, sscratch, both in supervisor mode.
+	machine := machine_entering_supervisor_mode(CSRW_SSCRATCH_T1, CSRR_T0_SSCRATCH)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.regs[6] = 0x1234 // t1
+	rv.machine_step(&machine) // step 1: mret into S
+
+	// sscratch is 0x140: bits 9..8 = 01, supervisor level, so S (1) may
+	// use it (csr_allowed: 1 >= 1).
+	testing.expect(t, rv.machine_step(&machine) == nil) // the csrw: no trap
+	testing.expect(t, rv.machine_step(&machine) == nil) // the csrr: no trap
+	testing.expect_value(t, machine.cpu.regs[5], 0x1234) // t0 read it back
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor)
+
+	// Back over the csrr and the csrw: the undo record restores
+	// sscratch like any other CSR.
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.sscratch, 0)
+}
+
+@(test)
+user_mode_cannot_touch_supervisor_csrs :: proc(t: ^testing.T) {
+	// The same csrr, from user mode: with MPP = user, the helper's mret
+	// drops to user mode instead of supervisor.
+	machine := machine_entering_supervisor_mode(CSRR_T0_SSCRATCH)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.csr.mstatus = rv.mstatus_with_mpp(0, .User)
+	rv.machine_step(&machine) // step 1: mret into U
+
+	// csr_allowed: 0 >= 1 is false, so Illegal_Instruction.
+	rv.machine_step(&machine)
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.User)
 }

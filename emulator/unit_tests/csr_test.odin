@@ -156,3 +156,35 @@ mstatus_mpp_holds_the_three_modes :: proc(t: ^testing.T) {
 	value, _ = rv.csr_read(&cpu, rv.CSR_MSTATUS)
 	testing.expect_value(t, value, rv.MSTATUS_MPP) // machine
 }
+
+@(test)
+supervisor_trap_csrs_follow_the_machine_rules :: proc(t: ^testing.T) {
+	// Supervisor mode's trap CSRs copy the machine ones' rules.
+	cpu: rv.Cpu
+
+	// stvec, like mtvec: MODE 3 is reserved, so bit 1 is cleared.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_STVEC, 0x8000_0103))
+	stvec, _ := rv.csr_read(&cpu, rv.CSR_STVEC)
+	testing.expect_value(t, stvec, 0x8000_0101)
+
+	// sepc, like mepc: instructions are 4-byte aligned.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SEPC, 0x8000_0007))
+	sepc, _ := rv.csr_read(&cpu, rv.CSR_SEPC)
+	testing.expect_value(t, sepc, 0x8000_0004)
+
+	// sscratch, scause, stval keep every bit.
+	for address in ([]u32{rv.CSR_SSCRATCH, rv.CSR_SCAUSE, rv.CSR_STVAL}) {
+		testing.expect(t, rv.csr_write(&cpu, address, 0xDEAD_BEEF_1234_5678))
+		value, _ := rv.csr_read(&cpu, address)
+		testing.expect_value(t, value, 0xDEAD_BEEF_1234_5678)
+	}
+
+	// Each one's own field, not the machine twin's: mscratch stays 0.
+	testing.expect_value(t, cpu.csr.mscratch, 0)
+
+	// All five are supervisor level: bits 9..8 of the number = 01.
+	for address in ([]u32{rv.CSR_STVEC, rv.CSR_SSCRATCH, rv.CSR_SEPC, rv.CSR_SCAUSE, rv.CSR_STVAL}) {
+		testing.expect_value(t, rv.csr_level(address), 1)
+	}
+}
+

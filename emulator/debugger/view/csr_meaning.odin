@@ -8,7 +8,7 @@ import state "../state"
 // What the CSRs tab shows: which CSRs, in what order, and a readable
 // meaning for each value.
 
-// Trap-related CSRs first, then the rest.
+// Trap-related CSRs first (machine, then supervisor), then the rest.
 csr_view_order := [?]u32 {
 	rv.CSR_MSTATUS,
 	rv.CSR_MTVEC,
@@ -16,6 +16,11 @@ csr_view_order := [?]u32 {
 	rv.CSR_MCAUSE,
 	rv.CSR_MTVAL,
 	rv.CSR_MSCRATCH,
+	rv.CSR_STVEC,
+	rv.CSR_SEPC,
+	rv.CSR_SCAUSE,
+	rv.CSR_STVAL,
+	rv.CSR_SSCRATCH,
 	rv.CSR_MIE,
 	rv.CSR_MIP,
 	rv.CSR_MISA,
@@ -38,17 +43,22 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 			rv.mstatus_mpp(value),
 		)
 	case rv.CSR_MTVEC:
-		if value == 0 {
+		if rv.mtvec_base(value) == 0 {
 			return "no handler: traps stop the machine"
 		}
-		mode := "vectored" if value & 0b11 == 1 else "direct"
-		return fmt.tprintf("handler at 0x%x (%s)", value &~ 0b11, mode)
-	case rv.CSR_MCAUSE:
+		return handler_text(value)
+	case rv.CSR_STVEC:
+		if rv.mtvec_base(value) == 0 {
+			return "not set"
+		}
+		return handler_text(value)
+	case rv.CSR_MCAUSE, rv.CSR_SCAUSE:
 		// mcause is 0 at reset, and 0 is also a real cause
 		// (Instruction_Address_Misaligned). Nothing has written it since
 		// Reset, neither a trap nor a csrw, so the 0 is the reset value.
-		// (Prev keeps this right: it takes back the write too.)
-		if state.last_write_csr(session, rv.CSR_MCAUSE) == 0 {
+		// (Prev keeps this right: it takes back the write too.) The same
+		// for scause.
+		if state.last_write_csr(session, address) == 0 {
 			return "no trap yet"
 		}
 		return cause_text(value)
@@ -134,4 +144,11 @@ misa_text :: proc(value: u64) -> string {
 		strings.write_string(&builder, ", user")
 	}
 	return strings.to_string(builder)
+}
+
+// mtvec or stvec as a handler address and mode (they share a layout).
+@(private = "file")
+handler_text :: proc(value: u64) -> string {
+	mode := "vectored" if rv.mtvec_mode(value) == rv.MTVEC_VECTORED else "direct"
+	return fmt.tprintf("handler at 0x%x (%s)", rv.mtvec_base(value), mode)
 }

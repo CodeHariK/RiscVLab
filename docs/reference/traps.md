@@ -210,7 +210,7 @@ Why no CSR shows the current level: so a program can't simply check which level 
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 
-Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Supervisor mode has no CSRs of its own yet, and nothing is delegated to it, so every trap still goes to machine mode; the S CSRs, delegation and `sret` come next, on the way to xv6.
+Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Supervisor mode has its trap CSRs (stvec, sepc, scause, stval, sscratch), but nothing is delegated to it yet, so every trap still goes to machine mode; delegation and `sret` come next, on the way to xv6.
 
 Related: mstatus, mret, ecall, csr-addresses
 

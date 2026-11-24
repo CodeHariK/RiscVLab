@@ -51,10 +51,11 @@ misa_reports_rv64i_and_ignores_writes :: proc(t: ^testing.T) {
 mstatus_keeps_only_implemented_fields :: proc(t: ^testing.T) {
 	cpu: rv.Cpu
 	// Write all ones: only the fields this hart has stick (MIE, MPIE,
-	// MPP = 11); every other bit reads 0.
+	// MPP = 11, and the supervisor ones SIE, SPIE, SPP); every other bit
+	// reads 0.
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, ~u64(0)))
 	value, _ := rv.csr_read(&cpu, rv.CSR_MSTATUS)
-	testing.expect_value(t, value, rv.MSTATUS_MIE | rv.MSTATUS_MPIE | rv.MSTATUS_MPP)
+	testing.expect_value(t, value, rv.MSTATUS_MIE | rv.MSTATUS_MPIE | rv.MSTATUS_MPP | rv.SSTATUS_MASK)
 }
 
 @(test)
@@ -186,5 +187,33 @@ supervisor_trap_csrs_follow_the_machine_rules :: proc(t: ^testing.T) {
 	for address in ([]u32{rv.CSR_STVEC, rv.CSR_SSCRATCH, rv.CSR_SEPC, rv.CSR_SCAUSE, rv.CSR_STVAL}) {
 		testing.expect_value(t, rv.csr_level(address), 1)
 	}
+}
+
+@(test)
+sstatus_is_a_view_of_mstatus :: proc(t: ^testing.T) {
+	// sstatus is mstatus through SSTATUS_MASK (SIE, SPIE, SPP): no
+	// storage of its own.
+	cpu: rv.Cpu
+	cpu.csr.mstatus = rv.MSTATUS_RESET | rv.MSTATUS_MIE // MPP = machine, MIE on
+	machine_fields := cpu.csr.mstatus
+
+	// Write all ones to sstatus: only the supervisor fields turn on.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SSTATUS, ~u64(0)))
+	sstatus, _ := rv.csr_read(&cpu, rv.CSR_SSTATUS)
+	testing.expect_value(t, sstatus, rv.SSTATUS_MASK)
+	// They are mstatus's bits, and the machine fields are untouched.
+	testing.expect_value(t, cpu.csr.mstatus, machine_fields | rv.SSTATUS_MASK)
+
+	// Write 0 to sstatus: the supervisor fields go off, MIE and MPP stay.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SSTATUS, 0))
+	testing.expect_value(t, cpu.csr.mstatus, machine_fields)
+
+	// The other way round: a write to mstatus shows through sstatus.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MSTATUS, machine_fields | rv.MSTATUS_SPP))
+	sstatus, _ = rv.csr_read(&cpu, rv.CSR_SSTATUS)
+	testing.expect_value(t, sstatus, rv.MSTATUS_SPP)
+
+	// sstatus is supervisor level (0x100: bits 9..8 = 01).
+	testing.expect_value(t, rv.csr_level(rv.CSR_SSTATUS), 1)
 }
 

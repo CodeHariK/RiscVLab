@@ -39,6 +39,10 @@ CSR_MCAUSE :: 0x342 // why the trap happened (Trap_Cause, or an interrupt)
 CSR_MTVAL :: 0x343 // extra trap information: bad address or instruction
 CSR_MIP :: 0x344 // which interrupts are pending
 
+// Supervisor status: a view of mstatus (SSTATUS_MASK below), not a
+// register of its own.
+CSR_SSTATUS :: 0x100 // supervisor interrupt enable and previous privilege
+
 // Supervisor trap setup and handling: supervisor mode's own copies of the
 // machine trap CSRs, at the same numbers with bits 9..8 = 01 instead of
 // 11, so supervisor and machine mode may use them (csr_allowed). They
@@ -58,19 +62,33 @@ CSR_CYCLE :: 0xC00
 CSR_INSTRET :: 0xC02
 
 // mstatus, the machine status register: one 64-bit CSR made of small
-// fields. The ones this hart has so far (the rest read 0; supervisor mode
-// adds SIE, SPIE, SPP and others):
+// fields. The ones this hart has so far (the rest read 0; paging adds
+// SUM and MXR later):
 //
-//   bit:   63 ...  13 | 12 11 | 10 9 8 | 7    | 6 5 4 | 3   | 2 1 0
-//   field:    (0)     |  MPP  |  (0)   | MPIE |  (0)  | MIE |  (0)
+//   bit:   63 .. 13 | 12 11 | 10 9 | 8   | 7    | 6 | 5    | 4 | 3   | 2 | 1   | 0
+//   field:   (0)    |  MPP  | (0)  | SPP | MPIE | 0 | SPIE | 0 | MIE | 0 | SIE | 0
 //
 //   MIE   machine interrupts on (only matters in machine mode)
 //   MPIE  what MIE was before the last trap (MRET puts it back)
 //   MPP   the mode the last trap came from (MRET returns to it): two
 //         bits, read and written with mstatus_mpp / mstatus_with_mpp
 //         (privilege.odin, which also has MSTATUS_MPP and MSTATUS_RESET)
+//   SIE, SPIE, SPP: supervisor mode's copies of MIE, MPIE and MPP, for
+//         traps into supervisor mode (SRET returns with them). SPP is
+//         one bit: a trap into supervisor mode can only come from user
+//         (0) or supervisor (1). Nothing uses them yet: delegation and
+//         SRET come next.
+MSTATUS_SIE :: u64(1) << 1
 MSTATUS_MIE :: u64(1) << 3
+MSTATUS_SPIE :: u64(1) << 5
 MSTATUS_MPIE :: u64(1) << 7
+MSTATUS_SPP :: u64(1) << 8
+
+// sstatus (0x100) is not a register of its own: it is mstatus, seen
+// through this mask. Supervisor mode can't use mstatus (0x300 is machine
+// only), so it reads and writes its own fields here, without seeing or
+// changing the machine ones (MIE, MPIE, MPP).
+SSTATUS_MASK :: MSTATUS_SIE | MSTATUS_SPIE | MSTATUS_SPP
 
 // mtvec, where traps go: the handler's address (BASE), with the mode in
 // its low 2 bits. A handler is 4-byte aligned, so those bits are free.
@@ -156,6 +174,8 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return 0, true
 	case CSR_MSTATUS:
 		return csr.mstatus, true
+	case CSR_SSTATUS:
+		return csr.mstatus & SSTATUS_MASK, true
 	case CSR_MISA:
 		return MISA_VALUE, true
 	case CSR_MIE:
@@ -206,7 +226,10 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		if !privilege_implemented(mpp) {
 			mpp = mstatus_mpp(csr.mstatus)
 		}
-		csr.mstatus = mstatus_with_mpp(value & (MSTATUS_MIE | MSTATUS_MPIE), mpp)
+		csr.mstatus = mstatus_with_mpp(value & (MSTATUS_MIE | MSTATUS_MPIE | SSTATUS_MASK), mpp)
+	case CSR_SSTATUS:
+		// Only the supervisor fields change; the machine ones stay.
+		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
@@ -272,6 +295,10 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	switch address {
 	case CSR_MSTATUS:
 		csr.mstatus = value
+	case CSR_SSTATUS:
+		// The undo record holds sstatus as it was read: the supervisor
+		// fields only. Put those back, and keep the machine ones.
+		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
 	case CSR_MIE:
 		csr.mie = value
 	case CSR_MTVEC:

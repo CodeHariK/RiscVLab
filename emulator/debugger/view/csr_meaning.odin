@@ -16,6 +16,7 @@ csr_view_order := [?]u32 {
 	rv.CSR_MCAUSE,
 	rv.CSR_MTVAL,
 	rv.CSR_MSCRATCH,
+	rv.CSR_SSTATUS,
 	rv.CSR_STVEC,
 	rv.CSR_SEPC,
 	rv.CSR_SCAUSE,
@@ -37,10 +38,21 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 	switch address {
 	case rv.CSR_MSTATUS:
 		return fmt.tprintf(
-			"MIE=%d MPIE=%d MPP=%v",
+			"MIE=%d MPIE=%d MPP=%v  SIE=%d SPIE=%d SPP=%s",
 			(value & rv.MSTATUS_MIE) >> 3,
 			(value & rv.MSTATUS_MPIE) >> 7,
 			rv.mstatus_mpp(value),
+			(value & rv.MSTATUS_SIE) >> 1,
+			(value & rv.MSTATUS_SPIE) >> 5,
+			"Supervisor" if value & rv.MSTATUS_SPP != 0 else "User",
+		)
+	case rv.CSR_SSTATUS:
+		// The same bits as in mstatus: sstatus is a view of it.
+		return fmt.tprintf(
+			"SIE=%d SPIE=%d SPP=%s (mstatus's supervisor fields)",
+			(value & rv.MSTATUS_SIE) >> 1,
+			(value & rv.MSTATUS_SPIE) >> 5,
+			"Supervisor" if value & rv.MSTATUS_SPP != 0 else "User",
 		)
 	case rv.CSR_MTVEC:
 		if rv.mtvec_base(value) == 0 {

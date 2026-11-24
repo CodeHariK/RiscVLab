@@ -21,6 +21,8 @@ CSRW_SSCRATCH_T1 :: u32(0x1403_1073) // csrrw zero, sscratch, t1
 @(private = "file")
 CSRR_T0_SSCRATCH :: u32(0x1400_22f3) // csrrs t0, sscratch, zero
 @(private = "file")
+CSRS_SSTATUS_T1 :: u32(0x1003_2073) // csrrs zero, sstatus, t1: set the bits in t1
+@(private = "file")
 S_CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
 @(private = "file")
 HANDLER :: rv.RAM_BASE + 0x800 // mtvec
@@ -167,3 +169,23 @@ user_mode_cannot_touch_supervisor_csrs :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
 	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.User)
 }
+
+@(test)
+supervisor_mode_sets_its_fields_through_sstatus :: proc(t: ^testing.T) {
+	// csrs sstatus, t1 with t1 = SIE, in supervisor mode.
+	machine := machine_entering_supervisor_mode(CSRS_SSTATUS_T1)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.regs[6] = rv.MSTATUS_SIE // t1
+	rv.machine_step(&machine) // step 1: mret into S
+	before := machine.cpu.csr.mstatus // after the mret: MPP = user, MPIE = 1
+
+	// Step 2: allowed (sstatus is supervisor level), and it changes only
+	// SIE, inside mstatus.
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.csr.mstatus, before | rv.MSTATUS_SIE)
+
+	// Undo puts SIE back off, and leaves the machine fields as they were.
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mstatus, before)
+}
+

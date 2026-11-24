@@ -74,7 +74,7 @@ cycle is the user-mode name of mcycle (see mcycle).
 Every CSR this emulator has, and the ones the supervisor plan adds next, by number (the low bits are grouped by job: 0x00..0x06 trap setup, 0x40..0x44 trap handling, the same at each level):
 | Number | Binary: region, level, number | Name | Level | Access | Group | In the emulator |
 |---|---|---|---|---|---|---|
-| 0x100 | 00 01 0000 0000 | sstatus | supervisor | read/write | trap setup | coming (step 5) |
+| 0x100 | 00 01 0000 0000 | sstatus | supervisor | read/write | trap setup | yes (a view of mstatus) |
 | 0x104 | 00 01 0000 0100 | sie | supervisor | read/write | trap setup | coming (step 8) |
 | 0x105 | 00 01 0000 0101 | stvec | supervisor | read/write | trap setup | yes |
 | 0x140 | 00 01 0100 0000 | sscratch | supervisor | read/write | trap handling | yes |
@@ -118,8 +118,8 @@ Does: the hart's global state: whether interrupts are on, and what to restore wh
 
 Fields: one 64-bit register made of small fields; these are the ones this emulator has (the rest read 0):
 ```
-  bit:    63 ... 13 | 12  11 | 10  9  8 |   7  | 6  5  4 |  3  | 2  1  0
-  field:     (0)    |  MPP   |   (0)    | MPIE |   (0)   | MIE |   (0)
+  bit:    63 .. 13 | 12 11 | 10 9 |  8  |  7   | 6 |  5   | 4 |  3  | 2 |  1  | 0
+  field:    (0)    |  MPP  | (0)  | SPP | MPIE | 0 | SPIE | 0 | MIE | 0 | SIE | 0
 
   mstatus = 0x1880 = binary ...0001 1000 1000 0000
                                   ^ ^    ^
@@ -128,6 +128,7 @@ Fields: one 64-bit register made of small fields; these are the ones this emulat
 - MIE (bit 3): machine interrupts enabled. Trap entry clears it, so a handler is not interrupted.
 - MPIE (bit 7): MIE as it was before the last trap. `mret` copies it back into MIE.
 - MPP (bits 12..11): the privilege level before the last trap: 0b00 user, 0b01 supervisor, 0b11 machine (0b10 is reserved). `mret` returns to it.
+- SIE (bit 1), SPIE (bit 5), SPP (bit 8): supervisor mode's copies of MIE, MPIE and MPP, for traps into supervisor mode. SPP is one bit (0 user, 1 supervisor): a trap into supervisor mode never comes from machine mode. Supervisor mode reaches them through sstatus.
 
 How it works: a field in the middle of a register is read by masking and shifting. MPP is bits 12..11, so its mask is 0b11 << 11 = 0x1800: `(mstatus & 0x1800) >> 11` gives 0..3, the mode. Writing it clears those two bits and ORs in the mode shifted left by 11. On a trap, MPIE = MIE, MIE = 0 and MPP = the current level. On `mret`, MIE = MPIE, MPIE = 1, the level = MPP, and MPP = the least privileged mode.
 
@@ -139,11 +140,11 @@ Why mret restores it, instead of the handler doing `csrsi mstatus, 8` (MIE = 1) 
 
 For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`), and choosing which mode `mret` enters: an OS sets MPP to user mode, then `mret`s into a user program.
 
-Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). Supervisor fields (SIE, SPP, SUM, MXR, ...) arrive with supervisor mode.
+Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). SIE, SPIE and SPP are there and keep their values, but nothing uses them yet: delegated traps write them and `sret` reads them, coming next. SUM and MXR arrive with paging.
 
 Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
 
-Related: mret, mie, mtvec, privilege
+Related: mret, mie, mtvec, privilege, sstatus
 
 Example:
 ```
@@ -331,6 +332,39 @@ Watch out:
 - In machine mode a bit in mie does nothing while mstatus.MIE = 0, so lesson 21 sets both: `csrs mie, t0` (MTIE), then `csrsi mstatus, 8` (MIE).
 
 Related: interrupt, interrupt-sources, mstatus, mcause, clint
+
+## sstatus - Supervisor status
+
+*CSR 0x100, supervisor, read / write: a view of mstatus*
+
+Does: supervisor mode's window onto mstatus. It is not a register of its own: reading sstatus gives mstatus's supervisor fields, and writing it changes only those fields.
+
+Fields: the supervisor bits of mstatus, at the same positions; every other bit reads 0 through sstatus:
+```
+  bit:      ... | 12 11 | 10 9 | 8   | 7    | 6 | 5    | 4 | 3   | 2 | 1   | 0
+  mstatus:  ... | MPP   | (0)  | SPP | MPIE | 0 | SPIE | 0 | MIE | 0 | SIE | 0
+  sstatus:  ... | 0     | 0    | SPP | 0    | 0 | SPIE | 0 | 0   | 0 | SIE | 0
+```
+| Field | Bit | Meaning | Machine twin |
+|---|---|---|---|
+| SIE | 1 | supervisor interrupts on | MIE (bit 3) |
+| SPIE | 5 | SIE as it was before the last trap into supervisor mode | MPIE (bit 7) |
+| SPP | 8 | the level the last trap into supervisor mode came from: 0 user, 1 supervisor | MPP (bits 12..11) |
+
+How it works: one register, two names. Write sstatus = 0x2 (SIE) and mstatus's bit 1 turns on; write mstatus with SPP set and sstatus shows it. The machine fields (MIE, MPIE, MPP) can't be seen or changed through sstatus, so a kernel in supervisor mode manages its own interrupt state without touching the firmware's.
+
+For: the kernel's half of trap handling. A trap into supervisor mode saves SIE into SPIE and the old level into SPP; `sret` puts them back, as `mret` does with the machine fields. xv6 reads sstatus to check where a trap came from (SPP) and sets SIE to turn its interrupts on and off.
+
+Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. Nothing uses SIE, SPIE or SPP yet: delegated traps and `sret` come next. RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
+
+Related: mstatus, privilege, stvec sepc scause stval sscratch, csr-addresses
+
+Example:
+```
+csrsi sstatus, 0x2       # SIE = 1: supervisor interrupts on
+csrr  t0, sstatus        # read SIE, SPIE, SPP
+andi  t0, t0, 0x100      # SPP: did the trap come from supervisor mode?
+```
 
 ## stvec sepc scause stval sscratch - Supervisor trap CSRs
 

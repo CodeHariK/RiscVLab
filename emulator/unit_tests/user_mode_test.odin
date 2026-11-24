@@ -4,9 +4,10 @@ import "core:testing"
 import rv "../core"
 import devices "../devices"
 
-// Unit tests for user mode (core/privilege.odin,
-// csr.odin): MRET down to user mode, ECALL and illegal instructions back
-// up to machine mode, and undo across the switch.
+// Unit tests for user mode (core/privilege.odin, csr.odin,
+// interrupts.odin): MRET down to user mode, ECALL and illegal
+// instructions back up to machine mode, undo across the switch, and
+// machine interrupts reaching user mode.
 
 @(private = "file")
 MRET :: u32(0x3020_0073)
@@ -35,79 +36,119 @@ machine_entering_user_mode :: proc(user_code: ..u32) -> rv.Machine {
 	return machine
 }
 
+// Step 1 is always the MRET at RAM_BASE (machine mode), dropping into
+// user mode at USER_CODE; step 2 is the instruction under test.
+
 @(test)
 mret_drops_into_user_mode :: proc(t: ^testing.T) {
+	// A NOP waits at USER_CODE: this test only checks where MRET lands.
 	machine := machine_entering_user_mode(NOP)
 	defer rv.machine_destroy(&machine)
-	testing.expect(t, rv.machine_step(&machine) == nil)
+
+	// MRET: privilege = MPP (user), pc = mepc (USER_CODE).
+	testing.expect(t, rv.machine_step(&machine) == nil) // no trap
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
 	testing.expect_value(t, machine.cpu.pc, USER_CODE)
-	// MPP is reset to the least privileged mode: user.
-	testing.expect_value(t, machine.cpu.csr.mstatus & rv.MSTATUS_MPP, 0)
+	// MRET also empties the return slot: MPP = the least privileged
+	// mode, which is user itself here (docs: mret, "Why step 4").
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.User)
 }
 
 @(test)
 ecall_from_user_mode_traps_to_machine_mode :: proc(t: ^testing.T) {
 	machine := machine_entering_user_mode(ECALL)
 	defer rv.machine_destroy(&machine)
-	rv.machine_step(&machine) // mret
-	rv.machine_step(&machine) // ecall
+	rv.machine_step(&machine) // step 1: mret into U
+
+	// Step 2: ecall, a system call. The cause says which level called:
+	// 8 from user (9 from supervisor), so the handler knows who asked.
+	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Ecall_From_U_Mode))
+	// mepc = the ecall itself; the handler adds 4 before returning.
 	testing.expect_value(t, machine.cpu.csr.mepc, USER_CODE)
+	// Up to machine mode, at the handler in mtvec.
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
 	testing.expect_value(t, machine.cpu.pc, HANDLER)
 	// MPP remembers where the trap came from, for the handler's mret.
-	testing.expect_value(t, machine.cpu.csr.mstatus & rv.MSTATUS_MPP, 0)
+	testing.expect_value(t, rv.mstatus_mpp(machine.cpu.csr.mstatus), rv.Privilege.User)
 }
 
 @(test)
 machine_csr_from_user_mode_is_illegal :: proc(t: ^testing.T) {
 	machine := machine_entering_user_mode(CSRR_T0_MSTATUS)
 	defer rv.machine_destroy(&machine)
-	rv.machine_step(&machine) // mret
-	rv.machine_step(&machine) // csrr t0, mstatus
+	rv.machine_step(&machine) // step 1: mret into U
+
+	// Step 2: csrr t0, mstatus. mstatus is 0x300: bits 9..8 = 11,
+	// machine only (csr_allowed: 0 >= 3 is false), so Illegal_Instruction.
+	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	// For an illegal instruction, mtval holds its 32 bits.
 	testing.expect_value(t, machine.cpu.csr.mtval, u64(CSRR_T0_MSTATUS))
-	testing.expect_value(t, machine.cpu.regs[5], 0) // t0 untouched
+	// A trapping instruction changes nothing: t0 never got mstatus.
+	testing.expect_value(t, machine.cpu.regs[5], 0)
 }
 
 @(test)
 mret_from_user_mode_is_illegal :: proc(t: ^testing.T) {
+	// A second MRET waits at USER_CODE.
 	machine := machine_entering_user_mode(MRET)
 	defer rv.machine_destroy(&machine)
-	rv.machine_step(&machine) // mret, in machine mode
-	rv.machine_step(&machine) // mret, in user mode
+	rv.machine_step(&machine) // step 1: mret into U (allowed: machine mode)
+
+	// Step 2: mret again, now from U. MRET sets the level to MPP, so only
+	// machine mode may run it (exec_mret), or a user program could jump
+	// itself into machine mode.
+	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
-	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine) // the trap took it up
 }
 
 @(test)
 undo_steps_back_across_the_switch :: proc(t: ^testing.T) {
 	machine := machine_entering_user_mode(ECALL)
 	defer rv.machine_destroy(&machine)
-	rv.machine_step(&machine) // mret: machine -> user
-	rv.machine_step(&machine) // ecall: user -> machine
+	rv.machine_step(&machine) // step 1, mret: machine -> user
+	rv.machine_step(&machine) // step 2, ecall: user -> machine
+
+	// Back over the ecall: the undo record kept the level from before
+	// the step, so the hart is in user mode again, at the ecall.
 	testing.expect(t, rv.machine_step_back(&machine))
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
 	testing.expect_value(t, machine.cpu.pc, USER_CODE)
+
+	// Back over the mret: machine mode, at the first instruction, and
+	// mstatus exactly as the helper set it. The mret had changed it
+	// (MPIE = 1), and undo puts the old value back (MPP = user, the
+	// rest 0).
 	testing.expect(t, rv.machine_step_back(&machine))
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
 	testing.expect_value(t, machine.cpu.pc, rv.RAM_BASE)
-	testing.expect_value(t, machine.cpu.csr.mstatus, 0) // MPP = user again
+	testing.expect_value(t, machine.cpu.csr.mstatus, 0)
 }
 
 // In user mode, machine interrupts are always on: mstatus.MIE only
-// switches them off while the hart is in machine mode.
+// switches them off while the hart is in machine mode (interrupt_to_take).
+// Otherwise a user program could stop the timer from ever taking the CPU
+// back.
 @(test)
 machine_interrupts_reach_user_mode_even_with_mie_off :: proc(t: ^testing.T) {
 	machine := machine_entering_user_mode(NOP, NOP)
 	defer rv.machine_destroy(&machine)
 	devices.clint_attach(&machine.bus)
+
+	// Timer interrupts wanted (mie.MTIE), and the alarm already due:
+	// mtimecmp = 0, so mtime >= mtimecmp and MTIP is pending at once.
 	machine.cpu.csr.mie = rv.MIP_MTIP
-	rv.machine_store(&machine, rv.CLINT_BASE + devices.CLINT_MTIMECMP, 8, 0) // the alarm has come
-	rv.machine_step(&machine) // mret; MIE stays 0
+	rv.machine_store(&machine, rv.CLINT_BASE + devices.CLINT_MTIMECMP, 8, 0)
+
+	// Step 1, mret into U. MIE = MPIE = 0: interrupts stay "off".
+	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mstatus & rv.MSTATUS_MIE, 0)
-	rv.machine_step(&machine) // the interrupt, instead of the first nop
+
+	// Step 2: the interrupt is taken anyway, before the first nop runs,
+	// because the hart is below machine mode.
+	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Machine_Timer_Interrupt))
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
 }

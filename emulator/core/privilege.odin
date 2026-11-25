@@ -220,7 +220,7 @@ ecall_cause :: proc(privilege: Privilege) -> Trap_Cause {
 	return .Ecall_From_M_Mode
 }
 
-// ------------------------------------------------------------ MRET
+// ------------------------------------------------------------ MRET and SRET
 //
 // MRET: return from a machine-mode trap handler. Undoes what trap entry
 // did:
@@ -259,5 +259,47 @@ exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	csr.mstatus = new_mstatus
 	cpu.privilege = previous
 	cpu.next_pc = csr.mepc
+	return nil
+}
+
+// SRET: return from a supervisor-mode trap handler (a trap delegated by
+// medeleg). MRET's twin, with the supervisor fields:
+//
+//   1. pc        = sepc
+//   2. privilege = mstatus.SPP (user or supervisor)
+//   3. SIE = SPIE (supervisor interrupts back to how they were), then
+//      SPIE = 1
+//   4. SPP = the least privileged mode (user), so a stale SPP can't be
+//      reused by a later SRET
+//
+// Supervisor and machine mode may execute SRET; user mode may not. (A
+// mstatus.TSR bit can make it illegal in supervisor mode too, for
+// hypervisors; it reads 0 here.)
+
+ENCODING_SRET :: u32(0x1020_0073)
+
+exec_sret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	if cpu.privilege == .User {
+		return illegal_instruction(instruction)
+	}
+	csr := &cpu.csr
+	old_mstatus := csr.mstatus
+
+	previous := mstatus_spp(old_mstatus)
+	new_mstatus := old_mstatus &~ MSTATUS_SIE // SIE off; set again below if SPIE was on
+	if old_mstatus & MSTATUS_SPIE != 0 {
+		new_mstatus |= MSTATUS_SIE // SIE = the saved SPIE
+	}
+	new_mstatus |= MSTATUS_SPIE
+	new_mstatus = mstatus_with_spp(new_mstatus, LEAST_PRIVILEGED_MODE)
+
+	when DEBUG_RECORD_STEPS {
+		cpu.debug_undo.csr_changed = true
+		cpu.debug_undo.csr_address = CSR_MSTATUS
+		cpu.debug_undo.csr_old = old_mstatus
+	}
+	csr.mstatus = new_mstatus
+	cpu.privilege = previous
+	cpu.next_pc = csr.sepc
 	return nil
 }

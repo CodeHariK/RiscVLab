@@ -4,8 +4,9 @@ import "core:testing"
 import rv "../core"
 
 // Unit tests for exception delegation (medeleg; core/privilege.odin
-// trap_target, trap_enter): which mode takes a trap, what a trap into
-// supervisor mode writes, and undo across one.
+// trap_target, trap_enter, exec_sret): which mode takes a trap, what a
+// trap into supervisor mode writes, how SRET returns from one, and undo
+// across both.
 //
 // Each test starts in machine mode with an MRET at RAM_BASE that drops
 // into `mode` at CODE (step 1), where the instruction under test waits
@@ -18,6 +19,8 @@ MRET :: u32(0x3020_0073)
 ECALL :: u32(0x0000_0073)
 @(private = "file")
 ILLEGAL :: u32(0x0000_0000) // all zeros: not a valid instruction
+@(private = "file")
+SRET :: u32(0x1020_0073)
 @(private = "file")
 CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
 @(private = "file")
@@ -158,4 +161,120 @@ undo_steps_back_over_a_delegated_trap :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.scause, 0)
 	testing.expect_value(t, machine.cpu.csr.mstatus, status_before)
 	testing.expect_value(t, machine.cpu.csr.mepc, CODE) // the machine trio never changed
+}
+
+// ---------------------------------------------------------------- SRET
+
+@(test)
+sret_returns_from_a_delegated_ecall :: proc(t: ^testing.T) {
+	// The full round trip: user code makes a system call, supervisor mode
+	// handles it and returns to the instruction after the ecall.
+	machine := machine_dropping_to(
+		.User,
+		delegate(.Ecall_From_U_Mode),
+		ECALL,
+		0x0070_0513, // addi a0, x0, 7: proof that user code carries on
+	)
+	defer rv.machine_destroy(&machine)
+	// The supervisor handler. sepc holds the ecall's own address, so the
+	// handler adds 4 before returning, or SRET would run the ecall again.
+	handler := [?]u32 {
+		0x1410_22f3, // csrr t0, sepc
+		0x0042_8293, // addi t0, t0, 4
+		0x1412_9073, // csrw sepc, t0
+		SRET,
+	}
+	for instruction, index in handler {
+		rv.machine_store(&machine, S_HANDLER + u64(index) * 4, 4, u64(instruction))
+	}
+	machine.cpu.csr.mstatus |= rv.MSTATUS_SIE // to watch SIE go off and come back
+
+	rv.machine_step(&machine) // step 1: mret into U
+	rv.machine_step(&machine) // step 2: ecall -> supervisor handler
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor)
+	testing.expect_value(t, machine.cpu.csr.mstatus & rv.MSTATUS_SIE, 0) // off in the handler
+	for _ in 0 ..< 3 {
+		rv.machine_step(&machine) // steps 3-5: sepc += 4
+	}
+	testing.expect_value(t, machine.cpu.csr.sepc, CODE + 4)
+
+	// Step 6: sret. Back to the mode in SPP (user), at sepc.
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
+	testing.expect_value(t, machine.cpu.pc, CODE + 4)
+	// SIE = SPIE (on again), SPIE = 1, SPP = user.
+	status := machine.cpu.csr.mstatus
+	testing.expect_value(t, status & rv.MSTATUS_SIE, rv.MSTATUS_SIE)
+	testing.expect_value(t, status & rv.MSTATUS_SPIE, rv.MSTATUS_SPIE)
+	testing.expect_value(t, status & rv.MSTATUS_SPP, 0)
+	// The machine trap CSRs were never involved.
+	testing.expect_value(t, machine.cpu.csr.mcause, 0)
+
+	// Step 7: user code runs on after the system call.
+	rv.machine_step(&machine)
+	testing.expect_value(t, machine.cpu.regs[10], 7) // a0
+}
+
+@(test)
+sret_with_spp_supervisor_stays_in_supervisor :: proc(t: ^testing.T) {
+	// SPP = 1 means "the trap came from supervisor mode", so SRET goes
+	// back to supervisor mode, then resets SPP to user.
+	machine := machine_dropping_to(.Supervisor, 0, SRET)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.csr.mstatus |= rv.MSTATUS_SPP
+	machine.cpu.csr.sepc = CODE + 0x40
+	rv.machine_step(&machine) // step 1: mret into S (MRET leaves SPP alone)
+
+	testing.expect(t, rv.machine_step(&machine) == nil) // step 2: sret
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor)
+	testing.expect_value(t, machine.cpu.pc, CODE + 0x40)
+	testing.expect_value(t, machine.cpu.csr.mstatus & rv.MSTATUS_SPP, 0)
+}
+
+@(test)
+sret_from_user_is_illegal :: proc(t: ^testing.T) {
+	// User mode has no trap to return from. Nothing is delegated, so the
+	// illegal instruction goes to machine mode.
+	machine := machine_dropping_to(.User, 0, SRET)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into U
+
+	testing.expect(t, rv.machine_step(&machine) == nil) // step 2: sret -> trap
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
+	testing.expect_value(t, machine.cpu.pc, M_HANDLER)
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, machine.cpu.csr.mepc, CODE)
+	testing.expect_value(t, machine.cpu.csr.mtval, u64(SRET)) // the bad instruction
+}
+
+@(test)
+sret_from_machine_is_allowed :: proc(t: ^testing.T) {
+	// A higher mode may run a lower mode's return: machine mode's SRET
+	// uses the supervisor fields like any other.
+	machine := machine_dropping_to(.User, 0)
+	defer rv.machine_destroy(&machine)
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(SRET)) // replace the MRET
+	machine.cpu.csr.sepc = CODE // SPP is 0: return to user mode
+
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
+	testing.expect_value(t, machine.cpu.pc, CODE)
+}
+
+@(test)
+undo_steps_back_over_sret :: proc(t: ^testing.T) {
+	machine := machine_dropping_to(.Supervisor, 0, SRET)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.csr.mstatus |= rv.MSTATUS_SPP
+	machine.cpu.csr.sepc = CODE + 0x40
+	rv.machine_step(&machine) // step 1: mret into S
+	status_before := machine.cpu.csr.mstatus
+	rv.machine_step(&machine) // step 2: sret
+
+	// SRET changed mstatus (SPP, SIE, SPIE), privilege and pc; the undo
+	// record kept all three.
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mstatus, status_before)
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor)
+	testing.expect_value(t, machine.cpu.pc, CODE)
 }

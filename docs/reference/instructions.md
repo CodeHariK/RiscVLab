@@ -753,7 +753,7 @@ Watch out:
 - After an `ecall`, mepc points at the `ecall` itself; add 4 first or it runs again. Lesson 13.
 - A plain `jr` to mepc + 4 gets back to the right place but leaves interrupts off and the privilege level raised. See trap-return.
 
-Related: ecall, mepc, mstatus, trap-return, system-call, encodings#Fences and system
+Related: sret, ecall, mepc, mstatus, trap-return, system-call, encodings#Fences and system
 
 Example:
 ```
@@ -761,6 +761,40 @@ csrr t0, mepc
 addi t0, t0, 0x4         # skip the ecall
 csrw mepc, t0
 mret
+```
+
+
+## sret - Return from a supervisor-mode trap
+
+*I-type, privileged*
+
+Does: returns from a supervisor-mode trap handler (a trap medeleg sent to supervisor mode) to the code that was interrupted. The same four steps as `mret`, using the supervisor fields:
+
+| Step | `mret` | `sret` |
+|---|---|---|
+| 1. pc = | mepc | sepc |
+| 2. privilege = | mstatus.MPP (user, supervisor or machine) | mstatus.SPP (user or supervisor) |
+| 3. interrupts back | MIE = MPIE, then MPIE = 1 | SIE = SPIE, then SPIE = 1 |
+| 4. return slot emptied | MPP = user | SPP = user |
+| Allowed in | machine mode | supervisor and machine mode |
+
+Why step 4: the same reason as `mret`'s. SPP is a return slot; emptying it to user mode means a second `sret` can only drop to user mode, never back to supervisor mode by accident.
+
+For: the last instruction of a kernel's trap handler when the kernel runs in supervisor mode, as xv6 does: a user program's `ecall` goes to the kernel through stvec, and `sret` takes it back to user mode. Also how a supervisor kernel starts a user program: set sepc to the program, clear SPP, then `sret`.
+
+Watch out:
+- After an `ecall`, sepc points at the `ecall` itself; add 4 first or it runs again.
+- `sret` in user mode raises Illegal_Instruction: user mode has no trap to return from.
+- SPP is one bit, so `sret` can never return to machine mode.
+
+Related: mret, sepc, sstatus, medeleg, trap-return, encodings#Fences and system
+
+Example:
+```
+csrr t0, sepc
+addi t0, t0, 0x4         # skip the ecall
+csrw sepc, t0
+sret
 ```
 
 

@@ -129,6 +129,11 @@ csr_changed_by_last_step :: proc(session: ^state.Session, address: u32) -> bool 
 	if record.csr_changed && record.csr_address == address {
 		return true
 	}
+	// sstatus is a view of mstatus: a write to either changes both rows.
+	if record.csr_changed && (address == rv.CSR_SSTATUS || address == rv.CSR_MSTATUS) &&
+	   (record.csr_address == rv.CSR_SSTATUS || record.csr_address == rv.CSR_MSTATUS) {
+		return true
+	}
 	if record.trap_taken {
 		switch address {
 		case rv.CSR_MSTATUS, rv.CSR_SSTATUS:

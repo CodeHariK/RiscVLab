@@ -54,7 +54,7 @@ The major opcodes:
 | 0111011 | OP-32 | R | addw subw sllw srlw sraw; mulw divw divuw remw remuw |
 | 0001111 | MISC-MEM | I | fence fence.i |
 | 0101111 | AMO | R | lr sc and the AMOs |
-| 1110011 | SYSTEM | I | ecall ebreak mret wfi, and the CSR instructions |
+| 1110011 | SYSTEM | I | ecall ebreak mret sret wfi, and the CSR instructions |
 
 For: reading the Encoding tab, a hex dump or a disassembler's output, and knowing why big constants take two instructions: only 12 bits (I, S) or 20 bits (U) of immediate fit.
 
@@ -202,7 +202,7 @@ Misaligned: LR raises Load_Address_Misaligned, SC and AMOs Store_Address_Misalig
 
 ### Fences and system (rv64i_system.odin, privilege.odin)
 
-The fences, ecall, ebreak, and the privileged mret and wfi.
+The fences, ecall, ebreak, and the privileged mret, sret and wfi.
 | Instruction | Encoding | Effect today |
 |---|---|---|
 | FENCE | opcode 0001111, funct3 000 | no-op (one hart, memory accesses happen in order) |
@@ -210,6 +210,7 @@ The fences, ecall, ebreak, and the privileged mret and wfi.
 | ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (the cause follows the current privilege level) |
 | EBREAK | 0x00100073 | trap `Breakpoint`; with no handler set up, the normal way for test programs to stop |
 | MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`privilege.odin`) |
+| SRET (privileged) | 0x10200073 | return from a supervisor trap: pc = sepc, privilege = SPP, SIE = SPIE, SPIE = 1; illegal in user mode (`privilege.odin`) |
 | WFI (privileged) | 0x10500073 | no-op: "wait for interrupt" is only a hint, and time here counts steps, so a loop around WFI still reaches its timer interrupt |
 
 ### CSR instructions (Zicsr, zicsr.odin)

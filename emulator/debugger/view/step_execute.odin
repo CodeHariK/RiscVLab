@@ -263,12 +263,14 @@ csr_trap_reason :: proc(session: ^state.Session, entry: state.Timeline_Entry) ->
 	return fmt.tprintf("%s can't be accessed this way", name)
 }
 
-// ECALL / EBREAK (trap into the handler) and MRET (return from it).
+// ECALL / EBREAK (trap into the handler) and MRET / SRET (return from it).
 @(private)
 system_call_text :: proc(entry: state.Timeline_Entry) -> string {
 	switch entry.instruction {
 	case rv.ENCODING_MRET:
 		return fmt.tprintf("return from the trap handler: pc = mepc = 0x%x, MIE = MPIE, privilege = MPP", entry.next_pc)
+	case rv.ENCODING_SRET:
+		return fmt.tprintf("return from the supervisor trap handler: pc = sepc = 0x%x, SIE = SPIE, privilege = SPP", entry.next_pc)
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
 		if entry.stops {

@@ -33,6 +33,8 @@ exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 		return trap_make(.Breakpoint, 0)
 	case ENCODING_MRET:
 		return exec_mret(cpu, instruction)
+	case ENCODING_SRET:
+		return exec_sret(cpu, instruction)
 	case ENCODING_WFI:
 		// "Wait for interrupt": a hint that the hart has nothing to do
 		// until one arrives. The spec allows doing nothing, and here time

@@ -177,7 +177,7 @@ encoding_summary :: proc(pc: u64, instruction: u32, encoding: Encoding) -> strin
 	case "I-type (CSR)":
 		return csr_field_text(instruction)
 	case "I-type (system)":
-		return "funct12 picks the instruction: 0x000 ecall, 0x001 ebreak, 0x302 mret, 0x105 wfi (rs1 and rd are 0)"
+		return "funct12 picks the instruction: 0x000 ecall, 0x001 ebreak, 0x102 sret, 0x302 mret, 0x105 wfi (rs1 and rd are 0)"
 	case "I-type (shift)":
 		return fmt.tprintf("shift amount = %s", value_text(u64((instruction >> 20) & 0x3F)))
 	case "S-type":

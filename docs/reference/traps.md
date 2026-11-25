@@ -131,7 +131,7 @@ How it works: what the trap changed, and what each way back restores:
 | pc | -> mtvec | restored | restored (= mepc) |
 | mstatus.MIE (interrupts) | -> 0 | stays 0 | = MPIE (as before) |
 | privilege level | -> machine | stays machine | = MPP (as before) |
-So the handler first sets mepc to where it should return (for `ecall`, mepc + 4), then ends with `mret`.
+So the handler first sets mepc to where it should return (for `ecall`, mepc + 4), then ends with `mret`. A supervisor-mode handler (a delegated trap) does the same with sepc and `sret`, which restores SIE and the level in SPP.
 
 For: a correct handler.
 - Interrupts: the trap turned them off so the handler isn't interrupted halfway. With `jr` they would stay off after the first trap.
@@ -139,7 +139,7 @@ For: a correct handler.
 
 Watch out: lesson 12 returns with `jr`. It works there only because everything runs in machine mode and nothing turned interrupts on. Lesson 13 does it properly: it turns MIE on, and you can watch the trap clear it and `mret` restore it.
 
-Related: mret, trap, handler, mstatus, mepc
+Related: mret, sret, trap, handler, mstatus, mepc
 
 Example:
 ```
@@ -212,9 +212,9 @@ Why no CSR shows the current level: so a program can't simply check which level 
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 
-Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Exceptions whose medeleg bit is set go to supervisor mode when they happen in user or supervisor mode; every other trap, and every interrupt, goes to machine mode. `sret` and interrupt delegation come next, on the way to xv6.
+Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Exceptions whose medeleg bit is set go to supervisor mode when they happen in user or supervisor mode; every other trap, and every interrupt, goes to machine mode. `sret` returns from a supervisor handler (illegal in user mode). Interrupt delegation comes next, on the way to xv6.
 
-Related: mstatus, mret, ecall, csr-addresses
+Related: mstatus, mret, sret, ecall, csr-addresses
 
 ## interrupt - Interrupts
 

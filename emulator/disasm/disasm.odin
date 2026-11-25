@@ -130,6 +130,8 @@ disassemble :: proc(buffer: []u8, pc: u64, instruction: u32) -> string {
 			return fmt.bprintf(buffer, "ebreak")
 		case rv.ENCODING_MRET:
 			return fmt.bprintf(buffer, "mret")
+		case rv.ENCODING_SRET:
+			return fmt.bprintf(buffer, "sret")
 		case rv.ENCODING_WFI:
 			return fmt.bprintf(buffer, "wfi")
 		}

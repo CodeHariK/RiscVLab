@@ -140,7 +140,7 @@ Why mret restores it, instead of the handler doing `csrsi mstatus, 8` (MIE = 1) 
 
 For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`), and choosing which mode `mret` enters: an OS sets MPP to user mode, then `mret`s into a user program.
 
-Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). SIE, SPIE and SPP are written by traps delegated to supervisor mode (medeleg); `sret`, which reads them, comes next. SUM and MXR arrive with paging.
+Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). SIE, SPIE and SPP are written by traps delegated to supervisor mode (medeleg) and read back by `sret`. SUM and MXR arrive with paging.
 
 Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
 
@@ -357,7 +357,7 @@ The bits this hart has:
 
 For: an OS kernel in supervisor mode handling its own programs' exceptions. Without delegation, every system call and fault from a user program would trap to machine mode (the firmware), which would have to pass it on to the kernel. xv6's firmware stage (start.c) sets medeleg to all ones at boot, so everything that can go to the kernel does. Interrupts have their own register, mideleg.
 
-Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/privilege.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret`, to return from a supervisor trap, comes next.
+Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/privilege.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret` returns from a supervisor trap.
 
 Watch out: delegation only moves where the trap goes, not what is allowed. A delegated exception from user mode lands in supervisor mode, but supervisor mode still can't touch machine CSRs, and an exception in machine mode always stays there.
 
@@ -391,7 +391,7 @@ How it works: one register, two names. Write sstatus = 0x2 (SIE) and mstatus's b
 
 For: the kernel's half of trap handling. A trap into supervisor mode saves SIE into SPIE and the old level into SPP; `sret` puts them back, as `mret` does with the machine fields. xv6 reads sstatus to check where a trap came from (SPP) and sets SIE to turn its interrupts on and off.
 
-Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. A trap delegated to supervisor mode sets SPIE = SIE, SIE = 0 and SPP; `sret`, which puts them back, comes next, and SIE starts holding back supervisor interrupts with mideleg. RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
+Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. A trap delegated to supervisor mode sets SPIE = SIE, SIE = 0 and SPP; `sret` puts them back (SIE = SPIE, SPIE = 1, SPP = user, level = old SPP). SIE starts holding back supervisor interrupts with mideleg. RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
 
 Related: mstatus, privilege, stvec sepc scause stval sscratch, csr-addresses
 
@@ -421,7 +421,7 @@ How it works: supervisor and machine mode may use them; user mode may not (Illeg
 
 For: an OS kernel in supervisor mode handling its programs' traps itself. Without its own set, every system call and page fault from a user program would go to machine mode first (the firmware), which would have to pass it on. With them, machine mode delegates those traps once at boot, and from then on they go straight to the kernel. xv6's kernel sets stvec to its trap handler and reads scause, sepc and stval there.
 
-Emulator: all five exist and keep their values (stvec clears bit 1 and sepc its low 2 bits, as mtvec and mepc do), and undo restores them. A trap delegated by medeleg writes sepc, scause and stval and jumps to stvec; machine traps leave them alone. `sret`, which returns from a supervisor trap, comes next.
+Emulator: all five exist and keep their values (stvec clears bit 1 and sepc its low 2 bits, as mtvec and mepc do), and undo restores them. A trap delegated by medeleg writes sepc, scause and stval and jumps to stvec; machine traps leave them alone. `sret` jumps back to sepc.
 
 Related: mtvec, mepc, mcause, mtval, mscratch, privilege, csr-addresses
 

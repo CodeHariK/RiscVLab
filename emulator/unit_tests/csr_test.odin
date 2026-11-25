@@ -115,13 +115,35 @@ writing_one_counter_leaves_the_other :: proc(t: ^testing.T) {
 }
 
 @(test)
-mip_ignores_software_writes :: proc(t: ^testing.T) {
-	// mip's bits are wires from the devices (interrupts.odin): a write is
-	// accepted but changes nothing.
+mip_machine_bits_ignore_writes_supervisor_bits_take_them :: proc(t: ^testing.T) {
+	// mip has two kinds of bit (interrupts.odin): the machine ones are
+	// wires from the devices, the supervisor ones belong to software.
 	cpu: rv.Cpu
+	cpu.csr.mip = rv.MIP_MTIP // as if the CLINT's alarm were ringing
+
+	// Write all ones: the three supervisor bits (1, 5, 9) turn on; the
+	// machine bits stay as the devices drive them (MSIP and MEIP stay 0).
 	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MIP, ~u64(0)))
 	value, _ := rv.csr_read(&cpu, rv.CSR_MIP)
-	testing.expect_value(t, value, 0)
+	testing.expect_value(t, value, rv.MIP_MTIP | rv.SUPERVISOR_INTERRUPT_BITS)
+
+	// Write zero: the supervisor bits clear, and MTIP is still pending.
+	// Software can't silence a device by writing mip; it has to tell the
+	// device (for the timer: a new mtimecmp).
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MIP, 0))
+	value, _ = rv.csr_read(&cpu, rv.CSR_MIP)
+	testing.expect_value(t, value, rv.MIP_MTIP)
+}
+
+@(test)
+mie_holds_machine_and_supervisor_enables :: proc(t: ^testing.T) {
+	// Write all ones: the six enable bits that exist stick, 11 9 7 5 3 1,
+	// every other bit from 1 to 11: 0b1010_1010_1010.
+	cpu: rv.Cpu
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MIE, ~u64(0)))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MIE)
+	testing.expect_value(t, value, 0xaaa)
+	testing.expect_value(t, value, rv.INTERRUPT_BITS)
 }
 
 @(test)
@@ -238,6 +260,26 @@ medeleg_holds_only_delegable_causes :: proc(t: ^testing.T) {
 	// medeleg is machine level (0x302: bits 9..8 = 11): only machine mode
 	// decides what supervisor mode gets.
 	testing.expect_value(t, rv.csr_level(rv.CSR_MEDELEG), 3)
+}
+
+@(test)
+mideleg_holds_only_supervisor_interrupts :: proc(t: ^testing.T) {
+	cpu: rv.Cpu
+	// Write all ones: only bits 1, 5 and 9 stick, the supervisor
+	// interrupts. Machine interrupts (3, 7, 11) can't be delegated: they
+	// always go to machine mode, so their bits read 0.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MIDELEG, ~u64(0)))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MIDELEG)
+	testing.expect_value(t, value, rv.SUPERVISOR_INTERRUPT_BITS)
+
+	// Asking for the supervisor and the machine timer: only the
+	// supervisor one is kept.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MIDELEG, rv.MIP_STIP | rv.MIP_MTIP))
+	value, _ = rv.csr_read(&cpu, rv.CSR_MIDELEG)
+	testing.expect_value(t, value, rv.MIP_STIP)
+
+	// mideleg is machine level (0x303: bits 9..8 = 11), like medeleg.
+	testing.expect_value(t, rv.csr_level(rv.CSR_MIDELEG), 3)
 }
 
 @(test)

@@ -2,13 +2,18 @@ package rv
 
 // Interrupts: devices asking for the hart's attention (docs: interrupt).
 //
-// Each device drives some of mip's bits, like wires (Device.interrupts):
-// the CLINT drives MTIP (timer) and MSIP (software), the PLIC will drive
-// MEIP. The machine reads them whenever they can have changed: after a
-// step that loaded from or stored to a device, after a step back, and
-// when the step clock reaches the time a device said they would change
-// (the CLINT's alarm). So mip always shows what the devices say, without
-// asking them every step. Software can't write these bits.
+// Each device drives some of mip's machine bits, like wires
+// (Device.interrupts): the CLINT drives MTIP (timer) and MSIP (software),
+// the PLIC will drive MEIP. The machine reads them whenever they can have
+// changed: after a step that loaded from or stored to a device, after a
+// step back, and when the step clock reaches the time a device said they
+// would change (the CLINT's alarm). So mip always shows what the devices
+// say, without asking them every step. Software can't write these bits.
+//
+// mip's supervisor bits are the other way round: no device drives them
+// (yet), machine-mode software sets and clears them with csrw mip. That
+// is how a machine-mode timer handler passes a tick down to a kernel in
+// supervisor mode: it sets STIP.
 //
 // At each instruction boundary, a pending interrupt is taken if its bit
 // is set in both mip and mie, and interrupts are on: mstatus.MIE in
@@ -18,11 +23,14 @@ package rv
 // beats software beats timer, as in the spec.
 
 // The interrupt bits, at the same place in mie (enabled) and mip
-// (pending): one per kind of interrupt.
+// (pending): one per kind of interrupt and mode. Each machine bit has a
+// supervisor twin two places lower (bit n = interrupt number n, the
+// number mcause / scause report).
 //
-//   bit:   11    7     3
-//   mie:   MEIE  MTIE  MSIE      software turns each kind on or off
-//   mip:   MEIP  MTIP  MSIP      the devices raise them
+//   bit:   11    9     7     5     3     1
+//   mie:   MEIE  SEIE  MTIE  STIE  MSIE  SSIE   software turns each on or off
+//   mip:   MEIP  SEIP  MTIP  STIP  MSIP  SSIP   M: devices, S: software
+//          external    timer       software
 //
 // An interrupt is taken when its bit is 1 in both, and interrupts are on:
 // mstatus.MIE in machine mode. mstatus.MIE is a different register's bit
@@ -30,11 +38,18 @@ package rv
 MIP_MSIP :: u64(1) << 3 // machine software interrupt pending (the CLINT's msip)
 MIP_MTIP :: u64(1) << 7 // machine timer interrupt pending (the CLINT's alarm)
 MIP_MEIP :: u64(1) << 11 // machine external interrupt pending (the PLIC, later)
+MIP_SSIP :: u64(1) << 1 // supervisor software interrupt pending
+MIP_STIP :: u64(1) << 5 // supervisor timer interrupt pending
+MIP_SEIP :: u64(1) << 9 // supervisor external interrupt pending
 
-// The interrupt bits mie and mip have for machine mode. A write to mie
-// keeps only these (csr_write), and devices can only drive these in mip.
-// Supervisor mode adds bits 1, 5 and 9.
+// The interrupt bits mie and mip have for machine mode. Devices can only
+// drive these in mip, and software can't write them there.
 MACHINE_INTERRUPT_BITS :: MIP_MSIP | MIP_MTIP | MIP_MEIP
+// And for supervisor mode: in mip, written by software (machine mode for
+// now). They are also the interrupts mideleg can hand to supervisor mode.
+SUPERVISOR_INTERRUPT_BITS :: MIP_SSIP | MIP_STIP | MIP_SEIP
+// Every bit mie can hold.
+INTERRUPT_BITS :: MACHINE_INTERRUPT_BITS | SUPERVISOR_INTERRUPT_BITS
 
 // mip as the devices drive it now (`now`: the step clock, for devices
 // that keep time), and the clock time at which that next changes by

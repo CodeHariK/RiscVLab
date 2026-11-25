@@ -17,6 +17,7 @@ csr_view_order := [?]u32 {
 	rv.CSR_MTVAL,
 	rv.CSR_MSCRATCH,
 	rv.CSR_MEDELEG,
+	rv.CSR_MIDELEG,
 	rv.CSR_SSTATUS,
 	rv.CSR_STVEC,
 	rv.CSR_SEPC,
@@ -77,10 +78,15 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 		return cause_text(value)
 	case rv.CSR_MEDELEG:
 		return delegated_text(value)
+	case rv.CSR_MIDELEG:
+		if value == 0 {
+			return "nothing delegated: every interrupt goes to machine mode"
+		}
+		return interrupt_bits_text(value, "to supervisor", machine = false)
 	case rv.CSR_MIE:
 		return interrupt_bits_text(value, "enabled")
 	case rv.CSR_MIP:
-		return interrupt_bits_text(value, "pending (driven by the devices)")
+		return interrupt_bits_text(value, "pending")
 	case rv.CSR_MISA:
 		return misa_text(value)
 	case rv.CSR_MINSTRET:
@@ -107,15 +113,27 @@ cause_text :: proc(value: u64) -> string {
 	return fmt.tprintf("%s: not a cause this hart raises", value_text(value))
 }
 
-// mie / mip: the three machine interrupt bits.
+// mie / mip / mideleg: the interrupt bits, machine then supervisor:
+// "pending: M software=0 timer=1 external=0, S software=0 timer=0 external=0".
+// mideleg has only the supervisor ones (machine = false).
 @(private)
-interrupt_bits_text :: proc(value: u64, what: string) -> string {
+interrupt_bits_text :: proc(value: u64, what: string, machine := true) -> string {
+	supervisor := fmt.tprintf(
+		"S software=%d timer=%d external=%d",
+		(value & rv.MIP_SSIP) >> 1,
+		(value & rv.MIP_STIP) >> 5,
+		(value & rv.MIP_SEIP) >> 9,
+	)
+	if !machine {
+		return fmt.tprintf("%s: %s", what, supervisor)
+	}
 	return fmt.tprintf(
-		"%s: software=%d timer=%d external=%d",
+		"%s: M software=%d timer=%d external=%d, %s",
 		what,
 		(value & rv.MIP_MSIP) >> 3,
 		(value & rv.MIP_MTIP) >> 7,
 		(value & rv.MIP_MEIP) >> 11,
+		supervisor,
 	)
 }
 

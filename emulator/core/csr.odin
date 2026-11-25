@@ -30,6 +30,7 @@ CSR_MHARTID :: 0xF14 // this hart's number: 0 (the only one)
 CSR_MSTATUS :: 0x300 // global state: interrupt enable, previous privilege
 CSR_MISA :: 0x301 // which ISA extensions this hart has
 CSR_MEDELEG :: 0x302 // which exceptions go to supervisor mode instead (docs: medeleg)
+CSR_MIDELEG :: 0x303 // which interrupts go to supervisor mode instead (docs: mideleg)
 CSR_MIE :: 0x304 // which interrupts are enabled
 CSR_MTVEC :: 0x305 // trap handler address (and mode)
 
@@ -109,6 +110,12 @@ MSTATUS_TRAP_FIELDS_S :: MSTATUS_SIE | MSTATUS_SPIE
 // reserved. The page faults (12, 13, 15) join with paging.
 MEDELEG_WRITABLE :: u64(0b11_1111_1111) // causes 0..9
 
+// mideleg, machine interrupt delegation: medeleg's twin for interrupts.
+// Bit n set means interrupt n goes to supervisor mode instead of machine
+// mode. Only the supervisor interrupts (bits 1, 5, 9) can be delegated;
+// machine interrupts always go to machine mode, so their bits read 0.
+MIDELEG_WRITABLE :: SUPERVISOR_INTERRUPT_BITS
+
 // mtvec, where traps go: the handler's address (BASE), with the mode in
 // its low 2 bits. A handler is 4-byte aligned, so those bits are free.
 //
@@ -167,6 +174,8 @@ Csr_File :: struct {
 	stval:    u64,
 	// Which exceptions go to supervisor mode (MEDELEG_WRITABLE above).
 	medeleg:  u64,
+	// Which interrupts go to supervisor mode (MIDELEG_WRITABLE above).
+	mideleg:  u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
@@ -199,6 +208,8 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.mstatus & SSTATUS_MASK, true
 	case CSR_MEDELEG:
 		return csr.medeleg, true
+	case CSR_MIDELEG:
+		return csr.mideleg, true
 	case CSR_MISA:
 		return MISA_VALUE, true
 	case CSR_MIE:
@@ -257,10 +268,13 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		// Only causes that exist and may be delegated (WARL): bit 11
 		// (ecall from machine mode) and the rest read 0.
 		csr.medeleg = value & MEDELEG_WRITABLE
+	case CSR_MIDELEG:
+		// Only the supervisor interrupts (WARL): machine ones read 0.
+		csr.mideleg = value & MIDELEG_WRITABLE
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
-		csr.mie = value & MACHINE_INTERRUPT_BITS // the bits that exist (interrupts.odin)
+		csr.mie = value & INTERRUPT_BITS // the bits that exist (interrupts.odin)
 	case CSR_MTVEC:
 		// MODE 2 and 3 are reserved, so bit 1 of MTVEC_MODE is kept at 0:
 		// only MTVEC_DIRECT and MTVEC_VECTORED can be stored. BASE is
@@ -276,9 +290,13 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MTVAL:
 		csr.mtval = value
 	case CSR_MIP:
-		// The pending bits are wires from the devices (the CLINT's timer
-		// and software interrupts; interrupts.odin): software writes are
-		// ignored.
+		// Two kinds of bit (interrupts.odin). The machine bits are wires
+		// from the devices (the CLINT's timer and software interrupts):
+		// writes leave them alone. The supervisor bits are software's:
+		// they take the written value. The mirror of
+		// machine_update_interrupts (machine.odin), which keeps the
+		// supervisor bits and takes the machine ones (docs: mie mip).
+		csr.mip = (csr.mip & MACHINE_INTERRUPT_BITS) | (value & SUPERVISOR_INTERRUPT_BITS)
 	case CSR_MCYCLE:
 		// step_clock = mcycle + step_clock_offset, and the step clock must
 		// go up by exactly 1 each step, even when software writes mcycle
@@ -328,6 +346,8 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
 	case CSR_MEDELEG:
 		csr.medeleg = value
+	case CSR_MIDELEG:
+		csr.mideleg = value
 	case CSR_MIE:
 		csr.mie = value
 	case CSR_MTVEC:
@@ -341,7 +361,9 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	case CSR_MTVAL:
 		csr.mtval = value
 	case CSR_MIP:
-		csr.mip = value
+		// Only the software (supervisor) bits: the machine bits follow
+		// the devices, and are worked out again after a step back.
+		csr.mip = (csr.mip &~ SUPERVISOR_INTERRUPT_BITS) | (value & SUPERVISOR_INTERRUPT_BITS)
 	case CSR_MCYCLE:
 		// Undoing a write to mcycle: the offset goes back too. The step
 		// being undone moved the clock on by one, so before it the clock

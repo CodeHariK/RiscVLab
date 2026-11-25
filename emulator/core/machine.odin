@@ -159,11 +159,17 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	return nil
 }
 
-// Sets mip to what the devices drive now, and notes when to look again.
-// mip is never stored for undo: it follows from the devices' state and
-// the step clock, so it is worked out again whenever either changes.
+// Sets mip's machine bits to what the devices drive now, and notes when
+// to look again. They are never stored for undo: they follow from the
+// devices' state and the step clock, so they are worked out again
+// whenever either changes. The supervisor bits are software's (csrw mip;
+// undo restores them like any CSR write) and are kept: the mirror of a
+// csrw mip (csr_write), which keeps the machine bits (docs: mie mip).
 machine_update_interrupts :: proc(machine: ^Machine) {
-	machine.cpu.csr.mip, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, step_clock(&machine.cpu))
+	csr := &machine.cpu.csr
+	lines: u64
+	lines, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, step_clock(&machine.cpu))
+	csr.mip = (csr.mip & SUPERVISOR_INTERRUPT_BITS) | lines
 }
 
 // Undoes the most recent recorded step. Returns false when there is

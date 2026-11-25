@@ -6,7 +6,7 @@ import devices "../devices"
 
 // Unit tests for the CLINT (devices/clint.odin) and interrupts
 // (core/interrupts.odin): the clock, the alarm, taking a timer interrupt,
-// msip, and undo across an interrupt.
+// msip, undo across an interrupt, and mip's software (supervisor) bits.
 //
 // Time here is the step clock: one tick of mtime per step
 // (CLINT_TICKS_PER_STEP = 1), so "after 4 steps, mtime = 4". Most tests
@@ -19,6 +19,7 @@ MTIMECMP :: rv.CLINT_BASE + devices.CLINT_MTIMECMP // the alarm (+0x4000): MTIP 
 MSIP :: rv.CLINT_BASE + devices.CLINT_MSIP // software interrupt (+0): bit 0 = MSIP
 ADDI_A0_A0_1 :: u32(0x0015_0513) // addi a0, a0, 1
 NOP :: u32(0x0000_0013) // addi zero, zero, 0
+CSRS_MIP_T0 :: u32(0x3442_a073) // csrs mip, t0 (csrrs zero, mip, t0)
 
 // A machine with a CLINT, RAM filled with `addi a0, a0, 1`, a handler
 // address in mtvec (nothing is there but more addis), and undo history.
@@ -292,4 +293,33 @@ atomics_on_a_device_fault :: proc(t: ^testing.T) {
 	trap, stopped = rv.machine_step(&machine).?
 	testing.expect(t, stopped)
 	testing.expect_value(t, trap.cause, rv.Trap_Cause.Load_Access_Fault)
+}
+
+@(test)
+software_mip_bits_survive_a_device_update :: proc(t: ^testing.T) {
+	machine, _ := machine_with_clint()
+	defer rv.machine_destroy(&machine)
+	// Step 1 sets STIP from software, as a machine-mode timer handler
+	// does to pass a tick down to the kernel. mie is 0, so nothing is
+	// taken: we only watch mip.
+	rv.machine_store(&machine, rv.RAM_BASE, 4, u64(CSRS_MIP_T0))
+	machine.cpu.regs[5] = rv.MIP_STIP // t0
+	rv.machine_store(&machine, MTIMECMP, 8, 2) // the alarm rings at clock 2
+
+	steps(&machine, 1) // csrs mip, t0
+	testing.expect_value(t, machine.cpu.csr.mip, rv.MIP_STIP)
+
+	// Two addis later the alarm has rung: mip's machine bits are worked
+	// out again from the devices (MTIP on), and STIP is kept.
+	steps(&machine, 2)
+	testing.expect_value(t, machine.cpu.csr.mip, rv.MIP_MTIP | rv.MIP_STIP)
+
+	// Undo: back over the addis MTIP goes (the clock is before the alarm
+	// again), then back over the csrs STIP goes too (restored from the
+	// undo record, like any CSR write).
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mip, rv.MIP_STIP)
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mip, 0)
 }

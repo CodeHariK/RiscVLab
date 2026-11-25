@@ -14,6 +14,7 @@ csr_name :: proc(address: u32) -> string {
 	case rv.CSR_MHARTID: return "mhartid"
 	case rv.CSR_MSTATUS: return "mstatus"
 	case rv.CSR_MISA: return "misa"
+	case rv.CSR_MEDELEG: return "medeleg"
 	case rv.CSR_MIE: return "mie"
 	case rv.CSR_MTVEC: return "mtvec"
 	case rv.CSR_MSCRATCH: return "mscratch"

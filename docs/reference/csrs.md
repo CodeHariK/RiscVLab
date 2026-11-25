@@ -86,7 +86,7 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0x180 | 00 01 1000 0000 | satp | supervisor | read/write | memory protection | later (paging) |
 | 0x300 | 00 11 0000 0000 | mstatus | machine | read/write | trap setup | yes |
 | 0x301 | 00 11 0000 0001 | misa | machine | read/write (writes ignored) | trap setup | yes |
-| 0x302 | 00 11 0000 0010 | medeleg | machine | read/write | trap setup | coming (step 6) |
+| 0x302 | 00 11 0000 0010 | medeleg | machine | read/write | trap setup | yes (trap entry follows it from step 6b) |
 | 0x303 | 00 11 0000 0011 | mideleg | machine | read/write | trap setup | coming (step 8) |
 | 0x304 | 00 11 0000 0100 | mie | machine | read/write | trap setup | yes |
 | 0x305 | 00 11 0000 0101 | mtvec | machine | read/write | trap setup | yes |
@@ -332,6 +332,42 @@ Watch out:
 - In machine mode a bit in mie does nothing while mstatus.MIE = 0, so lesson 21 sets both: `csrs mie, t0` (MTIE), then `csrsi mstatus, 8` (MIE).
 
 Related: interrupt, interrupt-sources, mstatus, mcause, clint
+
+## medeleg - Machine exception delegation
+
+*CSR 0x302, machine, read / write*
+
+Does: chooses which exceptions go straight to supervisor mode instead of machine mode. Bit n is exception cause n (the mcause number): set, and that exception, when it happens in user or supervisor mode, is taken by supervisor mode.
+
+How it works: where an exception goes:
+| It happens in | Its medeleg bit | It goes to |
+|---|---|---|
+| user or supervisor mode | 0 | machine mode: mepc, mcause, mtval, MPP, mtvec |
+| user or supervisor mode | 1 | supervisor mode: sepc, scause, stval, SPP, stvec |
+| machine mode | either | machine mode: a trap never goes down a level |
+The bits this hart has:
+| Bit | Exception |
+|---|---|
+| 0, 1, 2 | Instruction_Address_Misaligned, Instruction_Access_Fault, Illegal_Instruction |
+| 3 | Breakpoint |
+| 4, 5, 6, 7 | the load and store misaligned and access faults |
+| 8, 9 | ecall from user mode, ecall from supervisor mode |
+| 11 | ecall from machine mode: can never be delegated, always reads 0 |
+| 12, 13, 15 | the page faults (with paging, later) |
+
+For: an OS kernel in supervisor mode handling its own programs' exceptions. Without delegation, every system call and fault from a user program would trap to machine mode (the firmware), which would have to pass it on to the kernel. xv6's firmware stage (start.c) sets medeleg to all ones at boot, so everything that can go to the kernel does. Interrupts have their own register, mideleg.
+
+Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). For now it is only storage: trap entry doesn't look at it yet, so every trap still goes to machine mode. Following it is the next step.
+
+Watch out: delegation only moves where the trap goes, not what is allowed. A delegated exception from user mode lands in supervisor mode, but supervisor mode still can't touch machine CSRs, and an exception in machine mode always stays there.
+
+Related: mcause, stvec sepc scause stval sscratch, sstatus, trap, privilege, csr-addresses
+
+Example:
+```
+li    t0, 0x100           # bit 8: ecall from user mode
+csrw  medeleg, t0         # user system calls go to supervisor mode
+```
 
 ## sstatus - Supervisor status
 

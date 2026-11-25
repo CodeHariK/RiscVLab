@@ -29,6 +29,7 @@ CSR_MHARTID :: 0xF14 // this hart's number: 0 (the only one)
 // Machine trap setup.
 CSR_MSTATUS :: 0x300 // global state: interrupt enable, previous privilege
 CSR_MISA :: 0x301 // which ISA extensions this hart has
+CSR_MEDELEG :: 0x302 // which exceptions go to supervisor mode instead (docs: medeleg)
 CSR_MIE :: 0x304 // which interrupts are enabled
 CSR_MTVEC :: 0x305 // trap handler address (and mode)
 
@@ -90,6 +91,16 @@ MSTATUS_SPP :: u64(1) << 8
 // changing the machine ones (MIE, MPIE, MPP).
 SSTATUS_MASK :: MSTATUS_SIE | MSTATUS_SPIE | MSTATUS_SPP
 
+// medeleg, machine exception delegation: bit n set means exception cause
+// n, when it happens below machine mode, goes to supervisor mode instead
+// of machine mode (a trap never goes down a level, so an exception in
+// machine mode ignores it). Only the causes this hart can raise are
+// writable: 0 to 9 (misaligned and access faults, illegal instruction,
+// breakpoint, ecall from user and supervisor). Cause 11, ecall from
+// machine mode, can never be delegated, so its bit reads 0; 10 is
+// reserved. The page faults (12, 13, 15) join with paging.
+MEDELEG_WRITABLE :: u64(0b11_1111_1111) // causes 0..9
+
 // mtvec, where traps go: the handler's address (BASE), with the mode in
 // its low 2 bits. A handler is 4-byte aligned, so those bits are free.
 //
@@ -146,6 +157,8 @@ Csr_File :: struct {
 	sepc:     u64,
 	scause:   u64,
 	stval:    u64,
+	// Which exceptions go to supervisor mode (MEDELEG_WRITABLE above).
+	medeleg:  u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
@@ -176,6 +189,8 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.mstatus, true
 	case CSR_SSTATUS:
 		return csr.mstatus & SSTATUS_MASK, true
+	case CSR_MEDELEG:
+		return csr.medeleg, true
 	case CSR_MISA:
 		return MISA_VALUE, true
 	case CSR_MIE:
@@ -230,6 +245,10 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_SSTATUS:
 		// Only the supervisor fields change; the machine ones stay.
 		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
+	case CSR_MEDELEG:
+		// Only causes that exist and may be delegated (WARL): bit 11
+		// (ecall from machine mode) and the rest read 0.
+		csr.medeleg = value & MEDELEG_WRITABLE
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
@@ -299,6 +318,8 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		// The undo record holds sstatus as it was read: the supervisor
 		// fields only. Put those back, and keep the machine ones.
 		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
+	case CSR_MEDELEG:
+		csr.medeleg = value
 	case CSR_MIE:
 		csr.mie = value
 	case CSR_MTVEC:

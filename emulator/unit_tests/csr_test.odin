@@ -217,3 +217,26 @@ sstatus_is_a_view_of_mstatus :: proc(t: ^testing.T) {
 	testing.expect_value(t, rv.csr_level(rv.CSR_SSTATUS), 1)
 }
 
+@(test)
+medeleg_holds_only_delegable_causes :: proc(t: ^testing.T) {
+	cpu: rv.Cpu
+	// Write all ones: only causes 0..9 stick (the exceptions this hart
+	// can raise below machine mode). Bit 11, ecall from machine mode, can
+	// never be delegated: a trap never goes down a level.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MEDELEG, ~u64(0)))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MEDELEG)
+	testing.expect_value(t, value, rv.MEDELEG_WRITABLE)
+	testing.expect_value(t, value & (1 << 11), 0)
+
+	// A typical kernel setup: user ecalls and illegal instructions go to
+	// the kernel in supervisor mode.
+	wanted := u64(1) << u64(rv.Trap_Cause.Ecall_From_U_Mode) | u64(1) << u64(rv.Trap_Cause.Illegal_Instruction)
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MEDELEG, wanted))
+	value, _ = rv.csr_read(&cpu, rv.CSR_MEDELEG)
+	testing.expect_value(t, value, wanted)
+
+	// medeleg is machine level (0x302: bits 9..8 = 11): only machine mode
+	// decides what supervisor mode gets.
+	testing.expect_value(t, rv.csr_level(rv.CSR_MEDELEG), 3)
+}
+

@@ -16,6 +16,7 @@ csr_view_order := [?]u32 {
 	rv.CSR_MCAUSE,
 	rv.CSR_MTVAL,
 	rv.CSR_MSCRATCH,
+	rv.CSR_MEDELEG,
 	rv.CSR_SSTATUS,
 	rv.CSR_STVEC,
 	rv.CSR_SEPC,
@@ -74,6 +75,8 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 			return "no trap yet"
 		}
 		return cause_text(value)
+	case rv.CSR_MEDELEG:
+		return delegated_text(value)
 	case rv.CSR_MIE:
 		return interrupt_bits_text(value, "enabled")
 	case rv.CSR_MIP:
@@ -163,4 +166,25 @@ misa_text :: proc(value: u64) -> string {
 handler_text :: proc(value: u64) -> string {
 	mode := "vectored" if rv.mtvec_mode(value) == rv.MTVEC_VECTORED else "direct"
 	return fmt.tprintf("handler at 0x%x (%s)", rv.mtvec_base(value), mode)
+}
+
+// medeleg as the exceptions it sends to supervisor mode:
+// "to supervisor: Illegal_Instruction, Ecall_From_U_Mode".
+@(private = "file")
+delegated_text :: proc(value: u64) -> string {
+	if value == 0 {
+		return "nothing delegated: every exception goes to machine mode"
+	}
+	builder := strings.builder_make(context.temp_allocator)
+	strings.write_string(&builder, "to supervisor:")
+	first := true
+	for cause in rv.Trap_Cause {
+		if rv.trap_is_interrupt(cause) || value & (u64(1) << rv.trap_cause_number(cause)) == 0 {
+			continue
+		}
+		strings.write_string(&builder, " " if first else ", ")
+		fmt.sbprintf(&builder, "%v", cause)
+		first = false
+	}
+	return strings.to_string(builder)
 }

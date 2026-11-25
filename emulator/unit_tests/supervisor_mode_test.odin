@@ -4,9 +4,9 @@ import "core:testing"
 import rv "../core"
 
 // Unit tests for supervisor mode existing (core/privilege.odin, csr.odin):
-// MRET into it, what it may and may not touch, and ECALL back up. There
-// are no supervisor CSRs or delegation yet, so every trap still goes to
-// machine mode.
+// MRET into it, what it may and may not touch, ECALL back up, and its own
+// CSRs (sscratch, sstatus, sie). Nothing is delegated here, so every trap
+// goes to machine mode (delegation_test.odin has the delegated ones).
 
 @(private = "file")
 MRET :: u32(0x3020_0073)
@@ -22,6 +22,8 @@ CSRW_SSCRATCH_T1 :: u32(0x1403_1073) // csrrw zero, sscratch, t1
 CSRR_T0_SSCRATCH :: u32(0x1400_22f3) // csrrs t0, sscratch, zero
 @(private = "file")
 CSRS_SSTATUS_T1 :: u32(0x1003_2073) // csrrs zero, sstatus, t1: set the bits in t1
+@(private = "file")
+CSRW_SIE_T1 :: u32(0x1043_1073) // csrrw zero, sie, t1
 @(private = "file")
 S_CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
 @(private = "file")
@@ -189,3 +191,22 @@ supervisor_mode_sets_its_fields_through_sstatus :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.mstatus, before)
 }
 
+@(test)
+supervisor_mode_enables_its_interrupts_through_sie :: proc(t: ^testing.T) {
+	// csrw sie, t1 with t1 = all ones, in supervisor mode.
+	machine := machine_entering_supervisor_mode(CSRW_SIE_T1)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.regs[6] = ~u64(0) // t1
+	machine.cpu.csr.mideleg = rv.MIP_STIP // the timer is supervisor mode's
+	machine.cpu.csr.mie = rv.MIP_MTIP // machine mode wants its own timer (MTIE)
+	rv.machine_step(&machine) // step 1: mret into S
+
+	// Step 2: allowed (sie is supervisor level). Only the delegated
+	// enable, STIE, turns on; MTIE stays as machine mode left it.
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.csr.mie, rv.MIP_MTIP | rv.MIP_STIP)
+
+	// Undo turns STIE off again, and MTIE stays.
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.mie, rv.MIP_MTIP)
+}

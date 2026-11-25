@@ -24,6 +24,8 @@ csr_name :: proc(address: u32) -> string {
 	case rv.CSR_MTVAL: return "mtval"
 	case rv.CSR_MIP: return "mip"
 	case rv.CSR_SSTATUS: return "sstatus"
+	case rv.CSR_SIE: return "sie"
+	case rv.CSR_SIP: return "sip"
 	case rv.CSR_STVEC: return "stvec"
 	case rv.CSR_SSCRATCH: return "sscratch"
 	case rv.CSR_SEPC: return "sepc"

@@ -119,6 +119,15 @@ last_writes_record :: proc(session: ^Session, step: int, record: rv.Undo_Record,
 			csr_written(last, writes, address, step)
 		}
 	}
+	// Rows that changed through a view (csr_views.odin): mie after a
+	// csrw sie, sstatus after a trap into supervisor mode, sie and sip
+	// after a csrw mideleg, ...
+	for address in CSR_VIEW_ROWS {
+		named := (record.csr_changed && record.csr_address == address) || (record.trap_taken && address == rv.CSR_MSTATUS)
+		if !named && csr_changed_through_view(&session.machine.cpu, record, address) {
+			csr_written(last, writes, address, step)
+		}
+	}
 	if device_register != "" && record.device_changed {
 		add_write(writes, {kind = .Device_Register, name = device_register, previous = last.device_registers[device_register] or_else 0})
 		last.device_registers[device_register] = step

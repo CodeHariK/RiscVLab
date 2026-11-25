@@ -283,6 +283,63 @@ mideleg_holds_only_supervisor_interrupts :: proc(t: ^testing.T) {
 }
 
 @(test)
+sie_is_mie_through_mideleg :: proc(t: ^testing.T) {
+	cpu: rv.Cpu
+	rv.csr_write(&cpu, rv.CSR_MIE, ~u64(0)) // all six enables on: 0xaaa
+	rv.csr_write(&cpu, rv.CSR_MIDELEG, rv.MIP_STIP) // only the supervisor timer delegated
+
+	// sie shows only the delegated bit: supervisor mode can't see that
+	// machine mode turned its own interrupts on.
+	value, _ := rv.csr_read(&cpu, rv.CSR_SIE)
+	testing.expect_value(t, value, rv.MIP_STIP) // 0x020
+
+	// Writing 0 clears only STIE: the bits that aren't delegated (all
+	// the machine ones, SSIE, SEIE) stay as they were in mie.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIE, 0))
+	testing.expect_value(t, cpu.csr.mie, rv.INTERRUPT_BITS &~ rv.MIP_STIP) // 0xa8a
+	// Writing all ones turns only STIE back on.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIE, ~u64(0)))
+	testing.expect_value(t, cpu.csr.mie, rv.INTERRUPT_BITS)
+
+	// Nothing delegated: sie reads 0 and writes change nothing.
+	rv.csr_write(&cpu, rv.CSR_MIDELEG, 0)
+	value, _ = rv.csr_read(&cpu, rv.CSR_SIE)
+	testing.expect_value(t, value, 0)
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIE, 0))
+	testing.expect_value(t, cpu.csr.mie, rv.INTERRUPT_BITS)
+
+	// sie is supervisor level (0x104: bits 9..8 = 01).
+	testing.expect_value(t, rv.csr_level(rv.CSR_SIE), 1)
+}
+
+@(test)
+sip_is_mip_through_mideleg_and_only_ssip_is_writable :: proc(t: ^testing.T) {
+	cpu: rv.Cpu
+	cpu.csr.mip = rv.MIP_MTIP | rv.MIP_STIP // the CLINT's alarm, and a forwarded tick
+	rv.csr_write(&cpu, rv.CSR_MIDELEG, ~u64(0)) // all three supervisor interrupts: 0x222
+
+	// sip hides the machine timer: only STIP shows.
+	value, _ := rv.csr_read(&cpu, rv.CSR_SIP)
+	testing.expect_value(t, value, rv.MIP_STIP)
+
+	// Writing all ones sets only SSIP. STIP was already 1; SEIP stays 0:
+	// supervisor mode can't raise or clear those through sip.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIP, ~u64(0)))
+	testing.expect_value(t, cpu.csr.mip, rv.MIP_MTIP | rv.MIP_STIP | rv.MIP_SSIP)
+	// Writing 0 clears only SSIP: STIP is still pending.
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIP, 0))
+	testing.expect_value(t, cpu.csr.mip, rv.MIP_MTIP | rv.MIP_STIP)
+
+	// SSIP not delegated: it isn't supervisor mode's to set.
+	rv.csr_write(&cpu, rv.CSR_MIDELEG, rv.MIP_STIP)
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SIP, ~u64(0)))
+	testing.expect_value(t, cpu.csr.mip, rv.MIP_MTIP | rv.MIP_STIP)
+
+	// sip is supervisor level (0x144: bits 9..8 = 01).
+	testing.expect_value(t, rv.csr_level(rv.CSR_SIP), 1)
+}
+
+@(test)
 spp_helpers_read_and_write_bit_8 :: proc(t: ^testing.T) {
 	// SPP is one bit (8): supervisor when set, user when clear.
 	status := rv.MSTATUS_RESET // MPP = machine, SPP = 0

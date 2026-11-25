@@ -45,6 +45,12 @@ CSR_MIP :: 0x344 // which interrupts are pending
 // register of its own.
 CSR_SSTATUS :: 0x100 // supervisor interrupt enable and previous privilege
 
+// Supervisor interrupt enable and pending: views of mie and mip through
+// mideleg, so supervisor mode sees only the interrupts handed to it
+// (docs: sie sip).
+CSR_SIE :: 0x104 // mie & mideleg
+CSR_SIP :: 0x144 // mip & mideleg; only SSIP is writable here
+
 // Supervisor trap setup and handling: supervisor mode's own copies of the
 // machine trap CSRs, at the same numbers with bits 9..8 = 01 instead of
 // 11, so supervisor and machine mode may use them (csr_allowed). They
@@ -206,6 +212,10 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.mstatus, true
 	case CSR_SSTATUS:
 		return csr.mstatus & SSTATUS_MASK, true
+	case CSR_SIE:
+		return csr.mie & csr.mideleg, true
+	case CSR_SIP:
+		return csr.mip & csr.mideleg, true
 	case CSR_MEDELEG:
 		return csr.medeleg, true
 	case CSR_MIDELEG:
@@ -264,6 +274,16 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_SSTATUS:
 		// Only the supervisor fields change; the machine ones stay.
 		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
+	case CSR_SIE:
+		// sstatus's rule, with mideleg as the mask: only the delegated
+		// enable bits change, the rest of mie stays.
+		csr.mie = (csr.mie &~ csr.mideleg) | (value & csr.mideleg)
+	case CSR_SIP:
+		// Only SSIP, and only if it is delegated. STIP and SEIP stand for
+		// something outside the kernel (machine mode's timer, the PLIC):
+		// it clears them by dealing with the source, not by writing sip.
+		writable := MIP_SSIP & csr.mideleg
+		csr.mip = (csr.mip &~ writable) | (value & writable)
 	case CSR_MEDELEG:
 		// Only causes that exist and may be delegated (WARL): bit 11
 		// (ecall from machine mode) and the rest read 0.
@@ -344,6 +364,14 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		// The undo record holds sstatus as it was read: the supervisor
 		// fields only. Put those back, and keep the machine ones.
 		csr.mstatus = (csr.mstatus &~ SSTATUS_MASK) | (value & SSTATUS_MASK)
+	case CSR_SIE:
+		// The record holds sie as it was read: mie's delegated bits.
+		// mideleg is as it was then (undo goes back in order).
+		csr.mie = (csr.mie &~ csr.mideleg) | (value & csr.mideleg)
+	case CSR_SIP:
+		// Only SSIP can have been written through sip.
+		writable := MIP_SSIP & csr.mideleg
+		csr.mip = (csr.mip &~ writable) | (value & writable)
 	case CSR_MEDELEG:
 		csr.medeleg = value
 	case CSR_MIDELEG:
@@ -384,4 +412,3 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		csr.stval = value
 	}
 }
-

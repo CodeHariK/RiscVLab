@@ -19,6 +19,8 @@ csr_view_order := [?]u32 {
 	rv.CSR_MEDELEG,
 	rv.CSR_MIDELEG,
 	rv.CSR_SSTATUS,
+	rv.CSR_SIE,
+	rv.CSR_SIP,
 	rv.CSR_STVEC,
 	rv.CSR_SEPC,
 	rv.CSR_SCAUSE,
@@ -83,6 +85,10 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 			return "nothing delegated: every interrupt goes to machine mode"
 		}
 		return interrupt_bits_text(value, "to supervisor", machine = false)
+	case rv.CSR_SIE:
+		return interrupt_bits_text(value, "enabled (delegated only)", machine = false)
+	case rv.CSR_SIP:
+		return interrupt_bits_text(value, "pending (delegated only)", machine = false)
 	case rv.CSR_MIE:
 		return interrupt_bits_text(value, "enabled")
 	case rv.CSR_MIP:
@@ -147,14 +153,14 @@ csr_changed_by_last_step :: proc(session: ^state.Session, address: u32) -> bool 
 	if record.csr_changed && record.csr_address == address {
 		return true
 	}
-	// sstatus is a view of mstatus: a write to either changes both rows.
-	if record.csr_changed && (address == rv.CSR_SSTATUS || address == rv.CSR_MSTATUS) &&
-	   (record.csr_address == rv.CSR_SSTATUS || record.csr_address == rv.CSR_MSTATUS) {
+	// A view or the CSR behind it, changed through the other, or sie / sip
+	// changed by a write to mideleg (state/csr_views.odin).
+	if state.csr_changed_through_view(&session.machine.cpu, record, address) {
 		return true
 	}
 	if record.trap_taken {
 		switch address {
-		case rv.CSR_MSTATUS, rv.CSR_SSTATUS:
+		case rv.CSR_MSTATUS:
 			return true
 		case rv.CSR_MEPC, rv.CSR_MCAUSE, rv.CSR_MTVAL:
 			return !record.trap_to_supervisor

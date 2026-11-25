@@ -75,13 +75,13 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | Number | Binary: region, level, number | Name | Level | Access | Group | In the emulator |
 |---|---|---|---|---|---|---|
 | 0x100 | 00 01 0000 0000 | sstatus | supervisor | read/write | trap setup | yes (a view of mstatus) |
-| 0x104 | 00 01 0000 0100 | sie | supervisor | read/write | trap setup | coming (step 8) |
+| 0x104 | 00 01 0000 0100 | sie | supervisor | read/write | trap setup | yes (view of mie) |
 | 0x105 | 00 01 0000 0101 | stvec | supervisor | read/write | trap setup | yes |
 | 0x140 | 00 01 0100 0000 | sscratch | supervisor | read/write | trap handling | yes |
 | 0x141 | 00 01 0100 0001 | sepc | supervisor | read/write | trap handling | yes |
 | 0x142 | 00 01 0100 0010 | scause | supervisor | read/write | trap handling | yes |
 | 0x143 | 00 01 0100 0011 | stval | supervisor | read/write | trap handling | yes |
-| 0x144 | 00 01 0100 0100 | sip | supervisor | read/write | trap handling | coming (step 8) |
+| 0x144 | 00 01 0100 0100 | sip | supervisor | read/write | trap handling | yes (view of mip) |
 | 0x14d | 00 01 0100 1101 | stimecmp | supervisor | read/write | timer (Sstc) | coming (step 9) |
 | 0x180 | 00 01 1000 0000 | satp | supervisor | read/write | memory protection | later (paging) |
 | 0x300 | 00 11 0000 0000 | mstatus | machine | read/write | trap setup | yes |
@@ -288,7 +288,7 @@ Does: per-interrupt switches, one bit per interrupt. In mip, a 1 bit means that 
 Fields: both registers have the same layout. Bit n is interrupt n, the number that goes into mcause (with bit 63 set) when it is taken. They are 64 bits wide only because every CSR is on RV64; there aren't 64 interrupts. The spec defines a few low bits:
 | Bit | In mip | In mie | Interrupt | Comes from |
 |---|---|---|---|---|
-| 1 | SSIP | SSIE | supervisor software | software: `csrs mip` (or sip, later) |
+| 1 | SSIP | SSIE | supervisor software | software: `csrs mip`, or `csrs sip` from supervisor mode |
 | 3 | MSIP | MSIE | machine software | the CLINT's msip register (another hart) |
 | 5 | STIP | STIE | supervisor timer | software: machine mode's `csrs mip` (stimecmp, later) |
 | 7 | MTIP | MTIE | machine timer | the CLINT, when mtime reaches mtimecmp |
@@ -434,9 +434,9 @@ For: a kernel in supervisor mode taking its own timer, device and software inter
 
 Emulator: mideleg keeps bits 1, 5 and 9 (MIDELEG_WRITABLE, core/csr.odin) and reads 0 everywhere else. For now it is only storage: interrupts are still taken by machine mode (step 8c makes trap_target follow mideleg). The CSRs tab lists the delegated ones: "to supervisor: S software=0 timer=1 external=0".
 
-Watch out: delegating is half the job. A delegated interrupt is also held back by its bit in mie (STIE for the timer) and, in supervisor mode, by sstatus.SIE.
+Watch out: delegating is half the job. A delegated interrupt is also held back by its bit in mie (STIE for the timer; supervisor mode sets it through sie) and, in supervisor mode, by sstatus.SIE.
 
-Related: medeleg, mie mip, interrupt, sstatus, csr-addresses
+Related: medeleg, mie mip, sie sip, interrupt, sstatus, csr-addresses
 
 Example:
 ```
@@ -468,13 +468,57 @@ For: the kernel's half of trap handling. A trap into supervisor mode saves SIE i
 
 Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. A trap delegated to supervisor mode sets SPIE = SIE, SIE = 0 and SPP; `sret` puts them back (SIE = SPIE, SPIE = 1, SPP = user, level = old SPP). SIE starts holding back supervisor interrupts when they are taken (step 8c). RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
 
-Related: mstatus, privilege, stvec sepc scause stval sscratch, csr-addresses
+Related: mstatus, privilege, stvec sepc scause stval sscratch, sie sip, csr-addresses
 
 Example:
 ```
 csrsi sstatus, 0x2       # SIE = 1: supervisor interrupts on
 csrr  t0, sstatus        # read SIE, SPIE, SPP
 andi  t0, t0, 0x100      # SPP: did the trap come from supervisor mode?
+```
+
+## sie sip - Supervisor interrupt enable, interrupt pending
+
+*CSR 0x104 (sie) and 0x144 (sip), supervisor, read / write: views of mie and mip*
+
+Does: supervisor mode's windows onto mie and mip. Like sstatus, they are not registers of their own. They show only the interrupts machine mode delegated (mideleg), so a kernel in supervisor mode enables and checks its own interrupts without seeing or changing machine mode's.
+
+How it works: the three supervisor views side by side. sstatus looks through a fixed mask; sie and sip look through mideleg, a register machine mode can change:
+| | Reads | A write changes |
+|---|---|---|
+| sstatus | mstatus & SSTATUS_MASK | only the bits in SSTATUS_MASK |
+| sie | mie & mideleg | only the delegated enable bits; the rest of mie stays |
+| sip | mip & mideleg | only SSIP, and only if it is delegated |
+The bits are at the same places as in mie and mip; with all three supervisor interrupts delegated (mideleg = 0x222):
+```
+  bit:   11    9     7     5     3     1
+  mie:   MEIE  SEIE  MTIE  STIE  MSIE  SSIE
+  sie:   0     SEIE  0     STIE  0     SSIE      machine bits read 0
+  mip:   MEIP  SEIP  MTIP  STIP  MSIP  SSIP
+  sip:   0     SEIP  0     STIP  0     SSIP      only SSIP writable
+```
+For example, with mideleg = 0x20 (only the timer delegated) and mie = 0xa0 (MTIE and STIE):
+| Supervisor mode does | sees / gets | mie after |
+|---|---|---|
+| `csrr t0, sie` | t0 = 0x020: MTIE is hidden | 0x0a0 |
+| `csrw sie, zero` | STIE off | 0x080: MTIE stays |
+| `csrw sie, t0` with t0 = -1 | STIE on; SSIE and SEIE aren't delegated, so stay off | 0x0a0 |
+
+Why sip lets supervisor mode write only SSIP: SSIP is a software interrupt: nothing outside raises it but software, so the kernel may set and clear it (older xv6 gets its timer ticks as SSIP, and clears it after each one). STIP and SEIP stand for something outside the kernel: the timer (forwarded by machine mode, or stimecmp later) and the PLIC. The kernel clears those by dealing with the source, as with mip's machine bits.
+
+For: a kernel's interrupt setup. xv6's start.c delegates everything (mideleg) and turns on the supervisor timer, software and external interrupts through sie (machine mode may use the supervisor CSRs too); older xv6's handler clears each forwarded tick by clearing SSIP in sip.
+
+Emulator: sie and sip read and write mie and mip through mideleg (core/csr.odin); undo puts back only the bits a write could change. The CSRs tab shows them under sstatus ("enabled (delegated only): S software=0 timer=1 external=0"). It marks a view and the CSR behind it whenever its value changed, whichever was written: a `csrw sie` marks mie too, a `csrw mie` marks sie only if a delegated bit changed, and a `csrw mideleg` marks sie and sip if what they show changed (debugger/state/csr_views.odin). Nothing takes a supervisor interrupt yet (step 8c).
+
+Watch out: an interrupt that isn't delegated reads 0 in both, even when it is enabled and pending in mie / mip. A kernel that sees sip = 0 while an interrupt is ringing should check mideleg first.
+
+Related: mie mip, mideleg, sstatus, interrupt, csr-addresses
+
+Example:
+```
+li    t0, 0x222           # SEIE, STIE, SSIE
+csrs  sie, t0             # the kernel's interrupts on (those delegated)
+csrc  sip, 2              # SSIP handled: clear it
 ```
 
 ## stvec sepc scause stval sscratch - Supervisor trap CSRs

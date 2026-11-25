@@ -91,6 +91,14 @@ MSTATUS_SPP :: u64(1) << 8
 // changing the machine ones (MIE, MPIE, MPP).
 SSTATUS_MASK :: MSTATUS_SIE | MSTATUS_SPIE | MSTATUS_SPP
 
+// The interrupt-enable fields a trap saves and xRET puts back, per mode:
+// the enable bit and its saved copy (MPP and SPP have their own helpers
+// in privilege.odin). Not SSTATUS_MASK: that is every field sstatus
+// shows, and paging will add settings to it (SUM, MXR) that a trap must
+// leave alone.
+MSTATUS_TRAP_FIELDS_M :: MSTATUS_MIE | MSTATUS_MPIE
+MSTATUS_TRAP_FIELDS_S :: MSTATUS_SIE | MSTATUS_SPIE
+
 // medeleg, machine exception delegation: bit n set means exception cause
 // n, when it happens below machine mode, goes to supervisor mode instead
 // of machine mode (a trap never goes down a level, so an exception in

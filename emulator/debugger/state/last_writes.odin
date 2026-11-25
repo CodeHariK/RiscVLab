@@ -108,7 +108,14 @@ last_writes_record :: proc(session: ^Session, step: int, record: rv.Undo_Record,
 		csr_written(last, writes, record.csr_address, step)
 	}
 	if record.trap_taken {
-		for address in ([]u32{rv.CSR_MSTATUS, rv.CSR_MEPC, rv.CSR_MCAUSE, rv.CSR_MTVAL}) {
+		// mstatus (which sstatus shows too), and the trio of the mode
+		// that took the trap.
+		trio := []u32{rv.CSR_MEPC, rv.CSR_MCAUSE, rv.CSR_MTVAL}
+		if record.trap_to_supervisor {
+			trio = []u32{rv.CSR_SEPC, rv.CSR_SCAUSE, rv.CSR_STVAL}
+		}
+		csr_written(last, writes, rv.CSR_MSTATUS, step)
+		for address in trio {
 			csr_written(last, writes, address, step)
 		}
 	}

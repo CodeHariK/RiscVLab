@@ -56,12 +56,17 @@ Undo_Record :: struct {
 	reservation_changed: bool,
 	reservation_old:     Reservation,
 	// If the step trapped into a handler: the CSRs trap entry overwrote.
-	// (PC and privilege are restored from the fields above.)
-	trap_taken:       bool,
-	trap_mstatus:     u64,
-	trap_mepc:        u64,
-	trap_mcause:      u64,
-	trap_mtval:       u64,
+	// (PC and privilege are restored from the fields above.) A trap
+	// writes either the machine trio (mepc, mcause, mtval) or the
+	// supervisor one (sepc, scause, stval), never both, so one set of
+	// fields holds whichever it was, and trap_to_supervisor says which.
+	// mstatus also holds the supervisor fields (SIE, SPIE, SPP).
+	trap_taken:         bool,
+	trap_to_supervisor: bool,
+	trap_mstatus:       u64,
+	trap_epc:           u64,
+	trap_cause:         u64,
+	trap_tval:          u64,
 }
 
 // Default number of steps that can be undone. Each record is about 200

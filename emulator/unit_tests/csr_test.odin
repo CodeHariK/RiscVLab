@@ -240,3 +240,17 @@ medeleg_holds_only_delegable_causes :: proc(t: ^testing.T) {
 	testing.expect_value(t, rv.csr_level(rv.CSR_MEDELEG), 3)
 }
 
+@(test)
+spp_helpers_read_and_write_bit_8 :: proc(t: ^testing.T) {
+	// SPP is one bit (8): supervisor when set, user when clear.
+	status := rv.MSTATUS_RESET // MPP = machine, SPP = 0
+	testing.expect_value(t, rv.mstatus_spp(status), rv.Privilege.User)
+
+	status = rv.mstatus_with_spp(status, .Supervisor)
+	testing.expect_value(t, status, rv.MSTATUS_RESET | rv.MSTATUS_SPP) // only bit 8 changed
+	testing.expect_value(t, rv.mstatus_spp(status), rv.Privilege.Supervisor)
+
+	status = rv.mstatus_with_spp(status, .User)
+	testing.expect_value(t, status, rv.MSTATUS_RESET) // and back
+}
+

@@ -39,21 +39,21 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 	switch address {
 	case rv.CSR_MSTATUS:
 		return fmt.tprintf(
-			"MIE=%d MPIE=%d MPP=%v  SIE=%d SPIE=%d SPP=%s",
+			"MIE=%d MPIE=%d MPP=%v  SIE=%d SPIE=%d SPP=%v",
 			(value & rv.MSTATUS_MIE) >> 3,
 			(value & rv.MSTATUS_MPIE) >> 7,
 			rv.mstatus_mpp(value),
 			(value & rv.MSTATUS_SIE) >> 1,
 			(value & rv.MSTATUS_SPIE) >> 5,
-			"Supervisor" if value & rv.MSTATUS_SPP != 0 else "User",
+			rv.mstatus_spp(value),
 		)
 	case rv.CSR_SSTATUS:
 		// The same bits as in mstatus: sstatus is a view of it.
 		return fmt.tprintf(
-			"SIE=%d SPIE=%d SPP=%s (mstatus's supervisor fields)",
+			"SIE=%d SPIE=%d SPP=%v (mstatus's supervisor fields)",
 			(value & rv.MSTATUS_SIE) >> 1,
 			(value & rv.MSTATUS_SPIE) >> 5,
-			"Supervisor" if value & rv.MSTATUS_SPP != 0 else "User",
+			rv.mstatus_spp(value),
 		)
 	case rv.CSR_MTVEC:
 		if rv.mtvec_base(value) == 0 {
@@ -131,8 +131,12 @@ csr_changed_by_last_step :: proc(session: ^state.Session, address: u32) -> bool 
 	}
 	if record.trap_taken {
 		switch address {
-		case rv.CSR_MSTATUS, rv.CSR_MEPC, rv.CSR_MCAUSE, rv.CSR_MTVAL:
+		case rv.CSR_MSTATUS, rv.CSR_SSTATUS:
 			return true
+		case rv.CSR_MEPC, rv.CSR_MCAUSE, rv.CSR_MTVAL:
+			return !record.trap_to_supervisor
+		case rv.CSR_SEPC, rv.CSR_SCAUSE, rv.CSR_STVAL:
+			return record.trap_to_supervisor
 		}
 	}
 	return false

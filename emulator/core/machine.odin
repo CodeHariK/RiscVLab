@@ -116,17 +116,25 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 		}
 	}
 	if trap, has_trap := result.?; has_trap {
-		if !trap_has_handler(cpu) {
+		target := trap_target(cpu, trap) // machine, or supervisor if delegated
+		if !trap_has_handler(cpu, target) {
 			return result
 		}
 		when DEBUG_RECORD_STEPS {
 			cpu.debug_undo.trap_taken = true
 			cpu.debug_undo.trap_mstatus = cpu.csr.mstatus
-			cpu.debug_undo.trap_mepc = cpu.csr.mepc
-			cpu.debug_undo.trap_mcause = cpu.csr.mcause
-			cpu.debug_undo.trap_mtval = cpu.csr.mtval
+			if target == .Supervisor {
+				cpu.debug_undo.trap_to_supervisor = true
+				cpu.debug_undo.trap_epc = cpu.csr.sepc
+				cpu.debug_undo.trap_cause = cpu.csr.scause
+				cpu.debug_undo.trap_tval = cpu.csr.stval
+			} else {
+				cpu.debug_undo.trap_epc = cpu.csr.mepc
+				cpu.debug_undo.trap_cause = cpu.csr.mcause
+				cpu.debug_undo.trap_tval = cpu.csr.mtval
+			}
 		}
-		trap_enter(cpu, trap)
+		trap_enter(cpu, trap, target)
 		when DEBUG_RECORD_STEPS {
 			machine.debug_last_trap = trap
 		}
@@ -186,10 +194,13 @@ machine_step_back :: proc(machine: ^Machine) -> bool {
 		machine.cpu.reservation = record.reservation_old
 	}
 	if record.trap_taken {
-		machine.cpu.csr.mstatus = record.trap_mstatus
-		machine.cpu.csr.mepc = record.trap_mepc
-		machine.cpu.csr.mcause = record.trap_mcause
-		machine.cpu.csr.mtval = record.trap_mtval
+		csr := &machine.cpu.csr
+		csr.mstatus = record.trap_mstatus
+		if record.trap_to_supervisor {
+			csr.sepc, csr.scause, csr.stval = record.trap_epc, record.trap_cause, record.trap_tval
+		} else {
+			csr.mepc, csr.mcause, csr.mtval = record.trap_epc, record.trap_cause, record.trap_tval
+		}
 	}
 	machine.cpu.pc = record.pc
 	machine.cpu.csr.minstret = record.minstret

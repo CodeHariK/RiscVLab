@@ -38,7 +38,8 @@ Timeline_Entry :: struct {
 	// to put back on Prev.
 	writes:       Step_Writes,
 	// Only in the Next preview: the instruction traps with no handler set
-	// up (mtvec base = 0), so running it stops the machine instead.
+	// up (the base of mtvec, or of stvec for a delegated trap, is 0), so
+	// running it stops the machine instead.
 	stops:        bool,
 }
 

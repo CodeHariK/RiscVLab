@@ -266,6 +266,17 @@ write_text :: proc(entry: state.Timeline_Entry) -> string {
 		return "nothing: the machine stops"
 	}
 	if trap, took_trap := entry.trap.?; took_trap {
+		if entry.record.trap_to_supervisor {
+			return fmt.tprintf(
+				"delegated (medeleg): sepc <- 0x%x, scause <- %s (%v), stval <- %s, sstatus: SPIE <- SIE, SIE <- 0, SPP <- %v; privilege <- Supervisor; pc <- stvec 0x%x",
+				entry.pc,
+				value_text(u64(trap.cause)),
+				trap.cause,
+				value_text(trap.value),
+				entry.record.privilege,
+				entry.next_pc,
+			)
+		}
 		return fmt.tprintf(
 			"mepc <- 0x%x, mcause <- %s (%v), mtval <- %s, mstatus: MPIE <- MIE, MIE <- 0, MPP <- %v; privilege <- Machine; pc <- mtvec 0x%x",
 			entry.pc,

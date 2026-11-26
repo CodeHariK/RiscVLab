@@ -134,7 +134,7 @@ For:
 - preemptive multitasking: without a timer, a program that never makes a system call keeps the CPU for ever. The timer interrupt gives the kernel control back every few milliseconds, so it can switch to another program. xv6's scheduler and its sleep() depend on it.
 - msip: one hart wakes another (multi-core: "wake up", "flush your TLB").
 
-Emulator: msip, mtimecmp and mtime, for one hart; 4- and 8-byte accesses (the 8-byte registers also as two 4-byte halves). mtime counts steps rather than wall-clock time (see emulator-time): it is the step clock plus an offset that writing mtime changes, so a timer interrupt arrives at exactly the same instruction on every run, and Prev steps back over it. mtimecmp starts as all ones (no alarm). The Devices tab shows the three registers and counts down "timer interrupt pending in N steps". Lesson 21.
+Emulator: msip, mtimecmp and mtime, for one hart; 4- and 8-byte accesses (the 8-byte registers also as two 4-byte halves). mtime counts steps rather than wall-clock time (see emulator-time): it is the step clock plus an offset that writing mtime changes, so a timer interrupt arrives at exactly the same instruction on every run, and Prev steps back over it. mtimecmp starts as all ones (no alarm). The Devices tab shows the three registers and counts down "timer interrupt pending in N steps". The time CSR reads the same mtime (see time). Lesson 21.
 
 Watch out: xv6 today doesn't use mtimecmp from its kernel. It uses the Sstc extension: the supervisor-mode kernel sets its own alarm in the stimecmp CSR, and reads the clock with the time CSR (rdtime), which mirrors mtime. Older xv6 set mtimecmp from a small machine-mode handler instead. Either way the clock is the CLINT's mtime.
 

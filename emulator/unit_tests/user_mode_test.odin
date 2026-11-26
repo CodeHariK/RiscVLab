@@ -135,7 +135,7 @@ undo_steps_back_across_the_switch :: proc(t: ^testing.T) {
 machine_interrupts_reach_user_mode_even_with_mie_off :: proc(t: ^testing.T) {
 	machine := machine_entering_user_mode(NOP, NOP)
 	defer rv.machine_destroy(&machine)
-	devices.clint_attach(&machine.bus)
+	devices.clint_attach(&machine)
 
 	// Timer interrupts wanted (mie.MTIE), and the alarm already due:
 	// mtimecmp = 0, so mtime >= mtimecmp and MTIP is pending at once.
@@ -151,4 +151,19 @@ machine_interrupts_reach_user_mode_even_with_mie_off :: proc(t: ^testing.T) {
 	rv.machine_step(&machine)
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Machine_Timer_Interrupt))
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
+}
+
+@(test)
+user_mode_reads_time :: proc(t: ^testing.T) {
+	// time is 0xc01: bits 9..8 = 00, so any mode may read it (until
+	// mcounteren, later, lets machine mode say no). csrr t0, time in U.
+	machine := machine_entering_user_mode(CSRR_T0_TIME)
+	defer rv.machine_destroy(&machine)
+	devices.clint_attach(&machine) // the clock time reads
+	rv.machine_step(&machine) // step 1: mret into U
+
+	// Step 2: allowed, no trap. One step (the mret) has gone by.
+	testing.expect(t, rv.machine_step(&machine) == nil)
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
+	testing.expect_value(t, machine.cpu.regs[5], 1)
 }

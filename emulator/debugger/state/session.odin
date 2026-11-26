@@ -105,7 +105,7 @@ session_destroy :: proc(session: ^Session) {
 session_reset :: proc(session: ^Session) {
 	rv.machine_destroy(&session.machine)
 	session.machine = rv.machine_create(rv.RAM_SIZE_DEFAULT, rv.HISTORY_CAPACITY_DEFAULT)
-	session.clint = devices.clint_attach(&session.machine.bus)
+	session.clint = devices.clint_attach(&session.machine)
 	session.uart = devices.uart_attach(&session.machine.bus)
 	// session_open checked that the program loads, so it loads again here.
 	session.program, _ = loader.load_program(&session.machine, session.image)

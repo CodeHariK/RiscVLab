@@ -34,6 +34,7 @@ csr_name :: proc(address: u32) -> string {
 	case rv.CSR_MCYCLE: return "mcycle"
 	case rv.CSR_MINSTRET: return "minstret"
 	case rv.CSR_CYCLE: return "cycle"
+	case rv.CSR_TIME: return "time"
 	case rv.CSR_INSTRET: return "instret"
 	}
 	return ""

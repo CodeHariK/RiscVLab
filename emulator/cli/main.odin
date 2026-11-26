@@ -36,7 +36,7 @@ run :: proc() -> int {
 	machine := rv.machine_create(rv.RAM_SIZE_DEFAULT, history_capacity)
 	defer rv.machine_destroy(&machine)
 	// The devices of QEMU's virt board that exist so far.
-	devices.clint_attach(&machine.bus)
+	devices.clint_attach(&machine)
 	uart := devices.uart_attach(&machine.bus)
 
 	program, load_error := loader.load_program(&machine, image)

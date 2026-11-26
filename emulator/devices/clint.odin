@@ -45,10 +45,11 @@ Clint :: struct {
 }
 #assert(size_of(Clint) <= rv.DEVICE_STATE_SIZE)
 
-// Creates the CLINT and attaches it to the bus (which frees it in
-// bus_destroy). Its clock is the step clock, which the bus hands to
-// every access (`now`). nil if the bus has no room.
-clint_attach :: proc(bus: ^rv.Bus) -> ^Clint {
+// Creates the CLINT and attaches it to the machine's bus (which frees it
+// in bus_destroy). Its clock is the step clock, which the bus hands to
+// every access (`now`). It is also the hart's time CSR (time_source):
+// csrr time reads mtime. nil if the bus has no room.
+clint_attach :: proc(machine: ^rv.Machine) -> ^Clint {
 	clint := new(Clint)
 	clint.mtimecmp = max(u64)
 	device := rv.Device {
@@ -64,11 +65,18 @@ clint_attach :: proc(bus: ^rv.Bus) -> ^Clint {
 		restore    = clint_restore,
 		destroy    = clint_destroy,
 	}
-	if !rv.bus_attach(bus, device) {
+	if !rv.bus_attach(&machine.bus, device) {
 		free(clint)
 		return nil
 	}
+	machine.cpu.time_source = {data = clint, read = clint_time}
 	return clint
+}
+
+// The time CSR's read (rv.Time_Source): mtime.
+@(private = "file")
+clint_time :: proc(data: rawptr, now: u64) -> u64 {
+	return clint_mtime((^Clint)(data), now)
 }
 
 // mtime when the step clock reads `now`. Wraps around past max(u64), as

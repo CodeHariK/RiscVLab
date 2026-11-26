@@ -6,7 +6,8 @@ import devices "../devices"
 
 // Unit tests for the CLINT (devices/clint.odin) and interrupts
 // (core/interrupts.odin): the clock, the alarm, taking a timer interrupt,
-// msip, undo across an interrupt, and mip's software (supervisor) bits.
+// msip, undo across an interrupt, mip's software (supervisor) bits, and
+// the time CSR, which reads mtime.
 //
 // Time here is the step clock: one tick of mtime per step
 // (CLINT_TICKS_PER_STEP = 1), so "after 4 steps, mtime = 4". Most tests
@@ -20,6 +21,7 @@ MSIP :: rv.CLINT_BASE + devices.CLINT_MSIP // software interrupt (+0): bit 0 = M
 ADDI_A0_A0_1 :: u32(0x0015_0513) // addi a0, a0, 1
 NOP :: u32(0x0000_0013) // addi zero, zero, 0
 CSRS_MIP_T0 :: u32(0x3442_a073) // csrs mip, t0 (csrrs zero, mip, t0)
+CSRR_T0_TIME :: u32(0xc010_22f3) // csrr t0, time (csrrs t0, time, zero), i.e. rdtime t0
 
 // A machine with a CLINT, RAM filled with `addi a0, a0, 1`, a handler
 // address in mtvec (nothing is there but more addis), and undo history.
@@ -31,7 +33,7 @@ machine_with_clint :: proc() -> (rv.Machine, ^devices.Clint) {
 	for index in 0 ..< 1024 {
 		rv.machine_store(&machine, rv.RAM_BASE + u64(index) * 4, 4, u64(ADDI_A0_A0_1))
 	}
-	clint := devices.clint_attach(&machine.bus)
+	clint := devices.clint_attach(&machine)
 	machine.cpu.csr.mtvec = rv.RAM_BASE + 0x800
 	return machine, clint
 }
@@ -322,4 +324,38 @@ software_mip_bits_survive_a_device_update :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.mip, rv.MIP_STIP)
 	testing.expect(t, rv.machine_step_back(&machine))
 	testing.expect_value(t, machine.cpu.csr.mip, 0)
+}
+
+@(test)
+time_csr_reads_mtime :: proc(t: ^testing.T) {
+	machine, _ := machine_with_clint()
+	defer rv.machine_destroy(&machine)
+	// Three addis, then csrr t0, time as step 4.
+	rv.machine_store(&machine, rv.RAM_BASE + 12, 4, u64(CSRR_T0_TIME))
+	steps(&machine, 4)
+	// The instruction sees the clock as its step starts: three steps have
+	// gone by, so mtime (and time) = 3.
+	testing.expect_value(t, machine.cpu.regs[5], 3)
+
+	// From outside, after the 4 steps: the time CSR and the CLINT's
+	// mtime register are the same clock.
+	time, ok := rv.csr_read(&machine.cpu, rv.CSR_TIME)
+	testing.expect(t, ok)
+	mtime, _ := rv.machine_load(&machine, MTIME, 8)
+	testing.expect_value(t, time, 4)
+	testing.expect_value(t, time, mtime)
+
+	// time can't be written (it is read-only by its address, 0xc01), but
+	// writing mtime moves it: it is the same clock.
+	rv.machine_store(&machine, MTIME, 8, 1000)
+	time, _ = rv.csr_read(&machine.cpu, rv.CSR_TIME)
+	testing.expect_value(t, time, 1000)
+	steps(&machine, 1)
+	time, _ = rv.csr_read(&machine.cpu, rv.CSR_TIME)
+	testing.expect_value(t, time, 1001)
+
+	// A step back moves the clock back one tick, and time with it.
+	testing.expect(t, rv.machine_step_back(&machine))
+	time, _ = rv.csr_read(&machine.cpu, rv.CSR_TIME)
+	testing.expect_value(t, time, 1000)
 }

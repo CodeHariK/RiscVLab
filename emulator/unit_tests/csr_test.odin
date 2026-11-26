@@ -340,6 +340,22 @@ sip_is_mip_through_mideleg_and_only_ssip_is_writable :: proc(t: ^testing.T) {
 }
 
 @(test)
+time_needs_a_clock_and_is_read_only :: proc(t: ^testing.T) {
+	// A bare Cpu has no clock attached (Cpu.time_source is set by the
+	// CLINT): reading time fails, as for a CSR that doesn't exist, so
+	// csrr time would be an illegal instruction.
+	cpu: rv.Cpu
+	_, ok := rv.csr_read(&cpu, rv.CSR_TIME)
+	testing.expect(t, !ok)
+
+	// 0xc01: bits 11..10 = 11 (read-only), bits 9..8 = 00 (any mode may
+	// read it). A write is refused, clock or not.
+	testing.expect(t, rv.csr_is_read_only(rv.CSR_TIME))
+	testing.expect_value(t, rv.csr_level(rv.CSR_TIME), 0)
+	testing.expect(t, !rv.csr_write(&cpu, rv.CSR_TIME, 5))
+}
+
+@(test)
 spp_helpers_read_and_write_bit_8 :: proc(t: ^testing.T) {
 	// SPP is one bit (8): supervisor when set, user when clear.
 	status := rv.MSTATUS_RESET // MPP = machine, SPP = 0

@@ -63,10 +63,13 @@ CSR_SCAUSE :: 0x142 // why, like mcause
 CSR_STVAL :: 0x143 // extra information, like mtval
 
 // Counters. mcycle / minstret are read/write; cycle / instret are their
-// read-only copies for less privileged code.
+// read-only copies for less privileged code. time is the platform's
+// clock, the CLINT's mtime (Cpu.time_source), read-only: it is set by
+// writing mtime.
 CSR_MCYCLE :: 0xB00
 CSR_MINSTRET :: 0xB02
 CSR_CYCLE :: 0xC00
+CSR_TIME :: 0xC01
 CSR_INSTRET :: 0xC02
 
 // mstatus, the machine status register: one 64-bit CSR made of small
@@ -240,6 +243,13 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return cpu.csr.mcycle, true
 	case CSR_MINSTRET, CSR_INSTRET:
 		return cpu.csr.minstret, true
+	case CSR_TIME:
+		// Asks the device that keeps the clock. None: as if the CSR
+		// didn't exist (Illegal_Instruction).
+		if cpu.time_source.read == nil {
+			return 0, false
+		}
+		return cpu.time_source.read(cpu.time_source.data, step_clock(cpu)), true
 	case CSR_STVEC:
 		return csr.stvec, true
 	case CSR_SSCRATCH:

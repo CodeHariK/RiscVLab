@@ -355,6 +355,12 @@ csrwi csr, n      ->  csrrwi zero, csr, n
 csrsi csr, n      ->  csrrsi zero, csr, n
 csrci csr, n      ->  csrrci zero, csr, n
 ```
+The three counters have their own read shorthands too:
+```
+rdcycle   rd      ->  csrrs  rd, cycle, zero
+rdtime    rd      ->  csrrs  rd, time, zero
+rdinstret rd      ->  csrrs  rd, instret, zero
+```
 
 How it works: every CSR instruction reads the old value into rd and writes a new value, in one step. Using zero as rd skips the read; using zero as the source of a set or clear skips the write.
 

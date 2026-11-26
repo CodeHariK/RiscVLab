@@ -31,6 +31,7 @@ csr_view_order := [?]u32 {
 	rv.CSR_MISA,
 	rv.CSR_MINSTRET,
 	rv.CSR_MCYCLE,
+	rv.CSR_TIME,
 	rv.CSR_MHARTID,
 	rv.CSR_MVENDORID,
 	rv.CSR_MARCHID,
@@ -99,6 +100,8 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 		return "instructions retired"
 	case rv.CSR_MCYCLE:
 		return "clock cycles (one per instruction here)"
+	case rv.CSR_TIME:
+		return "the platform clock: the CLINT's mtime (read-only)"
 	}
 	return value_text(value)
 }

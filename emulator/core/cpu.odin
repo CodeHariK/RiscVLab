@@ -47,6 +47,20 @@ Cpu :: struct {
 	// What the current instruction overwrote, so it can be undone.
 	// Filled in during the step; `machine_step` saves it to the history.
 	debug_undo: Undo_Record,
+	// Where the time CSR reads the platform's clock (Time_Source). Last:
+	// it is read only by csrr time.
+	time_source: Time_Source,
+}
+
+// The device that keeps the platform's clock, for the time CSR: the
+// CLINT, which sets it when attached (devices/clint.odin), so time always
+// equals its mtime. `read` returns the time when the step clock reads
+// `now`. The CPU knows no devices, so this is a hook, like Device for the
+// bus. Not set (no CLINT, as in most unit tests): reading time is an
+// illegal instruction, as on real cores that leave rdtime to firmware.
+Time_Source :: struct {
+	data: rawptr,
+	read: proc(data: rawptr, now: u64) -> u64,
 }
 
 // The step clock: one tick per step, like mcycle, but no program can

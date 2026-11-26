@@ -98,7 +98,7 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0xb00 | 10 11 0000 0000 | mcycle | machine | read/write | counters | yes |
 | 0xb02 | 10 11 0000 0010 | minstret | machine | read/write | counters | yes |
 | 0xc00 | 11 00 0000 0000 | cycle | user | read-only | counters | yes |
-| 0xc01 | 11 00 0000 0001 | time | user | read-only | counters | coming (step 9) |
+| 0xc01 | 11 00 0000 0001 | time | user | read-only | counters | yes (the CLINT's mtime) |
 | 0xc02 | 11 00 0000 0010 | instret | user | read-only | counters | yes |
 | 0xf11 | 11 11 0001 0001 | mvendorid | machine | read-only | machine information | yes |
 | 0xf12 | 11 11 0001 0010 | marchid | machine | read-only | machine information | yes |
@@ -641,10 +641,37 @@ Watch out:
 - reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).
 - a write takes effect after the writing instruction, so `csrw minstret, t0` makes the next read give exactly t0: the csrw itself isn't counted.
 
-Related: csr-addresses, retire, emulator-time
+Related: csr-addresses, retire, emulator-time, time
 
 Example:
 ```
 csrr t5, minstret        # instructions so far
 csrr t6, minstret        # one more
+```
+
+## time - The platform clock
+
+*CSR 0xc01, user, read-only*
+
+Does: reads the platform's real-time clock: the same counter as the CLINT's mtime. Any mode may read it, so supervisor and user code can tell the time without reaching the CLINT, which sits at a physical address only machine mode normally maps.
+
+How it works: time is a third counter next to cycle and instret, but it doesn't belong to the hart:
+| | cycle (mcycle) | time | instret (minstret) |
+|---|---|---|---|
+| Counts | the hart's clock cycles | the platform clock, at a fixed rate | instructions retired |
+| Lives in | the hart | the CLINT (mtime), shared by all harts | the hart |
+| Machine name, read / write | mcycle | none: write the CLINT's mtime | minstret |
+| Rate | the CPU's clock, which can change (power saving) | fixed (10 MHz on QEMU's virt board) | depends on the code |
+That last row is why time exists: cycles say how much work the CPU did, but a CPU that slows down to save power runs fewer cycles per second. time ticks at the same rate whatever the CPU does, so it measures seconds; mtimecmp (and stimecmp, next) set alarms against it.
+
+For: timeouts and timestamps in a kernel, and the supervisor timer: xv6 reads time and sets stimecmp = time + an interval (step 9c).
+
+Emulator: time asks the CLINT (Cpu.time_source, set by clint_attach), so it always equals mtime, including after software writes mtime and after a step back. An instruction sees the clock as its step starts: `csrr t0, time` as the 4th step reads 3. With no CLINT attached (most unit tests) the CSR doesn't exist, and reading it raises Illegal_Instruction, as on cores that leave rdtime to firmware. Like everything here it counts steps, not seconds (see emulator-time). Any mode may read it for now; mcounteren, next, lets machine mode decide.
+
+Related: mcycle minstret cycle instret, clint, emulator-time, csr-addresses
+
+Example:
+```
+rdtime t0                # t0 = time (csrr t0, time)
+csrr   t1, cycle         # cycles: can differ from time on real hardware
 ```

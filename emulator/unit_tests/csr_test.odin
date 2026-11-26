@@ -412,6 +412,58 @@ counter_allowed_follows_both_registers :: proc(t: ^testing.T) {
 }
 
 @(test)
+menvcfg_keeps_only_stce :: proc(t: ^testing.T) {
+	// Write all ones: only bit 63, STCE (Sstc on), sticks. The other
+	// fields belong to extensions this hart doesn't have.
+	cpu: rv.Cpu
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MENVCFG, ~u64(0)))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MENVCFG)
+	testing.expect_value(t, value, rv.MENVCFG_STCE)
+	testing.expect_value(t, value, u64(1) << 63)
+	// Machine level (0x30a): only machine mode turns Sstc on.
+	testing.expect_value(t, rv.csr_level(rv.CSR_MENVCFG), 3)
+}
+
+@(test)
+stimecmp_needs_stce_and_tm_below_machine_mode :: proc(t: ^testing.T) {
+	Case :: struct {
+		mode:       rv.Privilege,
+		menvcfg:    u64,
+		mcounteren: u64,
+		allowed:    bool,
+	}
+	stce, tm := rv.MENVCFG_STCE, rv.COUNTEREN_TM
+	cases := [?]Case {
+		{.Machine, 0, 0, true}, // machine mode: always
+		{.Supervisor, 0, 0, false}, // supervisor: Sstc off
+		{.Supervisor, stce, 0, false}, //   Sstc on, but time not allowed
+		{.Supervisor, 0, tm, false}, //   time allowed, but Sstc off
+		{.Supervisor, stce, tm, true}, //   both: the kernel has its timer
+		{.User, stce, tm, false}, // user: stimecmp is a supervisor CSR
+	}
+	for c in cases {
+		cpu: rv.Cpu
+		cpu.privilege = c.mode
+		cpu.csr.menvcfg = c.menvcfg
+		cpu.csr.mcounteren = c.mcounteren
+		testing.expectf(t, rv.csr_allowed(&cpu, rv.CSR_STIMECMP) == c.allowed, "%v", c)
+	}
+}
+
+@(test)
+stimecmp_starts_with_no_alarm_and_holds_any_value :: proc(t: ^testing.T) {
+	machine := rv.machine_create(4096, 0)
+	defer rv.machine_destroy(&machine)
+	// All ones at reset: the farthest time, so no alarm (like mtimecmp).
+	value, _ := rv.csr_read(&machine.cpu, rv.CSR_STIMECMP)
+	testing.expect_value(t, value, max(u64))
+	// Any 64-bit time can be written.
+	testing.expect(t, rv.csr_write(&machine.cpu, rv.CSR_STIMECMP, 0x1234_5678_9abc))
+	value, _ = rv.csr_read(&machine.cpu, rv.CSR_STIMECMP)
+	testing.expect_value(t, value, 0x1234_5678_9abc)
+}
+
+@(test)
 spp_helpers_read_and_write_bit_8 :: proc(t: ^testing.T) {
 	// SPP is one bit (8): supervisor when set, user when clear.
 	status := rv.MSTATUS_RESET // MPP = machine, SPP = 0

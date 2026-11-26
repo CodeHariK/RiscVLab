@@ -32,8 +32,10 @@ csr_view_order := [?]u32 {
 	rv.CSR_MINSTRET,
 	rv.CSR_MCYCLE,
 	rv.CSR_TIME,
+	rv.CSR_STIMECMP,
 	rv.CSR_MCOUNTEREN,
 	rv.CSR_SCOUNTEREN,
+	rv.CSR_MENVCFG,
 	rv.CSR_MHARTID,
 	rv.CSR_MVENDORID,
 	rv.CSR_MARCHID,
@@ -108,6 +110,16 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 		return counteren_text(value, "lets supervisor mode read")
 	case rv.CSR_SCOUNTEREN:
 		return counteren_text(value, "lets user mode read (with mcounteren)")
+	case rv.CSR_MENVCFG:
+		if value & rv.MENVCFG_STCE != 0 {
+			return "STCE=1: Sstc on (stimecmp for supervisor mode)"
+		}
+		return "STCE=0: Sstc off (no stimecmp below machine mode)"
+	case rv.CSR_STIMECMP:
+		if value == rv.STIMECMP_RESET {
+			return "no alarm (all ones)"
+		}
+		return fmt.tprintf("supervisor timer alarm at time %s", value_text(value))
 	}
 	return value_text(value)
 }

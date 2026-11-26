@@ -53,6 +53,7 @@ machine_create :: proc(ram_size: u64, history_capacity: int) -> Machine {
 	machine.cpu.pc = RAM_BASE
 	machine.cpu.privilege = .Machine
 	machine.cpu.csr.mstatus = MSTATUS_RESET
+	machine.cpu.csr.stimecmp = STIMECMP_RESET
 	return machine
 }
 

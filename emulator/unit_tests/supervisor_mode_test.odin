@@ -5,7 +5,7 @@ import rv "../core"
 
 // Unit tests for supervisor mode existing (core/privilege.odin, csr.odin):
 // MRET into it, what it may and may not touch, ECALL back up, and its own
-// CSRs (sscratch, sstatus, sie). Nothing is delegated here, so every trap
+// CSRs (sscratch, sstatus, sie, stimecmp). Nothing is delegated here, so every trap
 // goes to machine mode (delegation_test.odin has the delegated ones).
 
 @(private = "file")
@@ -24,6 +24,8 @@ CSRR_T0_SSCRATCH :: u32(0x1400_22f3) // csrrs t0, sscratch, zero
 CSRS_SSTATUS_T1 :: u32(0x1003_2073) // csrrs zero, sstatus, t1: set the bits in t1
 @(private = "file")
 CSRW_SIE_T1 :: u32(0x1043_1073) // csrrw zero, sie, t1
+@(private = "file")
+CSRW_STIMECMP_T1 :: u32(0x14d3_1073) // csrrw zero, stimecmp, t1
 @(private = "file")
 S_CODE :: rv.RAM_BASE + 0x100 // where MRET sends the hart
 @(private = "file")
@@ -224,4 +226,38 @@ supervisor_mode_needs_mcounteren_to_read_cycle :: proc(t: ^testing.T) {
 	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
 	testing.expect_value(t, machine.cpu.csr.mtval, u64(CSRR_T0_CYCLE)) // the instruction
 	testing.expect_value(t, machine.cpu.regs[5], 0) // t0 not written
+}
+
+@(test)
+supervisor_mode_sets_stimecmp_once_allowed :: proc(t: ^testing.T) {
+	// The kernel sets its next timer alarm: csrw stimecmp, t1.
+	machine := machine_entering_supervisor_mode(CSRW_STIMECMP_T1)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.regs[6] = 1000 // t1: the alarm time
+	// What xv6's start.c does in machine mode first: Sstc on, and time
+	// readable from supervisor mode.
+	machine.cpu.csr.menvcfg = rv.MENVCFG_STCE
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_TM
+	rv.machine_step(&machine) // step 1: mret into S
+
+	testing.expect(t, rv.machine_step(&machine) == nil) // step 2: allowed
+	testing.expect_value(t, machine.cpu.csr.stimecmp, 1000)
+
+	// Undo puts the reset value back: no alarm.
+	testing.expect(t, rv.machine_step_back(&machine))
+	testing.expect_value(t, machine.cpu.csr.stimecmp, max(u64))
+}
+
+@(test)
+stimecmp_is_illegal_without_stce :: proc(t: ^testing.T) {
+	// The same write with menvcfg.STCE = 0 (its reset value): Sstc is
+	// off, so stimecmp doesn't exist for supervisor mode.
+	machine := machine_entering_supervisor_mode(CSRW_STIMECMP_T1)
+	defer rv.machine_destroy(&machine)
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_TM
+	rv.machine_step(&machine) // step 1: mret into S
+
+	rv.machine_step(&machine) // step 2: refused, to machine mode
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, machine.cpu.csr.stimecmp, max(u64)) // unchanged
 }

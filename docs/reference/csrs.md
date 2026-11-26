@@ -83,7 +83,7 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0x142 | 00 01 0100 0010 | scause | supervisor | read/write | trap handling | yes |
 | 0x143 | 00 01 0100 0011 | stval | supervisor | read/write | trap handling | yes |
 | 0x144 | 00 01 0100 0100 | sip | supervisor | read/write | trap handling | yes (view of mip) |
-| 0x14d | 00 01 0100 1101 | stimecmp | supervisor | read/write | timer (Sstc) | coming (step 9) |
+| 0x14d | 00 01 0100 1101 | stimecmp | supervisor | read/write | timer (Sstc) | yes |
 | 0x180 | 00 01 1000 0000 | satp | supervisor | read/write | memory protection | later (paging) |
 | 0x300 | 00 11 0000 0000 | mstatus | machine | read/write | trap setup | yes |
 | 0x301 | 00 11 0000 0001 | misa | machine | read/write (writes ignored) | trap setup | yes |
@@ -92,7 +92,7 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0x304 | 00 11 0000 0100 | mie | machine | read/write | trap setup | yes |
 | 0x305 | 00 11 0000 0101 | mtvec | machine | read/write | trap setup | yes |
 | 0x306 | 00 11 0000 0110 | mcounteren | machine | read/write | trap setup | yes |
-| 0x30a | 00 11 0000 1010 | menvcfg | machine | read/write | configuration | coming (step 9) |
+| 0x30a | 00 11 0000 1010 | menvcfg | machine | read/write | configuration | yes |
 | 0x340 | 00 11 0100 0000 | mscratch | machine | read/write | trap handling | yes |
 | 0x341 | 00 11 0100 0001 | mepc | machine | read/write | trap handling | yes |
 | 0x342 | 00 11 0100 0010 | mcause | machine | read/write | trap handling | yes |
@@ -603,6 +603,58 @@ Example:
 li    t0, 0x2             # TM: time
 csrs  mcounteren, t0      # supervisor mode may read time
 csrs  scounteren, t0      # and user mode too
+```
+
+## stimecmp - Supervisor timer compare
+
+*CSR 0x14d, supervisor, read / write (Sstc)*
+
+Does: the supervisor timer's alarm: supervisor mode's own mtimecmp. When time reaches stimecmp, the supervisor timer interrupt (STIP) becomes pending, and it stays pending until the kernel sets a later stimecmp.
+
+How it works: the two timers side by side:
+| | Machine timer | Supervisor timer (Sstc) |
+|---|---|---|
+| Alarm | mtimecmp, a CLINT register (memory address) | stimecmp, a CSR |
+| Clock | mtime | time (the same clock) |
+| Pending | MTIP while mtime >= mtimecmp | STIP while time >= stimecmp |
+| Set by | machine mode | the kernel, in supervisor mode |
+Without Sstc, a kernel only gets ticks through machine mode: the firmware takes MTIP, sets STIP by hand, and the kernel clears it again. With it, the firmware stays out of every tick.
+
+Below machine mode it may be used only when machine mode has turned Sstc on (menvcfg.STCE) and lets supervisor mode read time (mcounteren.TM); otherwise it raises Illegal_Instruction.
+
+For: a kernel's clock tick. xv6 sets `stimecmp = time + 1000000` in start.c and again in each timer interrupt.
+
+Emulator: stimecmp is stored and checked (stimecmp_allowed, core/csr.odin) and starts as all ones (no alarm). It doesn't raise STIP yet: that comes next, with the comparison against time.
+
+Related: menvcfg, time, mcounteren scounteren, mie mip, clint
+
+Example:
+```
+rdtime t0                 # now
+li     t1, 1000000
+add    t0, t0, t1
+csrw   stimecmp, t0       # next tick: now + 1000000
+```
+
+## menvcfg - Machine environment configuration
+
+*CSR 0x30a, machine, read / write*
+
+Does: switches, set by machine mode, for features the modes below it may use. Here only one: STCE (bit 63), which turns Sstc (stimecmp) on.
+
+How it works: with STCE = 0, stimecmp doesn't exist below machine mode and STIP is software's to set (the old way). With STCE = 1, supervisor mode may use stimecmp (if mcounteren.TM is set too), and STIP follows the timer. The other fields (bit 0 FIOM, the cache-block bits 4 to 7, PBMTE in bit 62, ...) belong to extensions this hart doesn't have and read 0.
+
+For: firmware enabling extensions for the kernel. xv6's start.c sets STCE first thing in its timer setup.
+
+Emulator: only STCE is writable (MENVCFG_WRITABLE, core/csr.odin); it starts as 0.
+
+Related: stimecmp, mcounteren scounteren, csr-addresses
+
+Example:
+```
+li    t0, 1
+slli  t0, t0, 63          # bit 63: STCE
+csrs  menvcfg, t0         # Sstc on for supervisor mode
 ```
 
 ## misa - Machine ISA

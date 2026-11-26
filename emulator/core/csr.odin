@@ -34,6 +34,7 @@ CSR_MIDELEG :: 0x303 // which interrupts go to supervisor mode instead (docs: mi
 CSR_MIE :: 0x304 // which interrupts are enabled
 CSR_MTVEC :: 0x305 // trap handler address (and mode)
 CSR_MCOUNTEREN :: 0x306 // which counters supervisor mode may read (docs: mcounteren scounteren)
+CSR_MENVCFG :: 0x30A // what lower modes' environment has: STCE turns stimecmp on (docs: menvcfg)
 
 // Machine trap handling.
 CSR_MSCRATCH :: 0x340 // free for the trap handler to use
@@ -51,6 +52,10 @@ CSR_SSTATUS :: 0x100 // supervisor interrupt enable and previous privilege
 // (docs: sie sip).
 CSR_SIE :: 0x104 // mie & mideleg
 CSR_SIP :: 0x144 // mip & mideleg; only SSIP is writable here
+
+// The supervisor timer (Sstc): an alarm against time, like mtimecmp
+// against mtime (docs: stimecmp).
+CSR_STIMECMP :: 0x14D
 
 // Supervisor trap setup and handling: supervisor mode's own copies of the
 // machine trap CSRs, at the same numbers with bits 9..8 = 01 instead of
@@ -142,6 +147,21 @@ COUNTEREN_TM :: u64(1) << 1 // time
 COUNTEREN_IR :: u64(1) << 2 // instret
 COUNTEREN_WRITABLE :: COUNTEREN_CY | COUNTEREN_TM | COUNTEREN_IR
 
+// menvcfg, machine environment configuration: switches for features of
+// the modes below machine mode. Only STCE exists here; the other fields
+// are for extensions this hart doesn't have (cache-block instructions,
+// page-based memory types) and read 0.
+//
+//   STCE (bit 63): Sstc on. stimecmp may be used in supervisor mode (with
+//   mcounteren.TM too: stimecmp_allowed), and it drives STIP. Off: no
+//   stimecmp below machine mode, and STIP is software's, as before.
+MENVCFG_STCE :: u64(1) << 63
+MENVCFG_WRITABLE :: MENVCFG_STCE
+
+// stimecmp's value at reset: all ones, the farthest time, so no alarm
+// until software sets one (as for the CLINT's mtimecmp).
+STIMECMP_RESET :: max(u64)
+
 // mideleg, machine interrupt delegation: medeleg's twin for interrupts.
 // Bit n set means interrupt n goes to supervisor mode instead of machine
 // mode. Only the supervisor interrupts (bits 1, 5, 9) can be delegated;
@@ -211,14 +231,37 @@ Csr_File :: struct {
 	// Which counters lower modes may read (COUNTEREN_WRITABLE above).
 	mcounteren: u64,
 	scounteren: u64,
+	// Sstc: its switch (MENVCFG_STCE) and the supervisor timer's alarm.
+	menvcfg:    u64,
+	stimecmp:   u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
 // its address are the lowest level allowed (0 user, 1 supervisor,
-// 3 machine), and for the counters, machine mode must have allowed it
-// (counter_allowed).
+// 3 machine). A few CSRs also need machine mode's permission: the
+// counters (counter_allowed) and stimecmp (stimecmp_allowed).
 csr_allowed :: proc(cpu: ^Cpu, address: u32) -> bool {
-	return u32(cpu.privilege) >= csr_level(address) && counter_allowed(cpu, address)
+	if u32(cpu.privilege) < csr_level(address) {
+		return false
+	}
+	switch address {
+	case CSR_CYCLE, CSR_TIME, CSR_INSTRET:
+		return counter_allowed(cpu, address)
+	case CSR_STIMECMP:
+		return stimecmp_allowed(cpu)
+	}
+	return true
+}
+
+// stimecmp below machine mode: Sstc must be on (menvcfg.STCE), and
+// supervisor mode must be allowed to read time (mcounteren.TM): an alarm
+// is no use without the clock it is set against. (User mode never gets
+// here: stimecmp is a supervisor CSR.)
+stimecmp_allowed :: proc(cpu: ^Cpu) -> bool {
+	if cpu.privilege == .Machine {
+		return true
+	}
+	return cpu.csr.menvcfg & MENVCFG_STCE != 0 && cpu.csr.mcounteren & COUNTEREN_TM != 0
 }
 
 // cycle, time and instret below machine mode: their bit in mcounteren
@@ -279,6 +322,10 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.mcounteren, true
 	case CSR_SCOUNTEREN:
 		return csr.scounteren, true
+	case CSR_MENVCFG:
+		return csr.menvcfg, true
+	case CSR_STIMECMP:
+		return csr.stimecmp, true
 	case CSR_MISA:
 		return MISA_VALUE, true
 	case CSR_MIE:
@@ -362,6 +409,11 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		csr.mcounteren = value & COUNTEREN_WRITABLE
 	case CSR_SCOUNTEREN:
 		csr.scounteren = value & COUNTEREN_WRITABLE
+	case CSR_MENVCFG:
+		// Only STCE (WARL): the other fields' extensions don't exist.
+		csr.menvcfg = value & MENVCFG_WRITABLE
+	case CSR_STIMECMP:
+		csr.stimecmp = value
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
@@ -451,6 +503,10 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		csr.mcounteren = value
 	case CSR_SCOUNTEREN:
 		csr.scounteren = value
+	case CSR_MENVCFG:
+		csr.menvcfg = value
+	case CSR_STIMECMP:
+		csr.stimecmp = value
 	case CSR_MIE:
 		csr.mie = value
 	case CSR_MTVEC:

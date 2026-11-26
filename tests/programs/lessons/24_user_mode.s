@@ -1,7 +1,7 @@
 # Lesson 24: User mode
 # Drop from machine mode into user mode with mret, find out what user code may not do, and come back up with ecall: a system call, then exit.
 # Expect: exit 4
-# Docs: privilege, mret, csr-addresses, Illegal_Instruction, Ecall_From_U_Mode, system-call
+# Docs: privilege, mret, csr-addresses, mcounteren, Illegal_Instruction, Ecall_From_U_Mode, system-call
 #
 # Until now every lesson ran in machine mode, which may do anything. An
 # OS runs programs in user mode instead, where they can only compute and
@@ -9,7 +9,8 @@
 #
 #   machine mode                         user mode
 #   ------------                         ---------
-#   set mtvec, MPP = user, mepc
+#   set mtvec, allow cycle,
+#   MPP = user, mepc
 #   mret  -----------------------------> user_main:
 #                                          csrr cycle     allowed
 #   handler: Illegal_Instruction <-------  csrr mstatus   not allowed
@@ -28,7 +29,9 @@
 #
 # What user mode may touch is written in each CSR's address: bits 9:8
 # are the lowest mode allowed. mstatus is 0x300 (bits 9:8 = 11: machine
-# only); cycle is 0xc00 (00: anyone, read-only).
+# only); cycle is 0xc00 (00: anyone, read-only). The counters (cycle,
+# time, instret) also need machine mode's permission: their bit in
+# mcounteren and scounteren, which start at 0.
 #
 # Registers: s1 counts the illegal instructions the handler skipped; s2
 # is what user mode read from cycle. The handler uses t0 and t1, so the
@@ -45,6 +48,14 @@ _start:                         # machine mode, as after reset
     csrw  mtvec, t0             # where traps go
     li    s1, 0
 
+    # Let user mode read cycle. Permission goes down one mode at a time:
+    # mcounteren lets supervisor mode read it, scounteren passes it on to
+    # user mode. Bit 0 is cycle (1 time, 2 instret). Without these two
+    # lines, csrr cycle below would trap like csrr mstatus.
+    li    t0, 1                 # bit 0: cycle
+    csrs  mcounteren, t0        # supervisor mode may read cycle...
+    csrs  scounteren, t0        # ...and so may user mode
+
     # No instruction just switches to user mode (a program could use it
     # to escape). The only way down is mret, "return from a trap". So we
     # set things up as if a trap had come from user_main in user mode,
@@ -57,7 +68,7 @@ _start:                         # machine mode, as after reset
     mret                        # down to user mode, at user_main
 
 user_main:                      # user mode from here
-    csrr  s2, cycle             # allowed: 0xc00 is readable by anyone
+    csrr  s2, cycle             # allowed: 0xc00 is readable by anyone, and we allowed it
     csrr  s3, mstatus           # machine only: traps, the handler skips it
     li    a0, 32
     li    a7, 1                 # system call 1: add 10 to a0

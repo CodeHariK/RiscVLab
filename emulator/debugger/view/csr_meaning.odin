@@ -32,6 +32,8 @@ csr_view_order := [?]u32 {
 	rv.CSR_MINSTRET,
 	rv.CSR_MCYCLE,
 	rv.CSR_TIME,
+	rv.CSR_MCOUNTEREN,
+	rv.CSR_SCOUNTEREN,
 	rv.CSR_MHARTID,
 	rv.CSR_MVENDORID,
 	rv.CSR_MARCHID,
@@ -102,6 +104,10 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 		return "clock cycles (one per instruction here)"
 	case rv.CSR_TIME:
 		return "the platform clock: the CLINT's mtime (read-only)"
+	case rv.CSR_MCOUNTEREN:
+		return counteren_text(value, "lets supervisor mode read")
+	case rv.CSR_SCOUNTEREN:
+		return counteren_text(value, "lets user mode read (with mcounteren)")
 	}
 	return value_text(value)
 }
@@ -223,4 +229,16 @@ delegated_text :: proc(value: u64) -> string {
 		first = false
 	}
 	return strings.to_string(builder)
+}
+
+// mcounteren / scounteren: "lets supervisor mode read: cycle=1 time=1 instret=0".
+@(private = "file")
+counteren_text :: proc(value: u64, what: string) -> string {
+	return fmt.tprintf(
+		"%s: cycle=%d time=%d instret=%d",
+		what,
+		value & rv.COUNTEREN_CY,
+		(value & rv.COUNTEREN_TM) >> 1,
+		(value & rv.COUNTEREN_IR) >> 2,
+	)
 }

@@ -155,15 +155,33 @@ machine_interrupts_reach_user_mode_even_with_mie_off :: proc(t: ^testing.T) {
 
 @(test)
 user_mode_reads_time :: proc(t: ^testing.T) {
-	// time is 0xc01: bits 9..8 = 00, so any mode may read it (until
-	// mcounteren, later, lets machine mode say no). csrr t0, time in U.
+	// time is 0xc01: bits 9..8 = 00, so any mode may read it, once
+	// machine mode allows it: TM in mcounteren (for supervisor mode) and
+	// scounteren (passing it on to user mode). csrr t0, time in U.
 	machine := machine_entering_user_mode(CSRR_T0_TIME)
 	defer rv.machine_destroy(&machine)
 	devices.clint_attach(&machine) // the clock time reads
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_TM
+	machine.cpu.csr.scounteren = rv.COUNTEREN_TM
 	rv.machine_step(&machine) // step 1: mret into U
 
 	// Step 2: allowed, no trap. One step (the mret) has gone by.
 	testing.expect(t, rv.machine_step(&machine) == nil)
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.User)
 	testing.expect_value(t, machine.cpu.regs[5], 1)
+}
+
+@(test)
+user_mode_needs_both_counter_enables :: proc(t: ^testing.T) {
+	// Only mcounteren.TM: supervisor mode could read time, but hasn't
+	// passed it on (scounteren = 0), so user mode can't.
+	machine := machine_entering_user_mode(CSRR_T0_TIME)
+	defer rv.machine_destroy(&machine)
+	devices.clint_attach(&machine)
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_TM
+	rv.machine_step(&machine) // step 1: mret into U
+
+	rv.machine_step(&machine) // step 2: refused
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Machine)
 }

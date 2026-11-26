@@ -144,11 +144,15 @@ user_mode_cannot_touch_machine_csrs :: proc(t: ^testing.T) {
 @(test)
 user_mode_can_read_the_user_counters :: proc(t: ^testing.T) {
 	// csrr t0, instret (user level: address bits 9:8 = 0).
-	// instret is the read-only user name of minstret (0xc02).
+	// instret is the read-only user name of minstret (0xc02). A counter
+	// also needs machine mode's permission: IR in mcounteren and
+	// scounteren (counter_allowed).
 	machine := machine_with(csr_instruction(rv.ZICSR_CSRRS, 5, 0, rv.CSR_INSTRET))
 	defer rv.machine_destroy(&machine)
 	machine.cpu.privilege = .User
-	testing.expect(t, rv.machine_step(&machine) == nil) // 0 >= 0: allowed
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_IR
+	machine.cpu.csr.scounteren = rv.COUNTEREN_IR
+	testing.expect(t, rv.machine_step(&machine) == nil) // 0 >= 0, and allowed
 }
 
 @(test)

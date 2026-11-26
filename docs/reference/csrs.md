@@ -77,6 +77,7 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0x100 | 00 01 0000 0000 | sstatus | supervisor | read/write | trap setup | yes (a view of mstatus) |
 | 0x104 | 00 01 0000 0100 | sie | supervisor | read/write | trap setup | yes (view of mie) |
 | 0x105 | 00 01 0000 0101 | stvec | supervisor | read/write | trap setup | yes |
+| 0x106 | 00 01 0000 0110 | scounteren | supervisor | read/write | trap setup | yes |
 | 0x140 | 00 01 0100 0000 | sscratch | supervisor | read/write | trap handling | yes |
 | 0x141 | 00 01 0100 0001 | sepc | supervisor | read/write | trap handling | yes |
 | 0x142 | 00 01 0100 0010 | scause | supervisor | read/write | trap handling | yes |
@@ -90,6 +91,8 @@ Every CSR this emulator has, and the ones the supervisor plan adds next, by numb
 | 0x303 | 00 11 0000 0011 | mideleg | machine | read/write | trap setup | yes |
 | 0x304 | 00 11 0000 0100 | mie | machine | read/write | trap setup | yes |
 | 0x305 | 00 11 0000 0101 | mtvec | machine | read/write | trap setup | yes |
+| 0x306 | 00 11 0000 0110 | mcounteren | machine | read/write | trap setup | yes |
+| 0x30a | 00 11 0000 1010 | menvcfg | machine | read/write | configuration | coming (step 9) |
 | 0x340 | 00 11 0100 0000 | mscratch | machine | read/write | trap handling | yes |
 | 0x341 | 00 11 0100 0001 | mepc | machine | read/write | trap handling | yes |
 | 0x342 | 00 11 0100 0010 | mcause | machine | read/write | trap handling | yes |
@@ -560,6 +563,48 @@ csrr  t1, scause         # in the handler: why
 csrr  t2, sepc           # and where
 ```
 
+## mcounteren scounteren - Counter enable
+
+*CSR 0x306 (mcounteren), machine, and 0x106 (scounteren), supervisor; read / write*
+
+Does: say which counters (cycle, time, instret) the next mode down may read. Machine mode can always read them; supervisor mode needs machine mode's permission, user mode needs both.
+
+Fields: one bit per counter, at the counter's offset from cycle (cycle 0xc00 is bit 0, time 0xc01 bit 1, instret 0xc02 bit 2):
+```
+  bit:          2    1    0
+  mcounteren:   IR   TM   CY     machine mode lets supervisor mode read
+  scounteren:   IR   TM   CY     supervisor mode lets user mode read
+                |    |    +---- cycle
+                |    +--------- time
+                +-------------- instret
+```
+Bits 3 to 31 would be for the performance counters hpmcounter3..31, which this hart doesn't have.
+
+How it works: permission goes down one mode at a time, so a mode can only pass on what it was given:
+| Hart in | May read cycle if | A refused read |
+|---|---|---|
+| machine mode | always | - |
+| supervisor mode | mcounteren.CY = 1 | Illegal_Instruction, to machine mode |
+| user mode | mcounteren.CY = 1 and scounteren.CY = 1 | Illegal_Instruction (to supervisor mode if medeleg delegates it) |
+time and instret work the same way with TM and IR. Only the read-only names are affected: mcycle and minstret are machine CSRs anyway.
+
+Why a counter needs permission at all: a precise clock is a tool for timing attacks (measuring how long a cache access takes reveals another program's secrets), so a careful system may hide it. And a refused read traps, so a kernel can answer it itself, for example with the cycles of the current process only.
+
+For: firmware and kernels setting up what lower modes see. xv6's start.c sets mcounteren.TM so its kernel can read time for the supervisor timer; Linux lets user programs read time (for gettimeofday without a system call) through scounteren.
+
+Emulator: both keep bits 0 to 2 and start at 0 (as on QEMU): nothing below machine mode may read a counter until machine mode allows it. The check is counter_allowed (core/csr.odin), part of csr_allowed, so a CSR instruction checks it with the level. Lesson 24 sets CY in both before dropping to user mode. The CSRs tab reads them: "lets supervisor mode read: cycle=1 time=0 instret=0".
+
+Watch out: setting mcounteren alone isn't enough for user mode; scounteren must allow it too, even on a system whose supervisor mode does nothing else.
+
+Related: mcycle minstret cycle instret, time, csr-addresses, privilege
+
+Example:
+```
+li    t0, 0x2             # TM: time
+csrs  mcounteren, t0      # supervisor mode may read time
+csrs  scounteren, t0      # and user mode too
+```
+
 ## misa - Machine ISA
 
 *CSR 0x301, machine, read / write*
@@ -635,13 +680,13 @@ The same amount of work takes 50 times as long. minstret alone can't tell those 
 
 For: measuring how long code takes (mcycle), and how much work it did (minstret). Lesson 22 compares two copy loops with minstret: 385 instructions against 49.
 
-Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. Both are fields of Csr_File (core/csr.odin). There is no mcounteren yet, so user mode can always read cycle and instret. A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. With no writes, mcycle - minstret is the number of traps and interrupts taken so far. Every step costs exactly one cycle here, so cycles per instruction is always about 1: the emulator doesn't model cache misses, slow divides or branch prediction, and timing measured inside it tells you about instructions, not about real hardware. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
+Emulator: one cycle per step, so mcycle and minstret read the same number until something traps or a program writes one of them. Both are fields of Csr_File (core/csr.odin). Lower modes read cycle and instret only when machine mode allows it (see mcounteren scounteren). A trap or interrupt taken into a handler is a step: it takes a cycle, as on real hardware, but retires no instruction, so only mcycle counts it. With no writes, mcycle - minstret is the number of traps and interrupts taken so far. Every step costs exactly one cycle here, so cycles per instruction is always about 1: the emulator doesn't model cache misses, slow divides or branch prediction, and timing measured inside it tells you about instructions, not about real hardware. A write changes only that counter. It doesn't move the timer either: mtime follows its own step clock, which no program can write (see emulator-time).
 
 Watch out:
 - reading the counter is itself an instruction: two `csrr` of minstret in a row differ by 1 (lesson 11).
 - a write takes effect after the writing instruction, so `csrw minstret, t0` makes the next read give exactly t0: the csrw itself isn't counted.
 
-Related: csr-addresses, retire, emulator-time, time
+Related: csr-addresses, retire, emulator-time, time, mcounteren scounteren
 
 Example:
 ```
@@ -666,9 +711,9 @@ That last row is why time exists: cycles say how much work the CPU did, but a CP
 
 For: timeouts and timestamps in a kernel, and the supervisor timer: xv6 reads time and sets stimecmp = time + an interval (step 9c).
 
-Emulator: time asks the CLINT (Cpu.time_source, set by clint_attach), so it always equals mtime, including after software writes mtime and after a step back. An instruction sees the clock as its step starts: `csrr t0, time` as the 4th step reads 3. With no CLINT attached (most unit tests) the CSR doesn't exist, and reading it raises Illegal_Instruction, as on cores that leave rdtime to firmware. Like everything here it counts steps, not seconds (see emulator-time). Any mode may read it for now; mcounteren, next, lets machine mode decide.
+Emulator: time asks the CLINT (Cpu.time_source, set by clint_attach), so it always equals mtime, including after software writes mtime and after a step back. An instruction sees the clock as its step starts: `csrr t0, time` as the 4th step reads 3. With no CLINT attached (most unit tests) the CSR doesn't exist, and reading it raises Illegal_Instruction, as on cores that leave rdtime to firmware. Like everything here it counts steps, not seconds (see emulator-time). Below machine mode it needs TM in mcounteren (and in scounteren for user mode): see mcounteren scounteren.
 
-Related: mcycle minstret cycle instret, clint, emulator-time, csr-addresses
+Related: mcycle minstret cycle instret, mcounteren scounteren, clint, emulator-time, csr-addresses
 
 Example:
 ```

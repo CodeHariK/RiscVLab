@@ -356,6 +356,62 @@ time_needs_a_clock_and_is_read_only :: proc(t: ^testing.T) {
 }
 
 @(test)
+counteren_hold_only_the_three_counters :: proc(t: ^testing.T) {
+	// Write all ones: bits 0..2 stick (cycle, time, instret); the others
+	// would be for performance counters this hart doesn't have.
+	cpu: rv.Cpu
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_MCOUNTEREN, ~u64(0)))
+	testing.expect(t, rv.csr_write(&cpu, rv.CSR_SCOUNTEREN, ~u64(0)))
+	value, _ := rv.csr_read(&cpu, rv.CSR_MCOUNTEREN)
+	testing.expect_value(t, value, 0b111)
+	value, _ = rv.csr_read(&cpu, rv.CSR_SCOUNTEREN)
+	testing.expect_value(t, value, 0b111)
+	// mcounteren is machine level (0x306), scounteren supervisor (0x106):
+	// each is set by the mode that hands the permission down.
+	testing.expect_value(t, rv.csr_level(rv.CSR_MCOUNTEREN), 3)
+	testing.expect_value(t, rv.csr_level(rv.CSR_SCOUNTEREN), 1)
+}
+
+@(test)
+counter_allowed_follows_both_registers :: proc(t: ^testing.T) {
+	// cycle (bit 0) from each mode, for each combination of the two bits.
+	Case :: struct {
+		mode:       rv.Privilege,
+		mcounteren: u64,
+		scounteren: u64,
+		allowed:    bool,
+	}
+	cases := [?]Case {
+		{.Machine, 0, 0, true}, // machine mode: always
+		{.Supervisor, 0, 0, false}, // supervisor: needs mcounteren
+		{.Supervisor, 0, 1, false}, //   scounteren doesn't count for it
+		{.Supervisor, 1, 0, true},
+		{.User, 1, 0, false}, // user: needs both
+		{.User, 0, 1, false}, //   scounteren can't pass on what S wasn't given
+		{.User, 1, 1, true},
+	}
+	for c in cases {
+		cpu: rv.Cpu
+		cpu.privilege = c.mode
+		cpu.csr.mcounteren = c.mcounteren
+		cpu.csr.scounteren = c.scounteren
+		testing.expectf(t, rv.counter_allowed(&cpu, rv.CSR_CYCLE) == c.allowed, "%v", c)
+	}
+
+	// Each counter has its own bit: with only TM (time) allowed for user
+	// mode, cycle and instret are still refused.
+	cpu: rv.Cpu
+	cpu.privilege = .User
+	cpu.csr.mcounteren = rv.COUNTEREN_TM
+	cpu.csr.scounteren = rv.COUNTEREN_TM
+	testing.expect(t, rv.counter_allowed(&cpu, rv.CSR_TIME))
+	testing.expect(t, !rv.counter_allowed(&cpu, rv.CSR_CYCLE))
+	testing.expect(t, !rv.counter_allowed(&cpu, rv.CSR_INSTRET))
+	// Other CSRs aren't counters: no bit needed (their level still is).
+	testing.expect(t, rv.counter_allowed(&cpu, rv.CSR_SSCRATCH))
+}
+
+@(test)
 spp_helpers_read_and_write_bit_8 :: proc(t: ^testing.T) {
 	// SPP is one bit (8): supervisor when set, user when clear.
 	status := rv.MSTATUS_RESET // MPP = machine, SPP = 0

@@ -67,10 +67,11 @@ mret_drops_into_supervisor_mode :: proc(t: ^testing.T) {
 supervisor_mode_reads_cycle :: proc(t: ^testing.T) {
 	machine := machine_entering_supervisor_mode(CSRR_T0_CYCLE)
 	defer rv.machine_destroy(&machine)
+	machine.cpu.csr.mcounteren = rv.COUNTEREN_CY // machine mode allows it
 	rv.machine_step(&machine) // step 1: mret into S
 
 	// Step 2: csrr t0, cycle. cycle is 0xc00: bits 9..8 = 00, so any
-	// level may read it (csr_allowed: 1 >= 0).
+	// level may read it (csr_allowed: 1 >= 0), and mcounteren.CY is set.
 	testing.expect(t, rv.machine_step(&machine) == nil) // no trap
 	testing.expect_value(t, machine.cpu.privilege, rv.Privilege.Supervisor) // still in S
 	// t0 (x5) got mcycle as it was when the csrr ran: one step (the
@@ -209,4 +210,18 @@ supervisor_mode_enables_its_interrupts_through_sie :: proc(t: ^testing.T) {
 	// Undo turns STIE off again, and MTIE stays.
 	testing.expect(t, rv.machine_step_back(&machine))
 	testing.expect_value(t, machine.cpu.csr.mie, rv.MIP_MTIP)
+}
+
+@(test)
+supervisor_mode_needs_mcounteren_to_read_cycle :: proc(t: ^testing.T) {
+	// The same csrr t0, cycle, with mcounteren = 0 (its reset value):
+	// machine mode hasn't allowed it.
+	machine := machine_entering_supervisor_mode(CSRR_T0_CYCLE)
+	defer rv.machine_destroy(&machine)
+	rv.machine_step(&machine) // step 1: mret into S
+
+	rv.machine_step(&machine) // step 2: refused, to machine mode
+	testing.expect_value(t, machine.cpu.csr.mcause, u64(rv.Trap_Cause.Illegal_Instruction))
+	testing.expect_value(t, machine.cpu.csr.mtval, u64(CSRR_T0_CYCLE)) // the instruction
+	testing.expect_value(t, machine.cpu.regs[5], 0) // t0 not written
 }

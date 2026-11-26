@@ -33,6 +33,7 @@ CSR_MEDELEG :: 0x302 // which exceptions go to supervisor mode instead (docs: me
 CSR_MIDELEG :: 0x303 // which interrupts go to supervisor mode instead (docs: mideleg)
 CSR_MIE :: 0x304 // which interrupts are enabled
 CSR_MTVEC :: 0x305 // trap handler address (and mode)
+CSR_MCOUNTEREN :: 0x306 // which counters supervisor mode may read (docs: mcounteren scounteren)
 
 // Machine trap handling.
 CSR_MSCRATCH :: 0x340 // free for the trap handler to use
@@ -57,6 +58,7 @@ CSR_SIP :: 0x144 // mip & mideleg; only SSIP is writable here
 // hold what a trap delegated to supervisor mode records (docs: stvec).
 // Nothing is delegated yet, so for now they are only storage.
 CSR_STVEC :: 0x105 // supervisor trap handler address (and mode), like mtvec
+CSR_SCOUNTEREN :: 0x106 // which counters user mode may read, like mcounteren
 CSR_SSCRATCH :: 0x140 // free for the supervisor trap handler, like mscratch
 CSR_SEPC :: 0x141 // where the supervisor trap happened, like mepc
 CSR_SCAUSE :: 0x142 // why, like mcause
@@ -65,7 +67,8 @@ CSR_STVAL :: 0x143 // extra information, like mtval
 // Counters. mcycle / minstret are read/write; cycle / instret are their
 // read-only copies for less privileged code. time is the platform's
 // clock, the CLINT's mtime (Cpu.time_source), read-only: it is set by
-// writing mtime.
+// writing mtime. Below machine mode the three read-only names need
+// mcounteren / scounteren (counter_allowed).
 CSR_MCYCLE :: 0xB00
 CSR_MINSTRET :: 0xB02
 CSR_CYCLE :: 0xC00
@@ -118,6 +121,26 @@ MSTATUS_TRAP_FIELDS_S :: MSTATUS_SIE | MSTATUS_SPIE
 // machine mode, can never be delegated, so its bit reads 0; 10 is
 // reserved. The page faults (12, 13, 15) join with paging.
 MEDELEG_WRITABLE :: u64(0b11_1111_1111) // causes 0..9
+
+// mcounteren / scounteren, counter enable: one bit per counter, at the
+// counter's offset from cycle (0xc00 + n):
+//
+//   bit:          2    1    0
+//   mcounteren:   IR   TM   CY     machine mode lets supervisor mode read
+//   scounteren:   IR   TM   CY     supervisor mode lets user mode read
+//                 |    |    +---- cycle
+//                 |    +--------- time
+//                 +-------------- instret
+//
+// Machine mode may always read the counters; supervisor mode needs its
+// bit in mcounteren, user mode in both (counter_allowed). The other bits
+// would be for the hpmcounter3..31 performance counters, which this hart
+// doesn't have: they read 0. Both start at 0: nothing allowed until
+// machine mode says so.
+COUNTEREN_CY :: u64(1) << 0 // cycle
+COUNTEREN_TM :: u64(1) << 1 // time
+COUNTEREN_IR :: u64(1) << 2 // instret
+COUNTEREN_WRITABLE :: COUNTEREN_CY | COUNTEREN_TM | COUNTEREN_IR
 
 // mideleg, machine interrupt delegation: medeleg's twin for interrupts.
 // Bit n set means interrupt n goes to supervisor mode instead of machine
@@ -185,13 +208,42 @@ Csr_File :: struct {
 	medeleg:  u64,
 	// Which interrupts go to supervisor mode (MIDELEG_WRITABLE above).
 	mideleg:  u64,
+	// Which counters lower modes may read (COUNTEREN_WRITABLE above).
+	mcounteren: u64,
+	scounteren: u64,
 }
 
 // True if the current privilege level may access the CSR: bits 9:8 of
 // its address are the lowest level allowed (0 user, 1 supervisor,
-// 3 machine).
+// 3 machine), and for the counters, machine mode must have allowed it
+// (counter_allowed).
 csr_allowed :: proc(cpu: ^Cpu, address: u32) -> bool {
-	return u32(cpu.privilege) >= csr_level(address)
+	return u32(cpu.privilege) >= csr_level(address) && counter_allowed(cpu, address)
+}
+
+// cycle, time and instret below machine mode: their bit in mcounteren
+// (supervisor mode), or in both mcounteren and scounteren (user mode).
+// Each mode can only pass on what it was given. True for every other CSR.
+counter_allowed :: proc(cpu: ^Cpu, address: u32) -> bool {
+	bit: u64
+	switch address {
+	case CSR_CYCLE:
+		bit = COUNTEREN_CY
+	case CSR_TIME:
+		bit = COUNTEREN_TM
+	case CSR_INSTRET:
+		bit = COUNTEREN_IR
+	case:
+		return true
+	}
+	switch cpu.privilege {
+	case .Supervisor:
+		return cpu.csr.mcounteren & bit != 0
+	case .User:
+		return cpu.csr.mcounteren & cpu.csr.scounteren & bit != 0
+	case .Machine:
+	}
+	return true
 }
 
 // The lowest privilege level that may access the CSR (address bits 9:8):
@@ -223,6 +275,10 @@ csr_read :: proc(cpu: ^Cpu, address: u32) -> (value: u64, ok: bool) {
 		return csr.medeleg, true
 	case CSR_MIDELEG:
 		return csr.mideleg, true
+	case CSR_MCOUNTEREN:
+		return csr.mcounteren, true
+	case CSR_SCOUNTEREN:
+		return csr.scounteren, true
 	case CSR_MISA:
 		return MISA_VALUE, true
 	case CSR_MIE:
@@ -301,6 +357,11 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MIDELEG:
 		// Only the supervisor interrupts (WARL): machine ones read 0.
 		csr.mideleg = value & MIDELEG_WRITABLE
+	case CSR_MCOUNTEREN:
+		// Only the three counters that exist (WARL).
+		csr.mcounteren = value & COUNTEREN_WRITABLE
+	case CSR_SCOUNTEREN:
+		csr.scounteren = value & COUNTEREN_WRITABLE
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
@@ -386,6 +447,10 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 		csr.medeleg = value
 	case CSR_MIDELEG:
 		csr.mideleg = value
+	case CSR_MCOUNTEREN:
+		csr.mcounteren = value
+	case CSR_SCOUNTEREN:
+		csr.scounteren = value
 	case CSR_MIE:
 		csr.mie = value
 	case CSR_MTVEC:

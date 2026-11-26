@@ -16,8 +16,12 @@ Trap_Cause :: enum u64 {
 	Ecall_From_S_Mode              = 9,
 	Ecall_From_M_Mode              = 11,
 	// Interrupts: bit 63, then the interrupt's number (its bit in mie / mip).
+	// Each supervisor one is its machine twin's number minus 2.
+	Supervisor_Software_Interrupt  = INTERRUPT_BIT | 1,
 	Machine_Software_Interrupt     = INTERRUPT_BIT | 3,
+	Supervisor_Timer_Interrupt     = INTERRUPT_BIT | 5,
 	Machine_Timer_Interrupt        = INTERRUPT_BIT | 7,
+	Supervisor_External_Interrupt  = INTERRUPT_BIT | 9,
 	Machine_External_Interrupt     = INTERRUPT_BIT | 11,
 }
 

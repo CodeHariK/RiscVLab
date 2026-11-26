@@ -212,7 +212,7 @@ Why no CSR shows the current level: so a program can't simply check which level 
 
 For: protection. A user program can't touch the kernel's memory or devices, or turn off interrupts; it must ask with `ecall`. xv6 runs its kernel in supervisor mode and its programs in user mode.
 
-Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Exceptions whose medeleg bit is set go to supervisor mode when they happen in user or supervisor mode; every other trap, and every interrupt, goes to machine mode. `sret` returns from a supervisor handler (illegal in user mode). Interrupt delegation comes next, on the way to xv6.
+Emulator: all three levels exist. `mret` with MPP = 0b00 drops into user mode and with MPP = 0b01 into supervisor mode. Below machine mode the machine CSRs and `mret` raise Illegal_Instruction, `ecall` traps with cause 0x8 (from user) or 0x9 (from supervisor), and machine interrupts are always taken (mstatus.MIE only matters in machine mode). Exceptions whose medeleg bit is set go to supervisor mode when they happen in user or supervisor mode, and interrupts whose mideleg bit is set go to supervisor mode (never taken while in machine mode); everything else goes to machine mode. `sret` returns from a supervisor handler (illegal in user mode).
 
 Related: mstatus, mret, sret, ecall, csr-addresses
 
@@ -227,7 +227,7 @@ How it works: an interrupt is a trap, with the same steps as an exception (see t
 2. mcause = the cause, with bit 63 set: 0x8000000000000007 is the machine timer, 0x800000000000000b an external device.
 3. mstatus: MPIE = MIE, MIE = 0 (no interrupts inside the handler), MPP = the privilege level it came from.
 4. pc = mtvec (in vectored mode: mtvec base + 4 * cause).
-The handler deals with the device (reads the byte, sets the next timer) and ends with `mret`; the program never notices it was stopped.
+The handler deals with the device (reads the byte, sets the next timer) and ends with `mret`; the program never notices it was stopped. An interrupt delegated to supervisor mode (mideleg) does the same with sepc, scause, SPIE / SIE / SPP and stvec, and returns with `sret`.
 
 | | Exception | Interrupt |
 |---|---|---|
@@ -235,7 +235,7 @@ The handler deals with the device (reads the byte, sets the next timer) and ends
 | When | at that instruction, every time | between any two instructions, whenever it arrives |
 | mcause bit 63 | 0 | 1 |
 | mepc | the instruction that trapped | the next instruction, not yet run |
-| Can be turned off | no | yes: mie, mstatus.MIE |
+| Can be turned off | no | yes: mie, mstatus.MIE (sie, sstatus.SIE for supervisor mode's) |
 
 Fields: three switches decide whether an interrupt is taken now. All must be on:
 - mip bit: the interrupt is pending (the device is asking). Devices set it.
@@ -243,15 +243,24 @@ Fields: three switches decide whether an interrupt is taken now. All must be on:
 - mstatus.MIE: interrupts are enabled at all. Trap entry clears it; mret restores it.
 A pending interrupt that isn't enabled just waits in mip until it is. mie mip explains why there are two enable switches, and that taking an interrupt doesn't clear its mip bit.
 
+Which mode takes it: mideleg sends each interrupt to machine or supervisor mode, and that mode's switch (MIE or SIE) matters only while the hart is running in that mode:
+| The interrupt goes to | Hart in user mode | Hart in supervisor mode | Hart in machine mode |
+|---|---|---|---|
+| machine (mideleg bit 0) | always taken | always taken | only if mstatus.MIE |
+| supervisor (mideleg bit 1) | always taken | only if sstatus.SIE | never: it waits until the hart drops below machine mode |
+A lower mode can always be interrupted up, so a user program can't block the kernel's timer, and a kernel can't block the firmware's. A higher mode is never interrupted down: a trap never goes down a level.
+
+When several are ready, those going to machine mode come first; within each group external, then software, then timer: MEI, MSI, MTI, SEI, SSI, STI.
+
 For:
 - the timer: an OS gets control back every few milliseconds, even from a program that never gives up the CPU, and switches to another program.
 - devices: xv6 doesn't spin waiting for the UART. It puts the text in a buffer and runs other programs; each time the UART can take a byte, it interrupts and the handler sends the next one. A key press arrives the same way.
 
-Emulator: machine-mode interrupts work: the CLINT drives MTIP (its timer) and MSIP (msip), the hart takes them at instruction boundaries, and Prev steps back over them. The Steps tab marks such a step "interrupted before it ran". External interrupts (MEIP) wait for the PLIC; the UART keeps IER but raises nothing yet. Lesson 21.
+Emulator: machine-mode interrupts work: the CLINT drives MTIP (its timer) and MSIP (msip), the hart takes them at instruction boundaries, and Prev steps back over them. The Steps tab marks such a step "interrupted before it ran". Supervisor interrupts work too (interrupt_to_take, core/interrupts.odin, has the table above): software sets SSIP / STIP / SEIP, and mideleg sends them to supervisor mode. External interrupts (MEIP) wait for the PLIC; the UART keeps IER but raises nothing yet. Lesson 21.
 
 Watch out: an interrupt can arrive between any two instructions, so a handler must save and restore every register it uses (mscratch helps), and code that shares data with a handler must turn interrupts off around it, or use atomics.
 
-Related: interrupt-sources, polling, exception, trap, mie mip, mcause, mstatus
+Related: interrupt-sources, polling, exception, trap, mie mip, mideleg, sie sip, mcause, mstatus
 
 ## interrupt-sources - Where interrupts come from
 
@@ -270,7 +279,14 @@ How it works:
 
 For: the timer is what makes an OS preemptive; the PLIC is how one CPU line serves many devices.
 
-Emulator: the CLINT is there (MSI and MTI work; see clint); the PLIC isn't yet, so MEI never turns on. Supervisor mode adds a second set (SSI, STI, SEI) that machine mode can delegate.
+Supervisor mode has a second set, one bit below each machine one, that machine mode can delegate to it (mideleg):
+| Bit | Name | cause | Comes from |
+|---|---|---|---|
+| 1 | SSI: supervisor software | 0x8000000000000001 | software: machine mode, or the kernel itself through sip |
+| 5 | STI: supervisor timer | 0x8000000000000005 | machine mode forwarding its timer (stimecmp, later) |
+| 9 | SEI: supervisor external | 0x8000000000000009 | machine mode for now; the PLIC's supervisor line, later |
+
+Emulator: the CLINT is there (MSI and MTI work; see clint); the PLIC isn't yet, so MEI never turns on. The supervisor lines are set by software (csrs mip, or sip for SSI) and taken by supervisor mode when delegated.
 
 Related: interrupt, clint, mie mip, memory-map, uart
 

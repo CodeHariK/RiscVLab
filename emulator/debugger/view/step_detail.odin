@@ -49,10 +49,17 @@ step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Ste
 	// An interrupt is taken at the instruction boundary, before the
 	// instruction at the pc: nothing of it runs (it runs after mret).
 	if trap, took_trap := entry.trap.?; took_trap && rv.trap_is_interrupt(trap.cause) {
-		detail[.Execute] = fmt.tprintf(
-			"%v is pending and enabled: it is taken before this instruction, which doesn't run yet (it runs when the handler returns with mret)",
-			trap.cause,
-		)
+		if entry.record.trap_to_supervisor {
+			detail[.Execute] = fmt.tprintf(
+				"%v is pending and enabled, and mideleg delegates it: supervisor mode takes it before this instruction, which doesn't run yet (it runs when the handler returns with sret)",
+				trap.cause,
+			)
+		} else {
+			detail[.Execute] = fmt.tprintf(
+				"%v is pending and enabled: it is taken before this instruction, which doesn't run yet (it runs when the handler returns with mret)",
+				trap.cause,
+			)
+		}
 		detail[.Write] = write_text(entry)
 		return detail
 	}
@@ -268,7 +275,8 @@ write_text :: proc(entry: state.Timeline_Entry) -> string {
 	if trap, took_trap := entry.trap.?; took_trap {
 		if entry.record.trap_to_supervisor {
 			return fmt.tprintf(
-				"delegated (medeleg): sepc <- 0x%x, scause <- %s (%v), stval <- %s, sstatus: SPIE <- SIE, SIE <- 0, SPP <- %v; privilege <- Supervisor; pc <- stvec 0x%x",
+				"delegated (%s): sepc <- 0x%x, scause <- %s (%v), stval <- %s, sstatus: SPIE <- SIE, SIE <- 0, SPP <- %v; privilege <- Supervisor; pc <- stvec 0x%x",
+				"mideleg" if rv.trap_is_interrupt(trap.cause) else "medeleg",
 				entry.pc,
 				value_text(u64(trap.cause)),
 				trap.cause,

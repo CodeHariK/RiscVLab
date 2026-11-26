@@ -226,7 +226,15 @@ How it works: the exception codes the emulator raises today:
 | 0x8 | Ecall_From_U_Mode | ecall in user mode |
 | 0x9 | Ecall_From_S_Mode | ecall in supervisor mode |
 | 0xb | Ecall_From_M_Mode | ecall in machine mode |
-Page faults (0xc, 0xd, 0xf) come with paging, and interrupts (bit 63 set) with the timer.
+Page faults (0xc, 0xd, 0xf) come with paging. The interrupts have bit 63 set, then their bit in mip:
+| mcause | Cause | When |
+|---|---|---|
+| 0x8000000000000001 | Supervisor_Software_Interrupt | SSIP, not delegated (delegated, it goes to scause) |
+| 0x8000000000000003 | Machine_Software_Interrupt | the CLINT's msip |
+| 0x8000000000000005 | Supervisor_Timer_Interrupt | STIP, not delegated |
+| 0x8000000000000007 | Machine_Timer_Interrupt | the CLINT's alarm (lesson 21) |
+| 0x8000000000000009 | Supervisor_External_Interrupt | SEIP, not delegated |
+| 0x800000000000000b | Machine_External_Interrupt | the PLIC (later) |
 
 For: the first thing a handler does is read mcause and decide what to do: a system call, a fault to report, a timer tick.
 
@@ -319,7 +327,7 @@ Why a main switch, when mie exists: the two do different jobs. mie is the long-t
 | Set by | software | software; trap entry turns it off, mret back on |
 | Changes | rarely: when the OS starts using a device | on every trap and every return |
 | Applies in | every mode | machine mode only |
-The main switch applies only in machine mode: running in a lower mode, machine interrupts are always taken, whatever mstatus.MIE says, so a user program can't block the timer.
+The main switch applies only in machine mode: running in a lower mode, machine interrupts are always taken, whatever mstatus.MIE says, so a user program can't block the timer. Supervisor mode's interrupts follow the same rule with its own switch, sstatus.SIE (see interrupt for the full table).
 
 Taking an interrupt doesn't clear mip. The bit follows the device: the timer's stays 1 while mtime >= mtimecmp. The handler must clear the source, by writing a later mtimecmp or writing 0 to msip; otherwise the same interrupt is taken again right after mret.
 
@@ -367,7 +375,7 @@ Both together, step by step, starting with mip = 0:
 | the program sets a later mtimecmp | device | S bits: 0x020 | M bits: 0x000 | 0x020: STIP survives |
 Without the "keeps" half, a write would wipe out the timer's MTIP, and the next device update would wipe out software's STIP.
 
-Nothing takes a supervisor interrupt yet: a pending STIP just waits (the next step, 8c, takes them). The CSRs tab spells out both modes: "M software=0 timer=1 external=0, S software=0 timer=0 external=0".
+A supervisor bit that is pending and enabled is taken like any interrupt: by supervisor mode if mideleg delegates it, by machine mode otherwise (see interrupt). The CSRs tab spells out both modes: "M software=0 timer=1 external=0, S software=0 timer=0 external=0".
 
 Watch out:
 - A handler that doesn't clear the source is interrupted again as soon as it returns, forever.
@@ -432,7 +440,7 @@ Why the supervisor interrupts aren't simply always supervisor mode's: machine mo
 
 For: a kernel in supervisor mode taking its own timer, device and software interrupts. xv6's start.c sets mideleg to 0xffff at boot (the writable bits stick: 0x222).
 
-Emulator: mideleg keeps bits 1, 5 and 9 (MIDELEG_WRITABLE, core/csr.odin) and reads 0 everywhere else. For now it is only storage: interrupts are still taken by machine mode (step 8c makes trap_target follow mideleg). The CSRs tab lists the delegated ones: "to supervisor: S software=0 timer=1 external=0".
+Emulator: mideleg keeps bits 1, 5 and 9 (MIDELEG_WRITABLE, core/csr.odin) and reads 0 everywhere else. Interrupt entry follows it (trap_target, core/privilege.odin): a delegated interrupt writes sepc, scause (bit 63 set) and sstatus's SPIE / SIE / SPP and jumps to stvec, plus 4 * its number when stvec is vectored. It is held back by sstatus.SIE in supervisor mode and never taken in machine mode (interrupt_to_take, core/interrupts.odin). The step details say "mideleg delegates it". The CSRs tab lists the delegated ones: "to supervisor: S software=0 timer=1 external=0".
 
 Watch out: delegating is half the job. A delegated interrupt is also held back by its bit in mie (STIE for the timer; supervisor mode sets it through sie) and, in supervisor mode, by sstatus.SIE.
 
@@ -466,7 +474,7 @@ How it works: one register, two names. Write sstatus = 0x2 (SIE) and mstatus's b
 
 For: the kernel's half of trap handling. A trap into supervisor mode saves SIE into SPIE and the old level into SPP; `sret` puts them back, as `mret` does with the machine fields. xv6 reads sstatus to check where a trap came from (SPP) and sets SIE to turn its interrupts on and off.
 
-Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. A trap delegated to supervisor mode sets SPIE = SIE, SIE = 0 and SPP; `sret` puts them back (SIE = SPIE, SPIE = 1, SPP = user, level = old SPP). SIE starts holding back supervisor interrupts when they are taken (step 8c). RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
+Emulator: sstatus reads and writes mstatus through a mask (SSTATUS_MASK, core/csr.odin), and undo puts back only the supervisor fields. A trap delegated to supervisor mode sets SPIE = SIE, SIE = 0 and SPP; `sret` puts them back (SIE = SPIE, SPIE = 1, SPP = user, level = old SPP). SIE holds back delegated interrupts while the hart is in supervisor mode (in user mode they are always taken). RV64 also has a read-only UXL field (bits 33..32, user mode's width); it reads 0 here for now.
 
 Related: mstatus, privilege, stvec sepc scause stval sscratch, sie sip, csr-addresses
 
@@ -508,7 +516,7 @@ Why sip lets supervisor mode write only SSIP: SSIP is a software interrupt: noth
 
 For: a kernel's interrupt setup. xv6's start.c delegates everything (mideleg) and turns on the supervisor timer, software and external interrupts through sie (machine mode may use the supervisor CSRs too); older xv6's handler clears each forwarded tick by clearing SSIP in sip.
 
-Emulator: sie and sip read and write mie and mip through mideleg (core/csr.odin); undo puts back only the bits a write could change. The CSRs tab shows them under sstatus ("enabled (delegated only): S software=0 timer=1 external=0"). It marks a view and the CSR behind it whenever its value changed, whichever was written: a `csrw sie` marks mie too, a `csrw mie` marks sie only if a delegated bit changed, and a `csrw mideleg` marks sie and sip if what they show changed (debugger/state/csr_views.odin). Nothing takes a supervisor interrupt yet (step 8c).
+Emulator: sie and sip read and write mie and mip through mideleg (core/csr.odin); undo puts back only the bits a write could change. The CSRs tab shows them under sstatus ("enabled (delegated only): S software=0 timer=1 external=0"). It marks a view and the CSR behind it whenever its value changed, whichever was written: a `csrw sie` marks mie too, a `csrw mie` marks sie only if a delegated bit changed, and a `csrw mideleg` marks sie and sip if what they show changed (debugger/state/csr_views.odin).
 
 Watch out: an interrupt that isn't delegated reads 0 in both, even when it is enabled and pending in mie / mip. A kernel that sees sip = 0 while an interrupt is ringing should check mideleg first.
 
@@ -540,7 +548,7 @@ How it works: supervisor and machine mode may use them; user mode may not (Illeg
 
 For: an OS kernel in supervisor mode handling its programs' traps itself. Without its own set, every system call and page fault from a user program would go to machine mode first (the firmware), which would have to pass it on. With them, machine mode delegates those traps once at boot, and from then on they go straight to the kernel. xv6's kernel sets stvec to its trap handler and reads scause, sepc and stval there.
 
-Emulator: all five exist and keep their values (stvec clears bit 1 and sepc its low 2 bits, as mtvec and mepc do), and undo restores them. A trap delegated by medeleg writes sepc, scause and stval and jumps to stvec; machine traps leave them alone. `sret` jumps back to sepc.
+Emulator: all five exist and keep their values (stvec clears bit 1 and sepc its low 2 bits, as mtvec and mepc do), and undo restores them. A trap delegated by medeleg or mideleg writes sepc, scause and stval and jumps to stvec (vectored: interrupts go to stvec base + 4 * number); machine traps leave them alone. `sret` jumps back to sepc.
 
 Related: mtvec, mepc, mcause, mtval, mscratch, privilege, csr-addresses
 

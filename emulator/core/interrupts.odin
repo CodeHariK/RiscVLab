@@ -16,11 +16,10 @@ package rv
 // supervisor mode: it sets STIP.
 //
 // At each instruction boundary, a pending interrupt is taken if its bit
-// is set in both mip and mie, and interrupts are on: mstatus.MIE in
-// machine mode (always, from a lower privilege level). It is a trap like
-// any other (privilege.odin), with mcause bit 63 set, and mepc = the
-// instruction that hadn't run yet. If several are pending, external
-// beats software beats timer, as in the spec.
+// is set in both mip and mie, and the mode it goes to (mideleg) allows it
+// (interrupt_to_take). It is a trap like any other (privilege.odin), with
+// bit 63 of mcause / scause set, and mepc / sepc = the instruction that
+// hadn't run yet.
 
 // The interrupt bits, at the same place in mie (enabled) and mip
 // (pending): one per kind of interrupt and mode. Each machine bit has a
@@ -67,24 +66,72 @@ bus_interrupt_lines :: proc(bus: ^Bus, now: u64) -> (lines: u64, changes_at: u64
 	return lines & MACHINE_INTERRUPT_BITS, changes_at
 }
 
+// The order interrupts are taken in when several are ready (the spec's):
+// external, then software, then timer; machine before supervisor.
+@(rodata)
+INTERRUPT_PRIORITY := [?]Trap_Cause {
+	.Machine_External_Interrupt,
+	.Machine_Software_Interrupt,
+	.Machine_Timer_Interrupt,
+	.Supervisor_External_Interrupt,
+	.Supervisor_Software_Interrupt,
+	.Supervisor_Timer_Interrupt,
+}
+
 // The interrupt to take before the next instruction, if any.
+//
+// Each ready interrupt (pending and enabled) goes to the mode mideleg
+// picks, and that mode decides whether it can be taken now:
+//
+//   goes to \ hart in:   user     supervisor     machine
+//   machine               taken    taken          if mstatus.MIE
+//   supervisor            taken    if sstatus.SIE never
+//
+// The same rule both times: a mode's switch (MIE, SIE) holds back its own
+// interrupts only while the hart runs in that mode. A lower mode can
+// always be interrupted up; a higher mode is never interrupted down (a
+// delegated interrupt waits until the hart leaves machine mode).
+//
+// Interrupts going to machine mode come first; within each group,
+// INTERRUPT_PRIORITY's order. An undelegated supervisor interrupt goes to
+// machine mode, and is taken there after the machine ones.
 interrupt_to_take :: proc(cpu: ^Cpu) -> (cause: Trap_Cause, take: bool) {
 	ready := cpu.csr.mip & cpu.csr.mie // pending and enabled
 	if ready == 0 {
 		return {}, false
 	}
-	// In machine mode, mstatus.MIE = 0 holds every interrupt back. A lower
-	// mode can always be interrupted into machine mode.
-	if cpu.privilege == .Machine && cpu.csr.mstatus & MSTATUS_MIE == 0 {
-		return {}, false
+	to_machine := ready &~ cpu.csr.mideleg
+	to_supervisor := ready & cpu.csr.mideleg
+	if !interrupts_allowed(cpu, .Machine) {
+		to_machine = 0
 	}
-	switch {
-	case ready & MIP_MEIP != 0:
-		return .Machine_External_Interrupt, true
-	case ready & MIP_MSIP != 0:
-		return .Machine_Software_Interrupt, true
-	case ready & MIP_MTIP != 0:
-		return .Machine_Timer_Interrupt, true
+	if !interrupts_allowed(cpu, .Supervisor) {
+		to_supervisor = 0
+	}
+	for group in ([2]u64{to_machine, to_supervisor}) {
+		for candidate in INTERRUPT_PRIORITY {
+			if group & (u64(1) << trap_cause_number(candidate)) != 0 {
+				return candidate, true
+			}
+		}
 	}
 	return {}, false
+}
+
+// True if an interrupt going to `target` may be taken now (the table
+// above): always from a lower mode, never from a higher one, and in
+// `target` itself only if its switch is on.
+@(private = "file")
+interrupts_allowed :: proc(cpu: ^Cpu, target: Privilege) -> bool {
+	current := u32(cpu.privilege)
+	switch {
+	case current < u32(target):
+		return true
+	case current > u32(target):
+		return false
+	case target == .Machine:
+		return cpu.csr.mstatus & MSTATUS_MIE != 0
+	case:
+		return cpu.csr.mstatus & MSTATUS_SIE != 0
+	}
 }

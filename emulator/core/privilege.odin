@@ -93,16 +93,24 @@ privilege_implemented :: proc(privilege: Privilege) -> bool {
 // supervisor CSRs and fields: sepc, scause, stval, SPIE / SIE / SPP,
 // stvec.
 
-// Which mode takes the trap. Supervisor mode, if the trap is an
-// exception whose medeleg bit is set and the hart is below machine mode;
-// machine mode otherwise. A trap never goes down a level: an exception in
-// machine mode stays there whatever medeleg says. (Interrupts are always
-// machine traps for now; mideleg, their own delegation, comes later.)
+// Which mode takes the trap: supervisor mode if its delegation bit is
+// set, machine mode otherwise.
+//
+//   exceptions: medeleg, and only below machine mode. A trap never goes
+//               down a level: an exception in machine mode stays there
+//               whatever medeleg says.
+//   interrupts: mideleg. A delegated interrupt is never taken in machine
+//               mode at all (interrupt_to_take holds it back), so the
+//               same rule holds.
 trap_target :: proc(cpu: ^Cpu, trap: Trap) -> Privilege {
-	if trap_is_interrupt(trap.cause) || cpu.privilege == .Machine {
+	bit := u64(1) << trap_cause_number(trap.cause)
+	if trap_is_interrupt(trap.cause) {
+		return .Supervisor if cpu.csr.mideleg & bit != 0 else .Machine
+	}
+	if cpu.privilege == .Machine {
 		return .Machine
 	}
-	if cpu.csr.medeleg & (u64(1) << trap_cause_number(trap.cause)) != 0 {
+	if cpu.csr.medeleg & bit != 0 {
 		return .Supervisor
 	}
 	return .Machine

@@ -13,7 +13,9 @@ package rv
 // mip's supervisor bits are the other way round: no device drives them
 // (yet), machine-mode software sets and clears them with csrw mip. That
 // is how a machine-mode timer handler passes a tick down to a kernel in
-// supervisor mode: it sets STIP.
+// supervisor mode: it sets STIP. The exception is STIP with Sstc on
+// (menvcfg.STCE): then the supervisor timer drives it, 1 while
+// time >= stimecmp (supervisor_timer), and software writes leave it.
 //
 // At each instruction boundary, a pending interrupt is taken if its bit
 // is set in both mip and mie, and the mode it goes to (mideleg) allows it
@@ -134,4 +136,52 @@ interrupts_allowed :: proc(cpu: ^Cpu, target: Privilege) -> bool {
 	case:
 		return cpu.csr.mstatus & MSTATUS_SIE != 0
 	}
+}
+
+// The mip bits software writes (csrw mip; undo restores them): the
+// supervisor ones, except STIP while Sstc is on (the supervisor timer
+// drives it then).
+mip_software_bits :: proc(cpu: ^Cpu) -> u64 {
+	if cpu.csr.menvcfg & MENVCFG_STCE != 0 {
+		return SUPERVISOR_INTERRUPT_BITS &~ MIP_STIP
+	}
+	return SUPERVISOR_INTERRUPT_BITS
+}
+
+// The supervisor timer (Sstc), as the CLINT's alarm is for MTIP: while
+// menvcfg.STCE is on, STIP is a wire, 1 while time >= stimecmp.
+//
+//   drives:     Sstc is on, so STIP is the timer's (not software's)
+//   pending:    STIP now
+//   changes_at: the step clock time at which STIP next changes by itself
+//               (the alarm time comes), or max(u64): it only falls when
+//               software writes a later stimecmp (or moves mtime back),
+//               and machine_step looks again after those.
+//
+// With no clock attached (no CLINT), time never reaches anything: STIP
+// stays 0.
+supervisor_timer :: proc(cpu: ^Cpu, now: u64) -> (drives: bool, pending: bool, changes_at: u64) {
+	changes_at = max(u64)
+	if cpu.csr.menvcfg & MENVCFG_STCE == 0 {
+		return false, false, changes_at
+	}
+	source := cpu.time_source
+	if source.read == nil {
+		return true, false, changes_at
+	}
+	time := source.read(source.data, now)
+	alarm := cpu.csr.stimecmp
+	if time >= alarm {
+		return true, true, changes_at
+	}
+	// Rounded up: the first step at which time has reached the alarm.
+	ticks := alarm - time
+	steps := ticks / source.ticks_per_step
+	if ticks % source.ticks_per_step != 0 {
+		steps += 1
+	}
+	if steps <= max(u64) - now { // else: so far off it never comes
+		changes_at = now + steps
+	}
+	return true, false, changes_at
 }

@@ -412,8 +412,10 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 	case CSR_MENVCFG:
 		// Only STCE (WARL): the other fields' extensions don't exist.
 		csr.menvcfg = value & MENVCFG_WRITABLE
+		cpu.interrupts_change_at = 0 // STIP may change owner: look now
 	case CSR_STIMECMP:
 		csr.stimecmp = value
+		cpu.interrupts_change_at = 0 // STIP may rise or fall: look now
 	case CSR_MISA:
 		// Legal but ignored: the set of extensions can't be changed.
 	case CSR_MIE:
@@ -439,7 +441,10 @@ csr_write :: proc(cpu: ^Cpu, address: u32, value: u64) -> (ok: bool) {
 		// they take the written value. The mirror of
 		// machine_update_interrupts (machine.odin), which keeps the
 		// supervisor bits and takes the machine ones (docs: mie mip).
-		csr.mip = (csr.mip & MACHINE_INTERRUPT_BITS) | (value & SUPERVISOR_INTERRUPT_BITS)
+		// With Sstc on, STIP is the supervisor timer's (interrupts.odin):
+		// mip_software_bits leaves it out.
+		software := mip_software_bits(cpu)
+		csr.mip = (csr.mip &~ software) | (value & software)
 	case CSR_MCYCLE:
 		// step_clock = mcycle + step_clock_offset, and the step clock must
 		// go up by exactly 1 each step, even when software writes mcycle
@@ -520,9 +525,11 @@ csr_restore :: proc(cpu: ^Cpu, address: u32, value: u64) {
 	case CSR_MTVAL:
 		csr.mtval = value
 	case CSR_MIP:
-		// Only the software (supervisor) bits: the machine bits follow
-		// the devices, and are worked out again after a step back.
-		csr.mip = (csr.mip &~ SUPERVISOR_INTERRUPT_BITS) | (value & SUPERVISOR_INTERRUPT_BITS)
+		// Only the software bits: the machine bits follow the devices,
+		// and STIP the supervisor timer when Sstc is on; they are worked
+		// out again after a step back.
+		software := mip_software_bits(cpu)
+		csr.mip = (csr.mip &~ software) | (value & software)
 	case CSR_MCYCLE:
 		// Undoing a write to mcycle: the offset goes back too. The step
 		// being undone moved the clock on by one, so before it the clock

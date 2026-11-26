@@ -30,7 +30,7 @@ and, where it teaches something new, a lesson.
 - [x] Supervisor mode: s-CSRs (sstatus, stvec, sepc, scause, stval,
       sscratch), medeleg, sret; mideleg, sie / sip, taking supervisor
       interrupts; the time CSR; mcounteren / scounteren
-- [ ] Sstc for xv6's timer: menvcfg.STCE, stimecmp, STIP from
+- [x] Sstc for xv6's timer: menvcfg.STCE, stimecmp, STIP from
       time >= stimecmp
 - [ ] rv64mi / rv64si tests; a lesson in supervisor mode
 - [ ] Time: wfi jumps the clock to the next alarm; a host clock for running

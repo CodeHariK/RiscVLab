@@ -20,10 +20,6 @@ Bus :: struct {
 	// before (machine_step copies it to the undo record). Written only
 	// when DEBUG_RECORD_STEPS is on.
 	debug_touched: Device_Touch,
-	// The step clock time (step_clock) at which the devices' interrupt
-	// lines change next by themselves (the CLINT's alarm); until then mip
-	// stays as it is.
-	interrupts_change_at: u64,
 }
 
 MAX_DEVICES :: 8

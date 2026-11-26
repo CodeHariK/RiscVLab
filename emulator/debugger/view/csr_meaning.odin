@@ -119,7 +119,18 @@ csr_meaning :: proc(session: ^state.Session, address: u32, value: u64) -> string
 		if value == rv.STIMECMP_RESET {
 			return "no alarm (all ones)"
 		}
-		return fmt.tprintf("supervisor timer alarm at time %s", value_text(value))
+		cpu := &session.machine.cpu
+		now := rv.step_clock(cpu)
+		drives, pending, changes_at := rv.supervisor_timer(cpu, now)
+		switch {
+		case !drives:
+			return fmt.tprintf("alarm at time %s (Sstc off: unused)", value_text(value))
+		case pending:
+			return fmt.tprintf("alarm at time %s: reached, STIP pending", value_text(value))
+		case changes_at != max(u64):
+			return fmt.tprintf("alarm at time %s: STIP in %d steps", value_text(value), changes_at - now)
+		}
+		return fmt.tprintf("alarm at time %s", value_text(value))
 	}
 	return value_text(value)
 }

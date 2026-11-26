@@ -283,7 +283,7 @@ Supervisor mode has a second set, one bit below each machine one, that machine m
 | Bit | Name | cause | Comes from |
 |---|---|---|---|
 | 1 | SSI: supervisor software | 0x8000000000000001 | software: machine mode, or the kernel itself through sip |
-| 5 | STI: supervisor timer | 0x8000000000000005 | machine mode forwarding its timer (stimecmp, later) |
+| 5 | STI: supervisor timer | 0x8000000000000005 | stimecmp with Sstc on (time >= stimecmp); without it, machine mode forwarding its timer |
 | 9 | SEI: supervisor external | 0x8000000000000009 | machine mode for now; the PLIC's supervisor line, later |
 
 Emulator: the CLINT is there (MSI and MTI work; see clint); the PLIC isn't yet, so MEI never turns on. The supervisor lines are set by software (csrs mip, or sip for SSI) and taken by supervisor mode when delegated.

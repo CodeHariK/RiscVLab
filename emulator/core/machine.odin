@@ -90,7 +90,7 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 	}
 	machine.bus.device_accessed = false
 
-	if step_clock(cpu) >= machine.bus.interrupts_change_at {
+	if step_clock(cpu) >= cpu.interrupts_change_at {
 		machine_update_interrupts(machine) // an alarm time has come
 	}
 	result: Step_Result
@@ -151,26 +151,34 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 			history_push(&machine.debug_history, cpu.debug_undo)
 		}
 	}
-	// Look again if a device register was used or an alarm time came.
-	// (mie and mstatus.MIE don't change mip: they are checked when the
+	// Look again if a device register was used, or an alarm time came
+	// (a CSR write that moved the supervisor timer set it to 0). (mie
+	// and mstatus.MIE don't change mip: they are checked when the
 	// interrupt is about to be taken, above.)
-	if machine.bus.device_accessed || step_clock(cpu) >= machine.bus.interrupts_change_at {
+	if machine.bus.device_accessed || step_clock(cpu) >= cpu.interrupts_change_at {
 		machine_update_interrupts(machine)
 	}
 	return nil
 }
 
-// Sets mip's machine bits to what the devices drive now, and notes when
-// to look again. They are never stored for undo: they follow from the
-// devices' state and the step clock, so they are worked out again
-// whenever either changes. The supervisor bits are software's (csrw mip;
-// undo restores them like any CSR write) and are kept: the mirror of a
-// csrw mip (csr_write), which keeps the machine bits (docs: mie mip).
+// Sets mip's wired bits to what drives them now, and notes when to look
+// again: the machine bits from the devices, and STIP from the supervisor
+// timer when Sstc is on. They are never stored for undo: they follow from
+// the devices' state, the CSRs and the step clock, so they are worked out
+// again whenever one changes. The software bits (mip_software_bits; csrw
+// mip, and undo restores them like any CSR write) are kept: the mirror of
+// a csrw mip (csr_write), which keeps the wired bits (docs: mie mip).
 machine_update_interrupts :: proc(machine: ^Machine) {
-	csr := &machine.cpu.csr
-	lines: u64
-	lines, machine.bus.interrupts_change_at = bus_interrupt_lines(&machine.bus, step_clock(&machine.cpu))
-	csr.mip = (csr.mip & SUPERVISOR_INTERRUPT_BITS) | lines
+	cpu := &machine.cpu
+	now := step_clock(cpu)
+	lines, changes_at := bus_interrupt_lines(&machine.bus, now)
+	_, stip, timer_changes_at := supervisor_timer(cpu, now)
+	if stip {
+		lines |= MIP_STIP
+	}
+	changes_at = min(changes_at, timer_changes_at)
+	cpu.csr.mip = (cpu.csr.mip & mip_software_bits(cpu)) | lines
+	cpu.interrupts_change_at = changes_at
 }
 
 // Undoes the most recent recorded step. Returns false when there is

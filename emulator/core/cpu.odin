@@ -29,6 +29,11 @@ Cpu :: struct {
 	// that the CLINT follows (step_clock = mcycle + step_clock_offset). It
 	// changes only when a program writes mcycle (csr_write).
 	step_clock_offset: u64,
+	// The step clock time at which mip's wired bits change next by
+	// themselves (the CLINT's alarm, the supervisor timer's); until then
+	// machine_step leaves mip as it is. A CSR write that moves the
+	// supervisor timer (stimecmp, menvcfg) sets it to 0: "look now".
+	interrupts_change_at: u64,
 	// Set when this step's CSR instruction wrote minstret / mcycle: the
 	// written value then stands, without the instruction's own count
 	// (cpu_step). Cleared at the start of each step. (mcycle also counts a
@@ -59,8 +64,11 @@ Cpu :: struct {
 // bus. Not set (no CLINT, as in most unit tests): reading time is an
 // illegal instruction, as on real cores that leave rdtime to firmware.
 Time_Source :: struct {
-	data: rawptr,
-	read: proc(data: rawptr, now: u64) -> u64,
+	data:           rawptr,
+	read:           proc(data: rawptr, now: u64) -> u64,
+	// How many ticks of time one step is: to work out when the
+	// supervisor timer's alarm comes (supervisor_timer).
+	ticks_per_step: u64,
 }
 
 // The step clock: one tick per step, like mcycle, but no program can

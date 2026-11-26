@@ -301,7 +301,7 @@ Fields: both registers have the same layout. Bit n is interrupt n, the number th
 |---|---|---|---|---|
 | 1 | SSIP | SSIE | supervisor software | software: `csrs mip`, or `csrs sip` from supervisor mode |
 | 3 | MSIP | MSIE | machine software | the CLINT's msip register (another hart) |
-| 5 | STIP | STIE | supervisor timer | software: machine mode's `csrs mip` (stimecmp, later) |
+| 5 | STIP | STIE | supervisor timer | software: machine mode's `csrs mip`; with Sstc on, the supervisor timer (time >= stimecmp) |
 | 7 | MTIP | MTIE | machine timer | the CLINT, when mtime reaches mtimecmp |
 | 9 | SEIP | SEIE | supervisor external | software: machine mode's `csrs mip` (the PLIC, later) |
 | 11 | MEIP | MEIE | machine external | the PLIC (later), for the UART, the disk, ... |
@@ -377,6 +377,13 @@ Both together, step by step, starting with mip = 0:
 | `csrs mip, t0` with t0 = 0x20 again | program | M bits: 0x080 | S bits: 0x020 | 0x0a0 |
 | the program sets a later mtimecmp | device | S bits: 0x020 | M bits: 0x000 | 0x020: STIP survives |
 Without the "keeps" half, a write would wipe out the timer's MTIP, and the next device update would wipe out software's STIP.
+
+With Sstc on (menvcfg.STCE = 1), STIP changes sides: the supervisor timer drives it, 1 while time >= stimecmp, so it joins the wired bits:
+| | Wired (worked out, not written) | Software's (mip_software_bits) |
+|---|---|---|
+| Sstc off | MEIP, MTIP, MSIP | SEIP, STIP, SSIP (0x222) |
+| Sstc on | MEIP, MTIP, MSIP, STIP | SEIP, SSIP (0x202) |
+The same two merges keep the sides apart; only the masks change.
 
 A supervisor bit that is pending and enabled is taken like any interrupt: by supervisor mode if mideleg delegates it, by machine mode otherwise (see interrupt). The CSRs tab spells out both modes: "M software=0 timer=1 external=0, S software=0 timer=0 external=0".
 
@@ -515,7 +522,7 @@ For example, with mideleg = 0x20 (only the timer delegated) and mie = 0xa0 (MTIE
 | `csrw sie, zero` | STIE off | 0x080: MTIE stays |
 | `csrw sie, t0` with t0 = -1 | STIE on; SSIE and SEIE aren't delegated, so stay off | 0x0a0 |
 
-Why sip lets supervisor mode write only SSIP: SSIP is a software interrupt: nothing outside raises it but software, so the kernel may set and clear it (older xv6 gets its timer ticks as SSIP, and clears it after each one). STIP and SEIP stand for something outside the kernel: the timer (forwarded by machine mode, or stimecmp later) and the PLIC. The kernel clears those by dealing with the source, as with mip's machine bits.
+Why sip lets supervisor mode write only SSIP: SSIP is a software interrupt: nothing outside raises it but software, so the kernel may set and clear it (older xv6 gets its timer ticks as SSIP, and clears it after each one). STIP and SEIP stand for something outside the kernel: the timer (forwarded by machine mode, or stimecmp) and the PLIC. The kernel clears those by dealing with the source, as with mip's machine bits.
 
 For: a kernel's interrupt setup. xv6's start.c delegates everything (mideleg) and turns on the supervisor timer, software and external interrupts through sie (machine mode may use the supervisor CSRs too); older xv6's handler clears each forwarded tick by clearing SSIP in sip.
 
@@ -624,7 +631,7 @@ Below machine mode it may be used only when machine mode has turned Sstc on (men
 
 For: a kernel's clock tick. xv6 sets `stimecmp = time + 1000000` in start.c and again in each timer interrupt.
 
-Emulator: stimecmp is stored and checked (stimecmp_allowed, core/csr.odin) and starts as all ones (no alarm). It doesn't raise STIP yet: that comes next, with the comparison against time.
+Emulator: stimecmp is checked (stimecmp_allowed, core/csr.odin) and starts as all ones (no alarm). With STCE on, supervisor_timer (core/interrupts.odin) works STIP out the way the CLINT works out MTIP: whenever the alarm time comes, and right after a write to stimecmp or menvcfg (the write sets Cpu.interrupts_change_at to 0, "look now"). STIP isn't recorded for undo: after a step back it is worked out again from time and stimecmp. The CSRs tab counts down: "alarm at time 0x72: STIP in 85 steps".
 
 Related: menvcfg, time, mcounteren scounteren, mie mip, clint
 
@@ -642,7 +649,7 @@ csrw   stimecmp, t0       # next tick: now + 1000000
 
 Does: switches, set by machine mode, for features the modes below it may use. Here only one: STCE (bit 63), which turns Sstc (stimecmp) on.
 
-How it works: with STCE = 0, stimecmp doesn't exist below machine mode and STIP is software's to set (the old way). With STCE = 1, supervisor mode may use stimecmp (if mcounteren.TM is set too), and STIP follows the timer. The other fields (bit 0 FIOM, the cache-block bits 4 to 7, PBMTE in bit 62, ...) belong to extensions this hart doesn't have and read 0.
+How it works: with STCE = 0, stimecmp doesn't exist below machine mode and STIP is software's to set (the old way). With STCE = 1, supervisor mode may use stimecmp (if mcounteren.TM is set too), and STIP follows the timer: 1 while time >= stimecmp, and software writes to mip leave it alone. The other fields (bit 0 FIOM, the cache-block bits 4 to 7, PBMTE in bit 62, ...) belong to extensions this hart doesn't have and read 0.
 
 For: firmware enabling extensions for the kernel. xv6's start.c sets STCE first thing in its timer setup.
 

@@ -69,7 +69,7 @@ clint_attach :: proc(machine: ^rv.Machine) -> ^Clint {
 		free(clint)
 		return nil
 	}
-	machine.cpu.time_source = {data = clint, read = clint_time}
+	machine.cpu.time_source = {data = clint, read = clint_time, ticks_per_step = CLINT_TICKS_PER_STEP}
 	return clint
 }
 

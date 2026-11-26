@@ -26,10 +26,13 @@ and, where it teaches something new, a lesson.
 - [x] CLINT timer and machine-mode interrupts: msip, mtimecmp, mtime following
       the step clock (deterministic, undoable), interrupts taken at instruction
       boundaries, vectored mtvec, wfi as a nop (lesson 21)
-- [ ] Supervisor and user modes: s-CSRs (sstatus, stvec, sepc, scause, ...),
-      medeleg / mideleg, sret, ecall from U / S (rv64mi / rv64si tests);
-      a lesson that drops into user mode; Sstc (stimecmp, the time CSR) for
-      xv6's timer
+- [x] User mode: mret down, ecall up, CSR levels enforced (lesson 24)
+- [x] Supervisor mode: s-CSRs (sstatus, stvec, sepc, scause, stval,
+      sscratch), medeleg, sret; mideleg, sie / sip, taking supervisor
+      interrupts; the time CSR; mcounteren / scounteren
+- [ ] Sstc for xv6's timer: menvcfg.STCE, stimecmp, STIP from
+      time >= stimecmp
+- [ ] rv64mi / rv64si tests; a lesson in supervisor mode
 - [ ] Time: wfi jumps the clock to the next alarm; a host clock for running
       xv6's shell from rvemu
 - [ ] UART output is kept whole (undo puts back its length); a long xv6
@@ -63,6 +66,27 @@ and, where it teaches something new, a lesson.
 - [ ] Locals, functions (calling convention), pointers, arrays, structs,
       globals, strings
 - [ ] Compile the lessons' C equivalents, then xv6 user programs or the games
+
+## Own ISA: simple, but runs an OS
+
+After xv6 on RISC-V: by then it is clear which parts an OS really needs,
+and xv6's tests have shown the emulator is right. A "RISC-V distilled"
+that the C compiler targets, the games run on, and that fits an FPGA.
+Most of RISC-V's weight is the privileged side's generality (three modes,
+delegation, extensions), not the instructions.
+
+- [ ] Look at small designs for ideas: Wirth's RISC5 (Project Oberon),
+      MIPS R3000 with OS/161 (software-filled TLB), Nand2Tetris Hack
+- [ ] Design it: 32-bit, 16 registers, about 40 instructions; two modes
+      (user, kernel), one trap vector, a few control registers (status,
+      cause, epc, trap value, page-table base); one timer compare; a
+      two-level page table; one interrupt line from a simple controller
+- [ ] Spec document and encoding tables, written like docs/reference
+- [ ] Emulator core for it, reusing the bus, devices, undo history,
+      debugger and docs system
+- [ ] Assembler, then a C compiler back end for it
+- [ ] Port the small OS (xv6 in Odin, or a smaller one) to it
+- [ ] Maybe: run it on an FPGA
 
 ## Maybe later
 

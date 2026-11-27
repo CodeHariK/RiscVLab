@@ -140,18 +140,23 @@ draw_panel :: proc(session: ^state.Session, panel: Panel) {
 				}
 			}
 		}
-		scroll := clay.Vector2{}
-		if !is_code_tab(shown) {
-			scroll = clay.GetScrollOffset()
-		}
 		current_tab_area = tab_area_id(panel)
+		// The scroll offset is read inside the config, after clay.UI has opened the tab area: GetScrollOffset answers
+		// for the open element, and read before it, it was the panel's (always zero), so no tab scrolled.
 		if clay.UI(current_tab_area)({
 			layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}, layoutDirection = .TopToBottom, childGap = 2},
-			clip = {horizontal = true, vertical = true, childOffset = scroll},
+			clip = {horizontal = true, vertical = true, childOffset = tab_scroll_offset(shown)},
 		}) {
 			draw_tab(session, shown)
 		}
 	}
+}
+
+// The open tab area's scroll offset, for Clay to scroll it: zero for the code tabs, which scroll themselves.
+// Call it while the tab area is the open element.
+@(private)
+tab_scroll_offset :: proc(tab: Tab) -> clay.Vector2 {
+	return {} if is_code_tab(tab) else clay.GetScrollOffset()
 }
 
 @(private)

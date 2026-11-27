@@ -10,8 +10,9 @@ import state "../state"
 // The CSRs tab: the privilege level and every implemented CSR, what each
 // value means (csr_meaning.odin), and what the last step changed.
 
-// The privilege level and every implemented CSR (see csr_meaning.odin),
-// with whatever the last step changed highlighted. Two rows per CSR, so
+// The privilege level and every implemented CSR (see csr_meaning.odin).
+// Whatever the last step changed comes first, highlighted, so it's in view
+// without scrolling; the rest keep their usual order. Two rows per CSR, so
 // the panel doesn't need to be wide:
 //
 //   #4  mstatus  0x300  0x0000000000001880
@@ -25,7 +26,7 @@ tab_csrs :: proc(session: ^state.Session) {
 
 	rows := make([dynamic]ui.Table_Row, 0, 2 * len(csr_view_order) + 1, context.temp_allocator)
 	append(&rows, ui.Table_Row{cells = ui.cells({}, {text = "privilege"}, {}, {text = fmt.tprintf("%v", cpu.privilege)})})
-	for address in csr_view_order {
+	for address in csrs_changed_first(session) {
 		value, _ := rv.csr_read(cpu, address)
 		highlight := colors.changed if csr_changed_by_last_step(session, address) else ui.COLOR_NONE
 		append(&rows, ui.Table_Row{
@@ -48,4 +49,22 @@ tab_csrs :: proc(session: ^state.Session) {
 	options := tab_table()
 	options.min_columns = {"#99"}
 	ui.table(clay.ID("CsrTable"), rows[:], options)
+}
+
+// csr_view_order with the CSRs the last step changed moved to the front,
+// each group keeping its usual order.
+@(private)
+csrs_changed_first :: proc(session: ^state.Session) -> []u32 {
+	ordered := make([dynamic]u32, 0, len(csr_view_order), context.temp_allocator)
+	for address in csr_view_order {
+		if csr_changed_by_last_step(session, address) {
+			append(&ordered, address)
+		}
+	}
+	for address in csr_view_order {
+		if !csr_changed_by_last_step(session, address) {
+			append(&ordered, address)
+		}
+	}
+	return ordered[:]
 }

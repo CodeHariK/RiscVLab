@@ -158,7 +158,7 @@ Related: mcycle minstret cycle instret
 
 Does: a rule for CSR fields: software may write any value, but the field only keeps values the hardware supports, and reads always give a legal value.
 
-How it works: here mstatus.MPP only holds the modes the hart has, user (0b00) and machine (0b11), so writing 0b01 (supervisor) into it leaves the old value. The step details say when a CSR kept something other than what was written.
+How it works: here mstatus.MPP only holds the levels that exist, user (0b00), supervisor (0b01) and machine (0b11), so writing the reserved 0b10 into it leaves the old value. The step details say when a CSR kept something other than what was written.
 
 For: software can find out what the hardware supports by writing a value and reading it back.
 

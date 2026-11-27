@@ -130,7 +130,7 @@ Fields: one 64-bit register made of small fields; these are the ones this emulat
 ```
 - MIE (bit 3): machine interrupts enabled. Trap entry clears it, so a handler is not interrupted.
 - MPIE (bit 7): MIE as it was before the last trap. `mret` copies it back into MIE.
-- MPP (bits 12..11): the privilege level before the last trap: 0b00 user, 0b01 supervisor, 0b11 machine (0b10 is reserved). `mret` returns to it.
+- MPP (bits 12..11): where the next `mret` goes, which is the level the last trap came from: 0b00 user, 0b01 supervisor, 0b11 machine (0b10 is reserved). It is a return slot, not the level the hart runs at: writing it changes nothing until `mret` (see privilege).
 - SIE (bit 1), SPIE (bit 5), SPP (bit 8): supervisor mode's copies of MIE, MPIE and MPP, for traps into supervisor mode. SPP is one bit (0 user, 1 supervisor): a trap into supervisor mode never comes from machine mode. Supervisor mode reaches them through sstatus.
 
 How it works: a field in the middle of a register is read by masking and shifting. MPP is bits 12..11, so its mask is 0b11 << 11 = 0x1800: `(mstatus & 0x1800) >> 11` gives 0..3, the mode. Writing it clears those two bits and ORs in the mode shifted left by 11. On a trap, MPIE = MIE, MIE = 0 and MPP = the current level. On `mret`, MIE = MPIE, MPIE = 1, the level = MPP, and MPP = the least privileged mode.
@@ -146,6 +146,8 @@ For: turning interrupts on and off (`csrsi mstatus, 0x8` / `csrci mstatus, 0x8`)
 Emulator: all three modes exist, so MPP holds 0b11 (machine), 0b01 (supervisor) or 0b00 (user); writing the reserved 0b10 leaves it as it was (WARL). After `mret`, MPP = 0b00, the least privileged mode. mstatus starts as 0x1800 (MPP = machine). SIE, SPIE and SPP are written by traps delegated to supervisor mode (medeleg) and read back by `sret`. SUM and MXR arrive with paging.
 
 Watch out: MIE only affects interrupts (the CLINT's timer, lesson 21); exceptions from instructions happen whatever MIE says.
+
+Watch out: MPP is not the current privilege level. No CSR holds that (the debugger's CSRs tab shows it on its "privilege" line). Machine code sets MPP to supervisor and stays in machine mode until `mret`. And a lower level can't use MPP to climb: mstatus is a machine CSR (0x300), so user or supervisor code that reads or writes it gets Illegal_Instruction.
 
 Related: mret, mie, mtvec, privilege, sstatus
 
@@ -417,7 +419,7 @@ The bits this hart has:
 
 For: an OS kernel in supervisor mode handling its own programs' exceptions. Without delegation, every system call and fault from a user program would trap to machine mode (the firmware), which would have to pass it on to the kernel. xv6's firmware stage (start.c) sets medeleg to all ones at boot, so everything that can go to the kernel does. Interrupts have their own register, mideleg.
 
-Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/privilege.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret` returns from a supervisor trap.
+Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/privilege.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret` returns from a supervisor trap. Lesson 25.
 
 Watch out: delegation only moves where the trap goes, not what is allowed. A delegated exception from user mode lands in supervisor mode, but supervisor mode still can't touch machine CSRs, and an exception in machine mode always stays there.
 
@@ -478,9 +480,11 @@ Fields: the supervisor bits of mstatus, at the same positions; every other bit r
 |---|---|---|---|
 | SIE | 1 | supervisor interrupts on | MIE (bit 3) |
 | SPIE | 5 | SIE as it was before the last trap into supervisor mode | MPIE (bit 7) |
-| SPP | 8 | the level the last trap into supervisor mode came from: 0 user, 1 supervisor | MPP (bits 12..11) |
+| SPP | 8 | where the next `sret` goes, which is the level the last trap into supervisor mode came from: 0 user, 1 supervisor | MPP (bits 12..11) |
 
 How it works: one register, two names. Write sstatus = 0x2 (SIE) and mstatus's bit 1 turns on; write mstatus with SPP set and sstatus shows it. The machine fields (MIE, MPIE, MPP) can't be seen or changed through sstatus, so a kernel in supervisor mode manages its own interrupt state without touching the firmware's.
+
+Watch out: like MPP, SPP is a return slot, not the current level: the kernel clears it to start a program and stays in supervisor mode until `sret`. User code can't reach sstatus (0x100 is a supervisor CSR), so it can't raise itself either.
 
 For: the kernel's half of trap handling. A trap into supervisor mode saves SIE into SPIE and the old level into SPP; `sret` puts them back, as `mret` does with the machine fields. xv6 reads sstatus to check where a trap came from (SPP) and sets SIE to turn its interrupts on and off.
 

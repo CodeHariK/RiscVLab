@@ -206,7 +206,9 @@ How they move, starting from machine code that set MPP to supervisor and runs `m
 | after the `mret` | supervisor (taken from MPP) | user (`mret` clears it to the least privileged level, see mret) |
 | after an `ecall` in supervisor mode | machine (every trap goes up) | supervisor (the trap saved where it came from) |
 | after the handler's `mret` | supervisor | user |
-To enter user mode, machine code clears MPP and runs `mret`: `li t0, 0x1800`, `csrc mstatus, t0`, `mret` (lesson 24).
+To enter user mode, machine code clears MPP and runs `mret`: `li t0, 0x1800`, `csrc mstatus, t0`, `mret` (lesson 24). A kernel in supervisor mode starts a program the same way one level down: SPP = 0, sepc, `sret` (lesson 25).
+
+Watch out: the only way up is a trap, and it lands at the handler the higher level chose (mtvec, or stvec when delegated). Lower code can't raise itself by writing MPP or SPP: mstatus is machine only and sstatus supervisor only, so the attempt is an Illegal_Instruction trap, and `mret` / `sret` from too low a level are illegal too.
 
 Why no CSR shows the current level: so a program can't simply check which level it really runs at. That keeps virtualization possible: a hypervisor can run a kernel one level lower than the kernel thinks, and catch (trap) whatever the kernel isn't allowed to do there. Code finds out what it may do only by trying and seeing whether it traps. Machine code never needs the current level anyway: inside a trap handler it is machine, and MPP says where the trap came from.
 

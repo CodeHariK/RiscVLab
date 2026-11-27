@@ -85,12 +85,13 @@ panel_area :: proc(session: ^state.Session) {
 		}
 		divider({.Main_Bottom, 0})
 		if clay.UI(clay.ID("BottomRow"))({layout = {sizing = {clay.SizingGrow(), clay.SizingGrow()}}}) {
-			if layout.bottom_count == 2 {
-				slot(session, {column = -1}, {clay.SizingPercent(layout.bottom_split), clay.SizingGrow()})
-				divider({.Bottom_Edge, 0})
-				slot(session, {column = -1, lower = true}, {clay.SizingGrow(), clay.SizingGrow()})
-			} else {
-				slot(session, {column = -1}, {clay.SizingGrow(), clay.SizingGrow()})
+			for position in 0 ..< layout.bottom_count {
+				is_last := position == layout.bottom_count - 1
+				width := clay.SizingGrow() if is_last else clay.SizingPercent(layout.bottom_widths[position])
+				slot(session, {column = -1, position = position}, {width, clay.SizingGrow()})
+				if !is_last {
+					divider({.Bottom_Edge, position})
+				}
 			}
 		}
 	}

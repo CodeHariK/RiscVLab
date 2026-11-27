@@ -7,20 +7,20 @@ import ui "../ui"
 // The panel layout: resizing and rearranging the panels.
 //
 // Below the toolbar, the window is a row of up to three columns, with a
-// bottom row of one or two panels. Each column holds one panel, or two
+// bottom row of one to three panels. Each column holds one panel, or two
 // stacked with a divider between them:
 //
 //   +-----------+--------+--------+
 //   | column 0  | col. 1 | col. 2 |     | between columns
 //   |  top      |        |        |     - between a column's two panels
 //   +-----------+        |        |     - above the bottom row
-//   |  bottom   |        |        |     | between the two bottom panels
+//   |  bottom   |        |        |     | between bottom panels
 //   +-----------+--------+--------+
-//   | bottom 0     | bottom 1     |
-//   +--------------+--------------+
+//   | bottom 0  | bottom 1 | b. 2  |
+//   +-----------+----------+-------+
 //
 // The layout is three columns (Code, Registers, the side panel) above a
-// bottom row with Encoding and Console side by side. Drag a divider to resize, or
+// bottom row with Encoding, Path and Console side by side. Drag a divider to resize, or
 // drag a panel by its grip (the "::" in its header) onto another panel to
 // swap the two.
 //
@@ -33,6 +33,7 @@ Panel :: enum {
 	Side,      // tabbed: CSRs, Memory, Stack, ELF
 	Registers, // the register list (the middle column)
 	Console,   // what the program printed (next to Encoding)
+	Path,      // the emulator functions the next step goes through
 }
 
 panel_names := [Panel]string {
@@ -41,9 +42,11 @@ panel_names := [Panel]string {
 	.Side        = "Side panel",
 	.Registers   = "Registers",
 	.Console     = "Console",
+	.Path        = "Path",
 }
 
 MAX_COLUMNS :: 3
+MAX_BOTTOM :: 3 // panels in the bottom row
 
 Column :: struct {
 	top:        Panel,
@@ -57,8 +60,9 @@ Column :: struct {
 
 // Where a panel sits: a column's top or lower half, or the bottom row.
 Slot :: struct {
-	column: int, // -1 = the bottom row
-	lower:  bool, // in a column: the lower panel; in the bottom row: the second (right) panel
+	column:   int, // -1 = the bottom row
+	lower:    bool, // in a column: the lower panel
+	position: int, // in the bottom row: 0 is the leftmost
 }
 
 Divider_Kind :: enum {
@@ -66,7 +70,7 @@ Divider_Kind :: enum {
 	Column_Edge, // right edge of `column`
 	Column_Rows, // between `column`'s top and bottom panels
 	Main_Bottom, // above the bottom row
-	Bottom_Edge, // between the two bottom panels
+	Bottom_Edge, // right edge of bottom panel `column`
 }
 
 Divider :: struct {
@@ -77,10 +81,11 @@ Divider :: struct {
 Panel_Layout :: struct {
 	columns:          [MAX_COLUMNS]Column,
 	column_count:     int,
-	bottom:           [2]Panel,
+	bottom:           [MAX_BOTTOM]Panel,
 	bottom_count:     int,
-	// Fraction of the bottom row's width for its first panel.
-	bottom_split:     f32,
+	// Fraction of the bottom row's width for each panel (the last takes
+	// what is left), as for the columns.
+	bottom_widths:    [MAX_BOTTOM]f32,
 	// Fraction of the area below the toolbar for the columns.
 	main_height:      f32,
 	dragging_divider: Divider,
@@ -105,9 +110,10 @@ DIVIDER_THICKNESS :: ui.PANEL_GAP
 //   | Code        | Registers | Side panel       |
 //   |             |           | (CSRs, Memory..) |
 //   +-------------+-----------+------------------+
-//   | Encoding (the next         | Console         |
-//   | instruction, its effect)   | (printed text)  |
-//   +----------------------------+-----------------+
+//   | Encoding (the next  | Path (its      | Console  |
+//   | instruction, its    | calls in the   | (printed |
+//   | effect)             | emulator)      |  text)   |
+//   +---------------------+----------------+----------+
 reset_panel_layout :: proc() {
 	layout := &panel_layout
 	layout^ = {}
@@ -115,9 +121,9 @@ reset_panel_layout :: proc() {
 	layout.columns[0] = {top = .Code, width = 0.44}
 	layout.columns[1] = {top = .Registers, width = 0.26}
 	layout.columns[2] = {top = .Side}
-	layout.bottom_count = 2
-	layout.bottom = {.Encoding, .Console}
-	layout.bottom_split = 0.62
+	layout.bottom_count = 3
+	layout.bottom = {.Encoding, .Path, .Console}
+	layout.bottom_widths = {0.5, 0.25, 0}
 	layout.main_height = 0.74
 }
 
@@ -125,7 +131,7 @@ reset_panel_layout :: proc() {
 
 slot_id :: proc(slot: Slot) -> clay.ElementId {
 	if slot.column < 0 {
-		return clay.ID("SlotBottom", u32(slot.lower))
+		return clay.ID("SlotBottom", u32(slot.position))
 	}
 	return clay.ID("Slot", u32(slot.column * 2 + int(slot.lower)))
 }
@@ -146,7 +152,7 @@ divider_id :: proc(divider: Divider) -> clay.ElementId {
 
 panel_in :: proc(slot: Slot) -> Panel {
 	if slot.column < 0 {
-		return panel_layout.bottom[int(slot.lower)]
+		return panel_layout.bottom[slot.position]
 	}
 	column := &panel_layout.columns[slot.column]
 	return column.bottom if slot.lower else column.top
@@ -157,7 +163,7 @@ slot_of :: proc(panel: Panel) -> Maybe(Slot) {
 	layout := &panel_layout
 	for shown, index in layout.bottom[:layout.bottom_count] {
 		if shown == panel {
-			return Slot{column = -1, lower = index == 1}
+			return Slot{column = -1, position = index}
 		}
 	}
 	for column, index in layout.columns[:layout.column_count] {
@@ -174,7 +180,7 @@ slot_of :: proc(panel: Panel) -> Maybe(Slot) {
 @(private)
 panel_pointer :: proc(slot: Slot) -> ^Panel {
 	if slot.column < 0 {
-		return &panel_layout.bottom[int(slot.lower)]
+		return &panel_layout.bottom[slot.position]
 	}
 	column := &panel_layout.columns[slot.column]
 	return &column.bottom if slot.lower else &column.top
@@ -189,9 +195,8 @@ all_slots :: proc() -> [dynamic]Slot {
 			append(&slots, Slot{column = index, lower = true})
 		}
 	}
-	append(&slots, Slot{column = -1})
-	if panel_layout.bottom_count == 2 {
-		append(&slots, Slot{column = -1, lower = true})
+	for position in 0 ..< panel_layout.bottom_count {
+		append(&slots, Slot{column = -1, position = position})
 	}
 	return slots
 }
@@ -208,8 +213,8 @@ all_dividers :: proc() -> [dynamic]Divider {
 		}
 	}
 	append(&dividers, Divider{.Main_Bottom, 0})
-	if panel_layout.bottom_count == 2 {
-		append(&dividers, Divider{.Bottom_Edge, 0})
+	for position in 0 ..< panel_layout.bottom_count - 1 {
+		append(&dividers, Divider{.Bottom_Edge, position})
 	}
 	return dividers
 }
@@ -284,7 +289,8 @@ drag_divider :: proc(divider: Divider) {
 		panel_layout.main_height = split_fraction(mouse.y - content.y, content.height)
 	case .Bottom_Edge:
 		row := clay.GetElementData(clay.ID("BottomRow")).boundingBox
-		panel_layout.bottom_split = split_fraction(mouse.x - row.x, row.width)
+		panel := clay.GetElementData(slot_id({column = -1, position = divider.column})).boundingBox
+		panel_layout.bottom_widths[divider.column] = split_fraction(mouse.x - panel.x, row.width)
 	case .None:
 	}
 }
@@ -333,10 +339,10 @@ update_cursor :: proc() {
 Saved_Layout :: struct {
 	columns:      [MAX_COLUMNS]Column,
 	column_count: int,
-	bottom:       [2]Panel,
-	bottom_count: int,
-	bottom_split: f32,
-	main_height:  f32,
+	bottom:        [MAX_BOTTOM]Panel,
+	bottom_count:  int,
+	bottom_widths: [MAX_BOTTOM]f32,
+	main_height:   f32,
 }
 
 layout_to_save :: proc() -> Saved_Layout {
@@ -344,20 +350,20 @@ layout_to_save :: proc() -> Saved_Layout {
 	return {
 		columns      = layout.columns,
 		column_count = layout.column_count,
-		bottom       = layout.bottom,
-		bottom_count = layout.bottom_count,
-		bottom_split = layout.bottom_split,
+		bottom        = layout.bottom,
+		bottom_count  = layout.bottom_count,
+		bottom_widths = layout.bottom_widths,
 		main_height  = layout.main_height,
 	}
 }
 
-// Uses a saved layout if it makes sense: 1 to 3 columns, 1 or 2 bottom
+// Uses a saved layout if it makes sense: 1 to 3 columns, 1 to 3 bottom
 // panels, and every panel shown exactly once (a layout saved before a
 // panel was added fails this). Sizes are clamped as dragging clamps them.
 // Returns false, changing nothing, otherwise.
 layout_apply :: proc(saved: Saved_Layout) -> bool {
 	saved := saved // addressable, to slice its arrays
-	if saved.column_count < 1 || saved.column_count > MAX_COLUMNS || saved.bottom_count < 1 || saved.bottom_count > 2 {
+	if saved.column_count < 1 || saved.column_count > MAX_COLUMNS || saved.bottom_count < 1 || saved.bottom_count > MAX_BOTTOM {
 		return false
 	}
 	seen: [Panel]int
@@ -383,6 +389,14 @@ layout_apply :: proc(saved: Saved_Layout) -> bool {
 	if widths > 1 - SPLIT_MIN {
 		return false
 	}
+	// The same for the bottom row.
+	widths = 0
+	for width in saved.bottom_widths[:saved.bottom_count - 1] {
+		widths += clamp(width, SPLIT_MIN, SPLIT_MAX)
+	}
+	if widths > 1 - SPLIT_MIN {
+		return false
+	}
 
 	layout := &panel_layout
 	layout.columns = saved.columns
@@ -393,7 +407,10 @@ layout_apply :: proc(saved: Saved_Layout) -> bool {
 	layout.column_count = saved.column_count
 	layout.bottom = saved.bottom
 	layout.bottom_count = saved.bottom_count
-	layout.bottom_split = clamp(saved.bottom_split, SPLIT_MIN, SPLIT_MAX)
+	layout.bottom_widths = saved.bottom_widths
+	for &width in layout.bottom_widths {
+		width = clamp(width, SPLIT_MIN, SPLIT_MAX)
+	}
 	layout.main_height = clamp(saved.main_height, SPLIT_MIN, SPLIT_MAX)
 	return true
 }

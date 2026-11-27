@@ -73,4 +73,5 @@ DEFAULT_SELECTED_TABS :: [Panel]Tab {
 	.Side      = .Csrs,
 	.Encoding  = .Encoding,
 	.Console   = .Console,
+	.Path      = .Path,
 }

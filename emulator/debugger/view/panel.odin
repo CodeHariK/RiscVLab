@@ -24,6 +24,7 @@ Tab :: enum {
 	Elf,         // what the loader found in the program file
 	Devices,     // the devices' registers (the UART so far)
 	Console,     // what the program printed through the UART
+	Path,        // the emulator functions the next step goes through
 }
 
 tab_titles := [Tab]string {
@@ -38,6 +39,7 @@ tab_titles := [Tab]string {
 	.Elf         = "ELF",
 	.Devices     = "Devices",
 	.Console     = "Console",
+	.Path        = "Path",
 }
 
 // Ids of the tab buttons, checked for clicks in input.odin.
@@ -53,6 +55,7 @@ tab_ids := [Tab]string {
 	.Elf         = "ElfTab",
 	.Devices     = "DevicesTab",
 	.Console     = "ConsoleTab",
+	.Path        = "PathTab",
 }
 
 // Which tabs each panel holds, in order.
@@ -62,6 +65,7 @@ panel_tabs := [Panel][]Tab {
 	.Side      = {.Csrs, .Memory, .Stack, .Elf, .Devices},
 	.Encoding  = {.Encoding},
 	.Console   = {.Console},
+	.Path      = {.Path},
 }
 
 // The tab called `name` (its title or its enum name, any case), for
@@ -184,6 +188,8 @@ draw_tab :: proc(session: ^state.Session, tab: Tab) {
 		tab_devices(session)
 	case .Console:
 		tab_console(session)
+	case .Path:
+		tab_path(session)
 	}
 }
 

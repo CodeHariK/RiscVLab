@@ -47,7 +47,7 @@ instruction_effect :: proc(session: ^state.Session) {
 	}
 	if clay.UI(clay.ID("InstructionEffect"))({layout = {layoutDirection = .TopToBottom, padding = {top = 8}}}) {
 		detail := step_detail(session, entry)
-		for stage in ([]Stage{.Read, .Execute, .Memory, .Write, .Path}) {
+		for stage in ([]Stage{.Read, .Execute, .Memory, .Write}) {
 			if detail[stage] != "" {
 				detail_line(stage_names[stage], detail[stage], stage_color(stage))
 			}

@@ -251,13 +251,14 @@ exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	csr := &cpu.csr
 	old_mstatus := csr.mstatus
 
-	previous := mstatus_mpp(old_mstatus)
-	new_mstatus := old_mstatus &~ MSTATUS_MIE
+	new_privilege := mstatus_mpp(old_mstatus) // where mret goes: the level the trap came from
+
+	new_mstatus := old_mstatus &~ MSTATUS_MIE // MIE = MPIE: clear it first,
 	if old_mstatus & MSTATUS_MPIE != 0 {
-		new_mstatus |= MSTATUS_MIE
+		new_mstatus |= MSTATUS_MIE // then set it if interrupts were on before the trap
 	}
-	new_mstatus |= MSTATUS_MPIE
-	new_mstatus = mstatus_with_mpp(new_mstatus, LEAST_PRIVILEGED_MODE)
+	new_mstatus |= MSTATUS_MPIE // MPIE = 1: the saved slot is emptied to "on"
+	new_mstatus = mstatus_with_mpp(new_mstatus, LEAST_PRIVILEGED_MODE) // MPP = user: a second mret can't go back up
 
 	when DEBUG_RECORD_STEPS {
 		cpu.debug_undo.csr_changed = true
@@ -265,8 +266,8 @@ exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 		cpu.debug_undo.csr_old = old_mstatus
 	}
 	csr.mstatus = new_mstatus
-	cpu.privilege = previous
-	cpu.next_pc = csr.mepc
+	cpu.privilege = new_privilege
+	cpu.next_pc = csr.mepc // cpu_step moves the pc here
 	return nil
 }
 
@@ -293,13 +294,14 @@ exec_sret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 	csr := &cpu.csr
 	old_mstatus := csr.mstatus
 
-	previous := mstatus_spp(old_mstatus)
-	new_mstatus := old_mstatus &~ MSTATUS_SIE // SIE off; set again below if SPIE was on
+	new_privilege := mstatus_spp(old_mstatus) // where sret goes: user or supervisor, never machine
+
+	new_mstatus := old_mstatus &~ MSTATUS_SIE // SIE = SPIE: clear it first,
 	if old_mstatus & MSTATUS_SPIE != 0 {
-		new_mstatus |= MSTATUS_SIE // SIE = the saved SPIE
+		new_mstatus |= MSTATUS_SIE // then set it if supervisor interrupts were on before the trap
 	}
-	new_mstatus |= MSTATUS_SPIE
-	new_mstatus = mstatus_with_spp(new_mstatus, LEAST_PRIVILEGED_MODE)
+	new_mstatus |= MSTATUS_SPIE // SPIE = 1: the saved slot is emptied to "on"
+	new_mstatus = mstatus_with_spp(new_mstatus, LEAST_PRIVILEGED_MODE) // SPP = user: a second sret can't go back up
 
 	when DEBUG_RECORD_STEPS {
 		cpu.debug_undo.csr_changed = true
@@ -307,7 +309,7 @@ exec_sret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 		cpu.debug_undo.csr_old = old_mstatus
 	}
 	csr.mstatus = new_mstatus
-	cpu.privilege = previous
-	cpu.next_pc = csr.sepc
+	cpu.privilege = new_privilege
+	cpu.next_pc = csr.sepc // cpu_step moves the pc here
 	return nil
 }

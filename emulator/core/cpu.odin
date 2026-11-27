@@ -148,22 +148,27 @@ cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
 	cpu.minstret_written = false
 	cpu.mcycle_written = false
 
+	// Fetch current instruction at cpu.pc
 	instruction, fetched := bus_fetch_instruction(bus, cpu.pc)
 	if !fetched {
 		return trap_make(.Instruction_Access_Fault, cpu.pc)
 	}
 
+	// Set next_pc to pc + 4, execute can change next_pc if mret/sret/jump occurs
 	cpu.next_pc = cpu.pc + INSTRUCTION_SIZE
+
+	// Try executing current instruction, if trap occurs return
 	if trap, has_trap := execute(cpu, bus, instruction).?; has_trap {
 		return trap
 	}
 
-	cpu.pc = cpu.next_pc
+	cpu.pc = cpu.next_pc // If execute success then update pc with instruction that will be run next
+
 	if !cpu.minstret_written {
-		cpu.csr.minstret += 1
+		cpu.csr.minstret += 1 // increment if csr instruction didnt modify it
 	}
 	if !cpu.mcycle_written {
-		cpu.csr.mcycle += 1
+		cpu.csr.mcycle += 1 // increment if csr instruction didnt modify it
 	}
 	return nil
 }

@@ -230,6 +230,7 @@ session_update_preview :: proc(session: ^Session) {
 			instruction = instruction,
 			next_pc     = pc,
 			trap        = trap,
+			path        = machine.cpu.debug_path, // as far as it got: the trap with no handler
 			inputs      = inputs,
 			stops       = true,
 		}

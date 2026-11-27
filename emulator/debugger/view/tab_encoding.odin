@@ -36,20 +36,20 @@ tab_encoding :: proc(session: ^state.Session) {
 }
 
 // What the next instruction reads, computes, moves to or from memory and
-// writes, results included: those stages of the preview (step_detail.odin).
+// writes, results included, and the emulator functions that do it: those
+// stages of the preview (step_detail.odin).
 // All its stages, and those of every earlier step, are in Steps -> Detailed.
 @(private)
 instruction_effect :: proc(session: ^state.Session) {
-	colors := ui.palette()
 	entry, has_preview := session.preview.?
 	if !has_preview {
 		return
 	}
 	if clay.UI(clay.ID("InstructionEffect"))({layout = {layoutDirection = .TopToBottom, padding = {top = 8}}}) {
 		detail := step_detail(session, entry)
-		for stage in ([]Stage{.Read, .Execute, .Memory, .Write}) {
+		for stage in ([]Stage{.Read, .Execute, .Memory, .Write, .Path}) {
 			if detail[stage] != "" {
-				detail_line(stage_names[stage], detail[stage], colors.text)
+				detail_line(stage_names[stage], detail[stage], stage_color(stage))
 			}
 		}
 	}

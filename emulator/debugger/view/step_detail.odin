@@ -5,6 +5,8 @@ import "core:strings"
 import rv "../../core"
 import disasm "../../disasm"
 import state "../state"
+import clay "../../vendor/clay-odin"
+import ui "../ui"
 
 // The detailed view of one step: what each part of the CPU did and why,
 // with every value that led to it.
@@ -30,6 +32,7 @@ Stage :: enum {
 	Execute,
 	Memory,
 	Write,
+	Path, // not a CPU stage: where in the emulator's code the step ran
 }
 
 stage_names := [Stage]string {
@@ -39,6 +42,7 @@ stage_names := [Stage]string {
 	.Execute = "execute",
 	.Memory  = "memory",
 	.Write   = "write",
+	.Path    = "path",
 }
 
 // One text per stage; "" for a stage the instruction doesn't use.
@@ -61,6 +65,7 @@ step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Ste
 			)
 		}
 		detail[.Write] = write_text(entry)
+		detail[.Path] = path_text(entry)
 		return detail
 	}
 	detail[.Fetch] = fmt.tprintf("mem[pc 0x%x] -> 0x%08x", entry.pc, entry.instruction)
@@ -69,7 +74,38 @@ step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Ste
 	detail[.Execute] = execute_text(session, entry)
 	detail[.Memory] = memory_text(session, entry)
 	detail[.Write] = write_text(entry)
+	detail[.Path] = path_text(entry)
 	return detail
+}
+
+// The emulator functions the step went through, and the file of the last
+// one (the code that did the work, or took the trap):
+//
+//   machine_step -> cpu_step -> execute -> exec_system -> exec_mret (core/privilege.odin)
+//
+// "" for a step recorded without a path.
+path_text :: proc(entry: state.Timeline_Entry) -> string {
+	path := entry.path
+	stages := rv.step_path_stages(&path)
+	if len(stages) == 0 {
+		return ""
+	}
+	builder := strings.builder_make(context.temp_allocator)
+	for stage, index in stages {
+		if index > 0 {
+			strings.write_string(&builder, " -> ")
+		}
+		strings.write_string(&builder, rv.STEP_STAGES[stage].procedure)
+	}
+	fmt.sbprintf(&builder, " (%s)", rv.STEP_STAGES[stages[len(stages) - 1]].file)
+	return strings.to_string(builder)
+}
+
+// The colour a stage's text is drawn in: the path is about the emulator,
+// not the instruction, so it is dimmer than the rest.
+stage_color :: proc(stage: Stage) -> clay.Color {
+	colors := ui.palette()
+	return colors.text_dim if stage == .Path else colors.text
 }
 
 // The instruction's mnemonic, e.g. "lw".

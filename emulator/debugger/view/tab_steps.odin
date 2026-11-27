@@ -148,7 +148,7 @@ step_block :: proc(session: ^state.Session, number: int, entry: state.Timeline_E
 		detail := step_detail(session, entry)
 		for stage in Stage {
 			if detail[stage] != "" {
-				stage_row(stage_names[stage], detail[stage], colors.text)
+				stage_row(stage_names[stage], detail[stage], stage_color(stage))
 			}
 		}
 	}

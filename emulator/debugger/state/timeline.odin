@@ -30,6 +30,7 @@ Timeline_Entry :: struct {
 	next_pc:      u64, // where execution went: shows jumps and taken branches
 	record:       rv.Undo_Record, // what changed (old values)
 	trap:         Maybe(rv.Trap), // a trap taken into a handler
+	path:         rv.Step_Path, // the emulator's functions the step went through (core/step_path.odin)
 	register_new: u64, // new values, read right after the step
 	memory_new:   u64,
 	csr_new:      u64,
@@ -83,6 +84,7 @@ timeline_entry_make :: proc(session: ^Session, pc: u64, instruction: u32, inputs
 		next_pc     = machine.cpu.pc,
 		record      = record,
 		trap        = machine.debug_last_trap,
+		path        = machine.cpu.debug_path,
 		inputs      = inputs,
 	}
 	if record.register_changed {

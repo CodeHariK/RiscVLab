@@ -532,6 +532,8 @@ For: a kernel's interrupt setup. xv6's start.c delegates everything (mideleg) an
 
 Emulator: sie and sip read and write mie and mip through mideleg (core/csr.odin); undo puts back only the bits a write could change. The CSRs tab shows them under sstatus ("enabled (delegated only): S software=0 timer=1 external=0"). It marks a view and the CSR behind it whenever its value changed, whichever was written: a `csrw sie` marks mie too, a `csrw mie` marks sie only if a delegated bit changed, and a `csrw mideleg` marks sie and sip if what they show changed (debugger/state/csr_views.odin).
 
+Lesson 26 raises SSIP through sip and takes it in the kernel.
+
 Watch out: an interrupt that isn't delegated reads 0 in both, even when it is enabled and pending in mie / mip. A kernel that sees sip = 0 while an interrupt is ringing should check mideleg first.
 
 Related: mie mip, mideleg, sstatus, interrupt, csr-addresses

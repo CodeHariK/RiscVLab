@@ -26,9 +26,13 @@ LINK    := $(SRC)/env/p/link.ld
 -include $(SRC)/isa/rv64ui/Makefrag
 -include $(SRC)/isa/rv64um/Makefrag
 -include $(SRC)/isa/rv64ua/Makefrag
+-include $(SRC)/isa/rv64mi/Makefrag
+-include $(SRC)/isa/rv64si/Makefrag
 TESTS := $(addprefix $(BUILD)/rv64ui-p-,$(rv64ui_sc_tests)) \
          $(addprefix $(BUILD)/rv64um-p-,$(rv64um_sc_tests)) \
-         $(addprefix $(BUILD)/rv64ua-p-,$(rv64ua_sc_tests))
+         $(addprefix $(BUILD)/rv64ua-p-,$(rv64ua_sc_tests)) \
+         $(addprefix $(BUILD)/rv64mi-p-,$(rv64mi_sc_tests)) \
+         $(addprefix $(BUILD)/rv64si-p-,$(rv64si_sc_tests))
 LINES := $(addsuffix .lines,$(TESTS))
 
 .PHONY: all clean check-source
@@ -51,6 +55,12 @@ $(BUILD)/rv64um-p-%: $(SRC)/isa/rv64um/%.S
 $(BUILD)/rv64ua-p-%: $(SRC)/isa/rv64ua/%.S
 	$(call build_test,rv64ua-$*)
 
+$(BUILD)/rv64mi-p-%: $(SRC)/isa/rv64mi/%.S
+	$(call build_test,rv64mi-$*)
+
+$(BUILD)/rv64si-p-%: $(SRC)/isa/rv64si/%.S
+	$(call build_test,rv64si-$*)
+
 # $(1): a name for the intermediate files, e.g. rv64ui-add.
 define build_test
 	@mkdir -p $(BUILD)
@@ -71,6 +81,12 @@ $(BUILD)/rv64um-p-%.lines: $(BUILD)/rv64um-p-%
 
 $(BUILD)/rv64ua-p-%.lines: $(BUILD)/rv64ua-p-%
 	$(call line_map,rv64ua-$*)
+
+$(BUILD)/rv64mi-p-%.lines: $(BUILD)/rv64mi-p-%
+	$(call line_map,rv64mi-$*)
+
+$(BUILD)/rv64si-p-%.lines: $(BUILD)/rv64si-p-%
+	$(call line_map,rv64si-$*)
 
 define line_map
 	@echo "source $(abspath $(BUILD)/$(1).s)" > $@

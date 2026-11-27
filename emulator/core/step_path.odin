@@ -53,43 +53,46 @@ Step_Stage :: enum u8 {
 	Trap_Enter_Supervisor,
 }
 
-// A stage's function and the file it is in (relative to the emulator
-// folder), for the debugger to show.
+// A stage's function, the file it is in (relative to the emulator
+// folder), and the stage that calls it, for the debugger to draw the step
+// as a tree of calls: a trap isn't entered from inside the instruction,
+// machine_step does it after cpu_step returns.
 Step_Stage_Info :: struct {
 	procedure: string,
 	file:      string,
+	parent:    Step_Stage, // the caller; machine_step, the root, names itself
 }
 
 STEP_STAGES := [Step_Stage]Step_Stage_Info {
-	.Machine_Step           = {"machine_step", "core/machine.odin"},
-	.Interrupt_To_Take      = {"interrupt_to_take", "core/interrupts.odin"},
-	.Cpu_Step               = {"cpu_step", "core/cpu.odin"},
-	.Execute                = {"execute", "core/execute.odin"},
-	.Exec_Lui               = {"exec_lui", "core/rv64i_upper.odin"},
-	.Exec_Auipc             = {"exec_auipc", "core/rv64i_upper.odin"},
-	.Exec_Jal               = {"exec_jal", "core/rv64i_control.odin"},
-	.Exec_Jalr              = {"exec_jalr", "core/rv64i_control.odin"},
-	.Exec_Branch            = {"exec_branch", "core/rv64i_control.odin"},
-	.Exec_Load              = {"exec_load", "core/rv64i_load_store.odin"},
-	.Exec_Store             = {"exec_store", "core/rv64i_load_store.odin"},
-	.Exec_Op_Imm            = {"exec_op_imm", "core/rv64i_alu.odin"},
-	.Exec_Op                = {"exec_op", "core/rv64i_alu.odin"},
-	.Exec_Op_Imm_32         = {"exec_op_imm_32", "core/rv64i_alu_word.odin"},
-	.Exec_Op_32             = {"exec_op_32", "core/rv64i_alu_word.odin"},
-	.Exec_Muldiv            = {"exec_muldiv", "core/rv64m.odin"},
-	.Exec_Muldiv_32         = {"exec_muldiv_32", "core/rv64m.odin"},
-	.Exec_Amo               = {"exec_amo", "core/rv64a.odin"},
-	.Exec_Lr                = {"exec_lr", "core/rv64a.odin"},
-	.Exec_Sc                = {"exec_sc", "core/rv64a.odin"},
-	.Exec_Read_Modify_Write = {"exec_read_modify_write", "core/rv64a.odin"},
-	.Exec_System            = {"exec_system", "core/rv64i_system.odin"},
-	.Exec_Zicsr             = {"exec_zicsr", "core/zicsr.odin"},
-	.Exec_Mret              = {"exec_mret", "core/privilege.odin"},
-	.Exec_Sret              = {"exec_sret", "core/privilege.odin"},
-	.Trap_Target            = {"trap_target", "core/privilege.odin"},
-	.Trap_Enter             = {"trap_enter", "core/privilege.odin"},
-	.Trap_Enter_Machine     = {"trap_enter_machine", "core/privilege.odin"},
-	.Trap_Enter_Supervisor  = {"trap_enter_supervisor", "core/privilege.odin"},
+	.Machine_Step           = {"machine_step", "core/machine.odin", .Machine_Step},
+	.Interrupt_To_Take      = {"interrupt_to_take", "core/interrupts.odin", .Machine_Step},
+	.Cpu_Step               = {"cpu_step", "core/cpu.odin", .Machine_Step},
+	.Execute                = {"execute", "core/execute.odin", .Cpu_Step},
+	.Exec_Lui               = {"exec_lui", "core/rv64i_upper.odin", .Execute},
+	.Exec_Auipc             = {"exec_auipc", "core/rv64i_upper.odin", .Execute},
+	.Exec_Jal               = {"exec_jal", "core/rv64i_control.odin", .Execute},
+	.Exec_Jalr              = {"exec_jalr", "core/rv64i_control.odin", .Execute},
+	.Exec_Branch            = {"exec_branch", "core/rv64i_control.odin", .Execute},
+	.Exec_Load              = {"exec_load", "core/rv64i_load_store.odin", .Execute},
+	.Exec_Store             = {"exec_store", "core/rv64i_load_store.odin", .Execute},
+	.Exec_Op_Imm            = {"exec_op_imm", "core/rv64i_alu.odin", .Execute},
+	.Exec_Op                = {"exec_op", "core/rv64i_alu.odin", .Execute},
+	.Exec_Op_Imm_32         = {"exec_op_imm_32", "core/rv64i_alu_word.odin", .Execute},
+	.Exec_Op_32             = {"exec_op_32", "core/rv64i_alu_word.odin", .Execute},
+	.Exec_Muldiv            = {"exec_muldiv", "core/rv64m.odin", .Exec_Op},
+	.Exec_Muldiv_32         = {"exec_muldiv_32", "core/rv64m.odin", .Exec_Op_32},
+	.Exec_Amo               = {"exec_amo", "core/rv64a.odin", .Execute},
+	.Exec_Lr                = {"exec_lr", "core/rv64a.odin", .Exec_Amo},
+	.Exec_Sc                = {"exec_sc", "core/rv64a.odin", .Exec_Amo},
+	.Exec_Read_Modify_Write = {"exec_read_modify_write", "core/rv64a.odin", .Exec_Amo},
+	.Exec_System            = {"exec_system", "core/rv64i_system.odin", .Execute},
+	.Exec_Zicsr             = {"exec_zicsr", "core/zicsr.odin", .Exec_System},
+	.Exec_Mret              = {"exec_mret", "core/privilege.odin", .Exec_System},
+	.Exec_Sret              = {"exec_sret", "core/privilege.odin", .Exec_System},
+	.Trap_Target            = {"trap_target", "core/privilege.odin", .Machine_Step},
+	.Trap_Enter             = {"trap_enter", "core/privilege.odin", .Machine_Step},
+	.Trap_Enter_Machine     = {"trap_enter_machine", "core/privilege.odin", .Trap_Enter},
+	.Trap_Enter_Supervisor  = {"trap_enter_supervisor", "core/privilege.odin", .Trap_Enter},
 }
 
 // The longest path a step takes is 8 stages (an illegal CSR access:
@@ -116,7 +119,7 @@ step_path_stages :: proc(path: ^Step_Path) -> []Step_Stage {
 @(private)
 step_path_push :: #force_inline proc(cpu: ^Cpu, stage: Step_Stage, location := #caller_location) {
 	when ODIN_TEST {
-		step_path_check(stage, location)
+		step_path_check(&cpu.debug_path, stage, location)
 	}
 	path := &cpu.debug_path
 	if int(path.count) < STEP_PATH_MAX {
@@ -126,11 +129,19 @@ step_path_push :: #force_inline proc(cpu: ^Cpu, stage: Step_Stage, location := #
 }
 
 // Unit test builds only: the push for `stage` must come from the function
-// and file STEP_STAGES gives for it, so a renamed or moved function fails
-// the tests instead of showing a stale name in the debugger.
+// and file STEP_STAGES gives for it, after its caller's, so a renamed,
+// moved or newly called function fails the tests instead of showing a
+// stale name or a wrong tree in the debugger.
 @(private = "file")
-step_path_check :: proc(stage: Step_Stage, location: runtime.Source_Code_Location) {
+step_path_check :: proc(path: ^Step_Path, stage: Step_Stage, location: runtime.Source_Code_Location) {
 	info := STEP_STAGES[stage]
+	// The caller STEP_STAGES names must already be on the path (machine_step
+	// starts it): a function called from somewhere new fails here.
+	has_parent := stage == .Machine_Step
+	for earlier in step_path_stages(path) {
+		has_parent ||= earlier == info.parent
+	}
+	assert(has_parent, "step_path_push: STEP_STAGES names the wrong caller for this stage")
 	assert(location.procedure == info.procedure, "step_path_push: the stage doesn't name the function it is pushed from")
 	file := location.file_path
 	assert(len(file) >= len(info.file) && file[len(file) - len(info.file):] == info.file, "step_path_push: STEP_STAGES has the wrong file for this stage")

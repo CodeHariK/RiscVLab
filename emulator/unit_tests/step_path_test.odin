@@ -108,5 +108,12 @@ step_stage_names_match_their_functions :: proc(t: ^testing.T) {
 		name := strings.to_lower(fmt.tprint(stage), context.temp_allocator)
 		testing.expectf(t, info.procedure == name, "%v: procedure %q", stage, info.procedure)
 		testing.expectf(t, strings.has_prefix(info.file, "core/"), "%v: file %q", stage, info.file)
+		// Following callers from any stage reaches machine_step, the root.
+		at, hops := stage, 0
+		for at != .Machine_Step && hops <= len(rv.Step_Stage) {
+			at = rv.STEP_STAGES[at].parent
+			hops += 1
+		}
+		testing.expectf(t, at == .Machine_Step, "%v: its callers never reach machine_step", stage)
 	}
 }

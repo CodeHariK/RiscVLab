@@ -78,26 +78,47 @@ step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Ste
 	return detail
 }
 
-// The emulator functions the step went through, and the file of the last
-// one (the code that did the work, or took the trap):
+// The emulator functions the step went through, as a tree of calls, each
+// with its file: a child is indented under the function that called it
+// (rv.STEP_STAGES' parent), so a trap shows up as machine_step's work after
+// cpu_step returned, not as part of the instruction:
 //
-//   machine_step -> cpu_step -> execute -> exec_system -> exec_mret (core/privilege.odin)
+//   machine_step               core/machine.odin
+//     cpu_step                 core/cpu.odin
+//       execute                core/execute.odin
+//         exec_system          core/rv64i_system.odin
+//     trap_target              core/privilege.odin
+//     trap_enter               core/privilege.odin
+//       trap_enter_machine     core/privilege.odin
 //
-// "" for a step recorded without a path.
+// One line per function; "" for a step recorded without a path.
 path_text :: proc(entry: state.Timeline_Entry) -> string {
 	path := entry.path
 	stages := rv.step_path_stages(&path)
 	if len(stages) == 0 {
 		return ""
 	}
+	// Each function's depth: one more than its caller's (machine_step is 0).
+	depths := make([]int, len(stages), context.temp_allocator)
+	name_width := 0
+	for stage, index in stages {
+		parent := rv.STEP_STAGES[stage].parent
+		for earlier := index - 1; earlier >= 0 && stage != .Machine_Step; earlier -= 1 {
+			if stages[earlier] == parent {
+				depths[index] = depths[earlier] + 1
+				break
+			}
+		}
+		name_width = max(name_width, 2 * depths[index] + len(rv.STEP_STAGES[stage].procedure))
+	}
 	builder := strings.builder_make(context.temp_allocator)
 	for stage, index in stages {
 		if index > 0 {
-			strings.write_string(&builder, " -> ")
+			strings.write_byte(&builder, '\n')
 		}
-		strings.write_string(&builder, rv.STEP_STAGES[stage].procedure)
+		name := fmt.tprintf("%*s%s", 2 * depths[index], "", rv.STEP_STAGES[stage].procedure)
+		fmt.sbprintf(&builder, "%-*s  %s", name_width, name, rv.STEP_STAGES[stage].file)
 	}
-	fmt.sbprintf(&builder, " (%s)", rv.STEP_STAGES[stages[len(stages) - 1]].file)
 	return strings.to_string(builder)
 }
 

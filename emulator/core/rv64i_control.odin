@@ -15,6 +15,9 @@ jump_to :: proc(cpu: ^Cpu, target: u64) -> Step_Result {
 
 // JAL rd, offset: rd = pc + 4; pc += offset.
 exec_jal :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Jal)
+	}
 	target := cpu.pc + imm_j(instruction)
 	if trap := jump_to(cpu, target); trap != nil {
 		return trap
@@ -26,6 +29,9 @@ exec_jal :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 // JALR rd, offset(rs1): rd = pc + 4; pc = (rs1 + offset) with bit 0 cleared.
 // The target is computed before writing rd, because rd may equal rs1.
 exec_jalr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Jalr)
+	}
 	if funct3(instruction) != 0 {
 		return illegal_instruction(instruction)
 	}
@@ -40,6 +46,9 @@ exec_jalr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 // BEQ / BNE / BLT / BGE / BLTU / BGEU rs1, rs2, offset.
 // If the comparison holds, pc += offset.
 exec_branch :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Branch)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	b := reg_read(cpu, rs2(instruction))
 

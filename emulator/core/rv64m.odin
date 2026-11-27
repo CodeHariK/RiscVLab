@@ -28,6 +28,9 @@ FUNCT7_MULDIV :: 0b000_0001
 
 // MUL ... REMU (called from exec_op when funct7 = 1).
 exec_muldiv :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Muldiv)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	b := reg_read(cpu, rs2(instruction))
 
@@ -57,6 +60,9 @@ exec_muldiv :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 // MULW / DIVW / DIVUW / REMW / REMUW (called from exec_op_32 when
 // funct7 = 1).
 exec_muldiv_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Muldiv_32)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	b := reg_read(cpu, rs2(instruction))
 	a32, b32 := i32(u32(a)), i32(u32(b))

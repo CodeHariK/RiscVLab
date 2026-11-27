@@ -103,6 +103,9 @@ privilege_implemented :: proc(privilege: Privilege) -> bool {
 //               mode at all (interrupt_to_take holds it back), so the
 //               same rule holds.
 trap_target :: proc(cpu: ^Cpu, trap: Trap) -> Privilege {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Trap_Target)
+	}
 	bit := u64(1) << trap_cause_number(trap.cause)
 	if trap_is_interrupt(trap.cause) {
 		return .Supervisor if cpu.csr.mideleg & bit != 0 else .Machine
@@ -133,6 +136,9 @@ trap_has_handler :: proc(cpu: ^Cpu, target: Privilege) -> bool {
 // does the moment a trap is taken. The caller has already saved, for
 // undo, the state this changes (see `machine_step`).
 trap_enter :: proc(cpu: ^Cpu, trap: Trap, target: Privilege) {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Trap_Enter)
+	}
 	if target == .Supervisor {
 		trap_enter_supervisor(cpu, trap)
 	} else {
@@ -147,6 +153,9 @@ trap_enter :: proc(cpu: ^Cpu, trap: Trap, target: Privilege) {
 // A trap into machine mode.
 @(private = "file")
 trap_enter_machine :: proc(cpu: ^Cpu, trap: Trap) {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Trap_Enter_Machine)
+	}
 	csr := &cpu.csr
 
 	// 1. Remember where, why and what, for the handler.
@@ -189,6 +198,9 @@ trap_enter_machine :: proc(cpu: ^Cpu, trap: Trap) {
 // Machine mode's mepc, mcause, mtval, MIE, MPIE and MPP are left alone.
 @(private = "file")
 trap_enter_supervisor :: proc(cpu: ^Cpu, trap: Trap) {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Trap_Enter_Supervisor)
+	}
 	csr := &cpu.csr
 
 	// 1. Where, why and what: sepc, scause, stval.
@@ -245,6 +257,9 @@ ecall_cause :: proc(privilege: Privilege) -> Trap_Cause {
 ENCODING_MRET :: u32(0x3020_0073)
 
 exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Mret)
+	}
 	if cpu.privilege != .Machine {
 		return illegal_instruction(instruction)
 	}
@@ -288,6 +303,9 @@ exec_mret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 ENCODING_SRET :: u32(0x1020_0073)
 
 exec_sret :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Sret)
+	}
 	if cpu.privilege == .User {
 		return illegal_instruction(instruction)
 	}

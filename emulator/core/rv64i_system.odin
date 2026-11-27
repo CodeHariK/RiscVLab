@@ -23,6 +23,9 @@ exec_misc_mem :: proc(instruction: u32) -> Step_Result {
 // The ECALL cause says which privilege level made the call.
 // funct3 != 0 selects a CSR instruction.
 exec_system :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_System)
+	}
 	if funct3(instruction) != 0 {
 		return exec_zicsr(cpu, instruction)
 	}

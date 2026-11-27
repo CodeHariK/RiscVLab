@@ -6,6 +6,9 @@ package rv
 
 // ADDIW / SLLIW / SRLIW / SRAIW.
 exec_op_imm_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Op_Imm_32)
+	}
 	a := reg_read(cpu, rs1(instruction))
 
 	// ADDIW: funct3 = 000, and the upper bits are all immediate.
@@ -36,6 +39,9 @@ exec_op_imm_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 
 // ADDW / SUBW / SLLW / SRLW / SRAW.
 exec_op_32 :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Op_32)
+	}
 	if funct7(instruction) == FUNCT7_MULDIV {
 		return exec_muldiv_32(cpu, instruction) // M extension (rv64m.odin)
 	}

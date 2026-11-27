@@ -34,6 +34,9 @@ csr_address :: #force_inline proc(instruction: u32) -> u32 {
 }
 
 exec_zicsr :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Zicsr)
+	}
 	kind := funct3(instruction)
 	address := csr_address(instruction)
 	destination := rd(instruction)

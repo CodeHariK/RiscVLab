@@ -15,6 +15,9 @@ bool_to_u64 :: #force_inline proc(condition: bool) -> u64 {
 
 // ADDI / SLTI / SLTIU / XORI / ORI / ANDI / SLLI / SRLI / SRAI.
 exec_op_imm :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Op_Imm)
+	}
 	a := reg_read(cpu, rs1(instruction))
 	imm := imm_i(instruction)
 	// RV64 shifts use a 6-bit amount; bits 31..26 select SRLI vs SRAI.
@@ -59,6 +62,9 @@ exec_op_imm :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
 // The M extension (MUL, DIV, ...) shares this opcode, selected by
 // funct7 = 1 (rv64m.odin).
 exec_op :: proc(cpu: ^Cpu, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Op)
+	}
 	if funct7(instruction) == FUNCT7_MULDIV {
 		return exec_muldiv(cpu, instruction)
 	}

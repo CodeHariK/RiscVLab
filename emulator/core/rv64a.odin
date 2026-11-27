@@ -57,6 +57,9 @@ funct5 :: #force_inline proc(instruction: u32) -> u32 {
 }
 
 exec_amo :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Amo)
+	}
 	size: u64
 	switch funct3(instruction) {
 	case AMO_WORD:
@@ -88,6 +91,9 @@ exec_amo :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 // reserve the address for the next SC.
 @(private = "file")
 exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Lr)
+	}
 	if address % size != 0 {
 		return trap_make(.Load_Address_Misaligned, address)
 	}
@@ -108,6 +114,9 @@ exec_lr :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 // 1 if not.
 @(private = "file")
 exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Sc)
+	}
 	if address % size != 0 {
 		return trap_make(.Store_Address_Misaligned, address)
 	}
@@ -132,6 +141,9 @@ exec_sc :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64)
 // memory = that value op rs2, as one step that nothing can come between.
 @(private = "file")
 exec_read_modify_write :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32, address: u64, size: u64) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Read_Modify_Write)
+	}
 	// Every check comes first. An AMO writes, so even a failing read is
 	// reported as a store fault (Store_Address_Misaligned,
 	// Store_Access_Fault), as the spec says.

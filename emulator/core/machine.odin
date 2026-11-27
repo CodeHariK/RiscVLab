@@ -84,6 +84,8 @@ machine_step :: proc(machine: ^Machine) -> Step_Result {
 			mcycle    = cpu.csr.mcycle,
 			privilege = cpu.privilege,
 		}
+		cpu.debug_path = {}
+		step_path_push(cpu, .Machine_Step)
 	}
 	when DEBUG_RECORD_STEPS {
 		machine.debug_last_trap = nil

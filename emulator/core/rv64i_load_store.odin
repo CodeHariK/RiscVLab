@@ -8,6 +8,9 @@ package rv
 
 // LB / LH / LW / LD / LBU / LHU / LWU rd, offset(rs1).
 exec_load :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Load)
+	}
 	kind := funct3(instruction)
 	if kind == 0b111 {
 		return illegal_instruction(instruction) // would be "LDU", which doesn't exist
@@ -36,6 +39,9 @@ exec_load :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
 
 // SB / SH / SW / SD rs2, offset(rs1): store the low bytes of rs2.
 exec_store :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Exec_Store)
+	}
 	kind := funct3(instruction)
 	if kind > 0b011 {
 		return illegal_instruction(instruction)

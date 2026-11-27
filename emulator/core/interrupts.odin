@@ -98,6 +98,9 @@ INTERRUPT_PRIORITY := [?]Trap_Cause {
 // INTERRUPT_PRIORITY's order. An undelegated supervisor interrupt goes to
 // machine mode, and is taken there after the machine ones.
 interrupt_to_take :: proc(cpu: ^Cpu) -> (cause: Trap_Cause, take: bool) {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Interrupt_To_Take)
+	}
 	ready := cpu.csr.mip & cpu.csr.mie // pending and enabled
 	if ready == 0 {
 		return {}, false

@@ -25,6 +25,9 @@ OPCODE_SYSTEM :: 0b111_0011
 // Package-private: only cpu_step (cpu.odin) calls it.
 @(private)
 execute :: proc(cpu: ^Cpu, bus: ^Bus, instruction: u32) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Execute)
+	}
 	switch opcode(instruction) {
 	case OPCODE_LUI:
 		return exec_lui(cpu, instruction)

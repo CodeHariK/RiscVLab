@@ -52,6 +52,9 @@ Cpu :: struct {
 	// What the current instruction overwrote, so it can be undone.
 	// Filled in during the step; `machine_step` saves it to the history.
 	debug_undo: Undo_Record,
+	// The functions this step went through, in call order (step_path.odin),
+	// for the debugger. Cleared at the start of each step.
+	debug_path: Step_Path,
 	// Where the time CSR reads the platform's clock (Time_Source). Last:
 	// it is read only by csrr time.
 	time_source: Time_Source,
@@ -142,6 +145,9 @@ INSTRUCTION_SIZE :: u64(4)
 // complete. A trap taken into a handler still takes a cycle; machine_step
 // counts that one.
 cpu_step :: proc(cpu: ^Cpu, bus: ^Bus) -> Step_Result {
+	when DEBUG_RECORD_STEPS {
+		step_path_push(cpu, .Cpu_Step)
+	}
 	when DEBUG_RECORD_STEPS {
 		cpu.debug_last_write = {}
 	}

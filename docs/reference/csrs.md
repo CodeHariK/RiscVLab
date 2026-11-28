@@ -419,7 +419,7 @@ The bits this hart has:
 
 For: an OS kernel in supervisor mode handling its own programs' exceptions. Without delegation, every system call and fault from a user program would trap to machine mode (the firmware), which would have to pass it on to the kernel. xv6's firmware stage (start.c) sets medeleg to all ones at boot, so everything that can go to the kernel does. Interrupts have their own register, mideleg.
 
-Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/privilege.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret` returns from a supervisor trap. Lesson 25.
+Emulator: medeleg keeps the bits for causes 0 to 9 and reads 0 everywhere else (WARL). Trap entry follows it (trap_target, core/trap_entry.odin): a delegated exception from user or supervisor mode writes sepc, scause, stval and sstatus's SPIE / SIE / SPP, and jumps to stvec. If stvec's base is 0, supervisor mode has no handler and the machine stops, as for mtvec = 0. The step details say when a trap was delegated. `sret` returns from a supervisor trap. Lesson 25.
 
 Watch out: delegation only moves where the trap goes, not what is allowed. A delegated exception from user mode lands in supervisor mode, but supervisor mode still can't touch machine CSRs, and an exception in machine mode always stays there.
 
@@ -452,7 +452,7 @@ Why the supervisor interrupts aren't simply always supervisor mode's: machine mo
 
 For: a kernel in supervisor mode taking its own timer, device and software interrupts. xv6's start.c sets mideleg to 0xffff at boot (the writable bits stick: 0x222).
 
-Emulator: mideleg keeps bits 1, 5 and 9 (MIDELEG_WRITABLE, core/csr.odin) and reads 0 everywhere else. Interrupt entry follows it (trap_target, core/privilege.odin): a delegated interrupt writes sepc, scause (bit 63 set) and sstatus's SPIE / SIE / SPP and jumps to stvec, plus 4 * its number when stvec is vectored. It is held back by sstatus.SIE in supervisor mode and never taken in machine mode (interrupt_to_take, core/interrupts.odin). The step details say "mideleg delegates it". The CSRs tab lists the delegated ones: "to supervisor: S software=0 timer=1 external=0".
+Emulator: mideleg keeps bits 1, 5 and 9 (MIDELEG_WRITABLE, core/csr.odin) and reads 0 everywhere else. Interrupt entry follows it (trap_target, core/trap_entry.odin): a delegated interrupt writes sepc, scause (bit 63 set) and sstatus's SPIE / SIE / SPP and jumps to stvec, plus 4 * its number when stvec is vectored. It is held back by sstatus.SIE in supervisor mode and never taken in machine mode (interrupt_to_take, core/interrupts.odin). The step details say "mideleg delegates it". The CSRs tab lists the delegated ones: "to supervisor: S software=0 timer=1 external=0".
 
 Watch out: delegating is half the job. A delegated interrupt is also held back by its bit in mie (STIE for the timer; supervisor mode sets it through sie) and, in supervisor mode, by sstatus.SIE.
 
@@ -635,7 +635,7 @@ Without Sstc, a kernel only gets ticks through machine mode: the firmware takes 
 
 Below machine mode it may be used only when machine mode has turned Sstc on (menvcfg.STCE) and lets supervisor mode read time (mcounteren.TM); otherwise it raises Illegal_Instruction.
 
-For: a kernel's clock tick. xv6 sets `stimecmp = time + 1000000` in start.c and again in each timer interrupt.
+For: a kernel's clock tick. xv6 sets `stimecmp = time + 1000000` in start.c and again in each timer interrupt. Lesson 27 does the same with 10.
 
 Emulator: stimecmp is checked (stimecmp_allowed, core/csr.odin) and starts as all ones (no alarm). With STCE on, supervisor_timer (core/interrupts.odin) works STIP out the way the CLINT works out MTIP: whenever the alarm time comes, and right after a write to stimecmp or menvcfg (the write sets Cpu.interrupts_change_at to 0, "look now"). STIP isn't recorded for undo: after a step back it is worked out again from time and stimecmp. The CSRs tab counts down: "alarm at time 0x72: STIP in 85 steps".
 

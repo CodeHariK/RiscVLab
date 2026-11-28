@@ -32,6 +32,7 @@ The lessons:
 | 24 | user mode: down with mret, what user code may not do, back up with ecall |
 | 25 | supervisor mode: firmware, kernel and program; user system calls go to the kernel (medeleg), which returns with sret |
 | 26 | a supervisor interrupt: mideleg, sie and SIE; the interrupt waits, then arrives between two instructions; sret without + 4 |
+| 27 | the supervisor timer (Sstc): stimecmp against time, the kernel's own tick, and setting the next alarm |
 
 For: anyone new to RISC-V, to assembly, or to how an operating system works with the hardware underneath it. No assembly is needed to start; some C helps.
 

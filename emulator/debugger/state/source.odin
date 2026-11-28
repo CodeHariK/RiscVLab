@@ -19,6 +19,11 @@ import "core:strings"
 // is listed once, at its first instruction; later instructions belong to
 // the closest entry before them.
 //
+// The assembler only lists instructions: a data directive in the code
+// (`.word 0xffffffff`, an instruction that doesn't exist, in lesson 14)
+// gets no entry, so its address would show as part of the line before.
+// source_load adds those entries itself (add_data_entries).
+//
 // Programs without one (raw binaries, files built elsewhere) simply have
 // no Source view.
 
@@ -76,7 +81,89 @@ source_load :: proc(program_path: string) -> (source: Source_Map, ok: bool) {
 	make_printable(text)
 	source.text = text
 	source.lines = strings.split_lines(string(text))
+	add_data_entries(&source)
 	return source, true
+}
+
+// Adds entries for the data directives between two listed lines. Their
+// bytes sit at the end of the gap between the two entries' addresses,
+// just before the next entry: the line before may have used the start of
+// it for more instructions (a pseudo-instruction).
+//
+//   80000010 20   li   s1, 0             4 bytes: 0x10
+//   (none)   21   .word 0xffffffff       4 bytes: 0x14 = 0x18 - 4
+//   80000018 22   li   t1, 0x1000
+@(private = "file")
+add_data_entries :: proc(source: ^Source_Map) {
+	listed := len(source.entries)
+	for index in 0 ..< listed - 1 {
+		this, next := source.entries[index], source.entries[index + 1]
+		if next.line <= this.line + 1 {
+			continue // nothing between them (or out of order)
+		}
+		total: u64
+		for line in this.line + 1 ..< next.line {
+			total += data_directive_size(source_line_text(source, line))
+		}
+		if total == 0 || total >= next.address - this.address {
+			continue // no data, or it doesn't fit after the line before
+		}
+		address := next.address - total
+		for line in this.line + 1 ..< next.line {
+			size := data_directive_size(source_line_text(source, line))
+			if size > 0 {
+				append(&source.entries, Line_Entry{address, line})
+				address += size
+			}
+		}
+	}
+	if len(source.entries) > listed {
+		slice.stable_sort_by(source.entries[:], proc(a, b: Line_Entry) -> bool {
+			return a.address < b.address
+		})
+	}
+}
+
+// The text of source line `line` (counted from 1), or "".
+@(private = "file")
+source_line_text :: proc(source: ^Source_Map, line: int) -> string {
+	if line < 1 || line > len(source.lines) {
+		return ""
+	}
+	return source.lines[line - 1]
+}
+
+// How many bytes a data directive line puts in memory: the size of one
+// value times how many values it lists (`.word 1, 2` is 8). 0 for any
+// other line: an instruction, a label alone, a comment, other directives.
+@(private = "file")
+data_directive_size :: proc(text: string) -> u64 {
+	line := text
+	if comment := strings.index_byte(line, '#'); comment >= 0 {
+		line = line[:comment]
+	}
+	line = strings.trim_space(line)
+	if colon := strings.index_byte(line, ':'); colon >= 0 {
+		line = strings.trim_space(line[colon + 1:]) // after a label: "bad: .word 0"
+	}
+	directive, _, values := strings.partition(line, " ")
+	size: u64
+	switch directive {
+	case ".byte":
+		size = 1
+	case ".half", ".2byte", ".short":
+		size = 2
+	case ".word", ".4byte", ".long":
+		size = 4
+	case ".dword", ".8byte", ".quad":
+		size = 8
+	case:
+		return 0
+	}
+	if strings.trim_space(values) == "" {
+		return 0
+	}
+	return size * u64(strings.count(values, ",") + 1)
 }
 
 source_destroy :: proc(source: ^Source_Map) {

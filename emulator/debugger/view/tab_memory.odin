@@ -3,6 +3,7 @@ package view
 import "core:fmt"
 import clay "../../vendor/clay-odin"
 import rv "../../core"
+import devices "../../devices"
 import ui "../ui"
 import state "../state"
 
@@ -18,6 +19,13 @@ import state "../state"
 //
 // Symbol names (labels and variables from the ELF) are shown on a line
 // above the row they fall in.
+//
+// RAM only. When the interesting address is a device register (a load
+// or store to the UART or the CLINT), the tab names the register and its
+// value instead of a dump, and points to the Devices tab: a device's
+// registers aren't memory (some values are worked out on each read, and
+// grouping four 1-byte registers into a word means nothing). Addresses
+// outside RAM show as "--".
 //
 // Two layouts (switch at the top of the tab):
 //   Words: 4 x 32-bit words per row, each read as a little-endian value,
@@ -49,6 +57,10 @@ tab_memory :: proc(session: ^state.Session) {
 	}
 	focus, reason := memory_focus(session, access, changed)
 	wrapped_text(reason, ui.text_config(.Code_Small, colors.text_dim))
+	if device, _, is_device := rv.bus_device_at(&session.machine.bus, focus); is_device {
+		device_register_note(session, device, focus, access)
+		return
+	}
 
 	row_bytes := u64(WORDS_PER_ROW * 4) if display.memory_layout == .Words else 8
 	cell_size: u64 = 4 if display.memory_layout == .Words else 1
@@ -116,14 +128,42 @@ memory_focus :: proc(session: ^state.Session, access: state.Memory_Access, chang
 	return session.machine.cpu.pc, "the instruction at pc: instructions are stored in memory like any data"
 }
 
-// One word (size 4) or byte (size 1) in hex, "--" outside memory,
-// coloured if the next access or the last change overlaps it.
+// In place of a dump, when the focus is a device register: which
+// register, its value, and where to look.
+//
+//   0x10000001 is a device register, not memory:
+//     uart IER = 0x00
+//   The Devices tab shows every register of the device, with what its
+//   value means; the one the next instruction uses is coloured there.
+@(private)
+device_register_note :: proc(session: ^state.Session, device: ^rv.Device, address: u64, access: state.Memory_Access) {
+	colors := ui.palette()
+	writing := access.kind == .Store && access.address == address
+	size := access.size if access.kind != .None && access.address == address else 1
+	name := state.device_register_name(session, address) // clint.mtime, uart.THR, ...
+	if device.name == "uart" && session.uart != nil {
+		name = fmt.tprintf("uart.%s", devices.uart_register_name(session.uart, address - device.base, writing))
+	}
+	if name == "" {
+		name = fmt.tprintf("%s +0x%x", device.name, address - device.base)
+	}
+	value, _ := rv.machine_peek(&session.machine, address, size) // peek: no side effects
+	wrapped_text(fmt.tprintf("0x%x is a device register, not memory:", address), ui.text_config(.Code_Small, colors.text))
+	wrapped_text(fmt.tprintf("  %s = %s", name, value_text(value)), ui.text_config(.Code_Small, colors.accent))
+	wrapped_text(
+		"The Devices tab shows every register of the device, with what its value means; the one the next instruction uses is coloured there.",
+		ui.text_config(.Code_Small, colors.text_dim),
+	)
+}
+
+// One word (size 4) or byte (size 1) in hex, "--" outside RAM, coloured
+// if the next access or the last change overlaps it.
 @(private)
 memory_cell :: proc(session: ^state.Session, address: u64, size: u64, access: state.Memory_Access, changed: state.Memory_Access) -> ui.Table_Cell {
 	colors := ui.palette()
-	value, in_ram := rv.machine_peek(&session.machine, address, size)
 	text := "--------" if size == 4 else "--"
-	if in_ram {
+	if rv.bus_is_ram(&session.machine.bus, address, size) {
+		value, _ := rv.machine_peek(&session.machine, address, size)
 		text = fmt.tprintf("%08x", value) if size == 4 else fmt.tprintf("%02x", value)
 	}
 

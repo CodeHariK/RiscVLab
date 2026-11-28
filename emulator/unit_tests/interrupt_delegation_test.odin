@@ -4,7 +4,7 @@ import "core:testing"
 import rv "../core"
 
 // Unit tests for taking supervisor interrupts (core/interrupts.odin
-// interrupt_to_take, core/privilege.odin trap_target): which mode an
+// interrupt_to_take, core/trap_entry.odin trap_target): which mode an
 // interrupt goes to (mideleg), when that mode allows it, which one wins
 // when several are ready, and the round trip back with sret.
 //

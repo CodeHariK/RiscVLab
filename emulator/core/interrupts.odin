@@ -19,7 +19,7 @@ package rv
 //
 // At each instruction boundary, a pending interrupt is taken if its bit
 // is set in both mip and mie, and the mode it goes to (mideleg) allows it
-// (interrupt_to_take). It is a trap like any other (privilege.odin), with
+// (interrupt_to_take). It is a trap like any other (trap_entry.odin), with
 // bit 63 of mcause / scause set, and mepc / sepc = the instruction that
 // hadn't run yet.
 

@@ -4,8 +4,8 @@ import "core:testing"
 import rv "../core"
 import devices "../devices"
 
-// Unit tests for user mode (core/privilege.odin, csr.odin,
-// interrupts.odin): MRET down to user mode, ECALL and illegal
+// Unit tests for user mode (core/trap_return.odin, trap_entry.odin,
+// csr.odin, interrupts.odin): MRET down to user mode, ECALL and illegal
 // instructions back up to machine mode, undo across the switch, and
 // machine interrupts reaching user mode.
 

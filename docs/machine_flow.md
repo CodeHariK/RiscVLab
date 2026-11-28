@@ -400,7 +400,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  subgraph TE["core/privilege.odin : trap_enter (from machine_step)"]
+  subgraph TE["core/trap_entry.odin : trap_enter (from machine_step)"]
     direction TB
     E1["mepc = pc (the instruction that trapped,<br/>or the one an interrupt came before)<br/>mcause = cause, mtval = value"]
     E1 --> E2["mstatus.MPIE = mstatus.MIE<br/>mstatus.MIE = 0"]
@@ -412,7 +412,7 @@ flowchart TD
     E6 --> E7["reservation cleared (an sc after this fails)"]
   end
 
-  subgraph MR["core/privilege.odin : exec_mret (an instruction, via exec_system)"]
+  subgraph MR["core/trap_return.odin : exec_mret (an instruction, via exec_system)"]
 
     direction TB
     R0{"privilege == Machine?"}

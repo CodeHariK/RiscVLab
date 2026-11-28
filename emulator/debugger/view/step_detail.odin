@@ -87,9 +87,9 @@ step_detail :: proc(session: ^state.Session, entry: state.Timeline_Entry) -> Ste
 //     cpu_step                 core/cpu.odin
 //       execute                core/execute.odin
 //         exec_system          core/rv64i_system.odin
-//     trap_target              core/privilege.odin
-//     trap_enter               core/privilege.odin
-//       trap_enter_machine     core/privilege.odin
+//     trap_target              core/trap_entry.odin
+//     trap_enter               core/trap_entry.odin
+//       trap_enter_machine     core/trap_entry.odin
 //
 // One line per function; "" for a step recorded without a path.
 path_text :: proc(entry: state.Timeline_Entry) -> string {

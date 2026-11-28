@@ -87,12 +87,12 @@ STEP_STAGES := [Step_Stage]Step_Stage_Info {
 	.Exec_Read_Modify_Write = {"exec_read_modify_write", "core/rv64a.odin", .Exec_Amo},
 	.Exec_System            = {"exec_system", "core/rv64i_system.odin", .Execute},
 	.Exec_Zicsr             = {"exec_zicsr", "core/zicsr.odin", .Exec_System},
-	.Exec_Mret              = {"exec_mret", "core/privilege.odin", .Exec_System},
-	.Exec_Sret              = {"exec_sret", "core/privilege.odin", .Exec_System},
-	.Trap_Target            = {"trap_target", "core/privilege.odin", .Machine_Step},
-	.Trap_Enter             = {"trap_enter", "core/privilege.odin", .Machine_Step},
-	.Trap_Enter_Machine     = {"trap_enter_machine", "core/privilege.odin", .Trap_Enter},
-	.Trap_Enter_Supervisor  = {"trap_enter_supervisor", "core/privilege.odin", .Trap_Enter},
+	.Exec_Mret              = {"exec_mret", "core/trap_return.odin", .Exec_System},
+	.Exec_Sret              = {"exec_sret", "core/trap_return.odin", .Exec_System},
+	.Trap_Target            = {"trap_target", "core/trap_entry.odin", .Machine_Step},
+	.Trap_Enter             = {"trap_enter", "core/trap_entry.odin", .Machine_Step},
+	.Trap_Enter_Machine     = {"trap_enter_machine", "core/trap_entry.odin", .Trap_Enter},
+	.Trap_Enter_Supervisor  = {"trap_enter_supervisor", "core/trap_entry.odin", .Trap_Enter},
 }
 
 // The longest path a step takes is 8 stages (an illegal CSR access:

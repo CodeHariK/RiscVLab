@@ -3,7 +3,8 @@ package rv_unit_tests
 import "core:testing"
 import rv "../core"
 
-// Unit tests for supervisor mode existing (core/privilege.odin, csr.odin):
+// Unit tests for supervisor mode existing (core/trap_return.odin,
+// trap_entry.odin, csr.odin):
 // MRET into it, what it may and may not touch, ECALL back up, and its own
 // CSRs (sscratch, sstatus, sie, stimecmp). Nothing is delegated here, so every trap
 // goes to machine mode (delegation_test.odin has the delegated ones).

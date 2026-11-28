@@ -87,7 +87,9 @@ No file access and no printing, so it compiles for any target.
 | `zeroed_pages.odin` | RAM and undo history mapped straight from the OS (`zeroed_pages_wasm.odin` for WebAssembly) |
 | `history.odin` | Undo records and the ring buffer that makes stepping back possible |
 | `trap.odin` | Trap causes (`mcause` numbering) and the step result type |
-| `privilege.odin` | Privilege levels and mstatus.MPP; trap entry (save `mepc` / `mcause` / `mtval`, update `mstatus`, jump to `mtvec`); MRET (return from a trap handler) |
+| `privilege.odin` | Privilege levels, and mstatus.MPP / SPP: the return slots trap entry fills and MRET / SRET read |
+| `trap_entry.odin` | Which mode takes a trap (medeleg, mideleg), and trap entry: save `mepc` / `mcause` / `mtval` (or the s ones), update `mstatus`, jump to `mtvec` / `stvec` |
+| `trap_return.odin` | MRET and SRET: back down to the level the trap came from |
 | `decode.odin` | Instruction field and immediate extraction |
 | `execute.odin` | Dispatch: the major opcode picks the handler for the instruction's group |
 | `rv64i_upper.odin` | LUI, AUIPC |

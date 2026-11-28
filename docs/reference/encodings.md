@@ -75,7 +75,7 @@ Watch out:
 Notes:
 - CSR instructions are I-type whose 12-bit immediate is the CSR address (not sign-extended); the immediate forms put a 5-bit value in the rs1 field.
 - ECALL, EBREAK, MRET and WFI have every field fixed, so the emulator matches the whole 32-bit word.
-- Unprivileged vs privileged: everything here is from the unprivileged spec except MRET (`privilege.odin`) and WFI (`rv64i_system.odin`, next to ECALL and EBREAK, which share its opcode). SRET and SFENCE.VMA come with supervisor mode and paging.
+- Unprivileged vs privileged: everything here is from the unprivileged spec except MRET and SRET (`trap_return.odin`) and WFI (`rv64i_system.odin`, next to ECALL and EBREAK, which share its opcode). SFENCE.VMA comes with paging.
 
 ### Upper immediates (rv64i_upper.odin)
 
@@ -200,7 +200,7 @@ The A extension: lr, sc and the AMOs. R-type, opcode 0101111 (AMO). funct5 (bits
 | AMOMINU / AMOMAXU | 11000 / 11100 | unsigned min / max |
 Misaligned: LR raises Load_Address_Misaligned, SC and AMOs Store_Address_Misaligned. Outside RAM (nothing there, or a device: atomics work on RAM only): Load_Access_Fault for LR, Store_Access_Fault for SC and AMOs. Trap entry clears the reservation, and undo restores it.
 
-### Fences and system (rv64i_system.odin, privilege.odin)
+### Fences and system (rv64i_system.odin, trap_return.odin)
 
 The fences, ecall, ebreak, and the privileged mret, sret and wfi.
 | Instruction | Encoding | Effect today |
@@ -209,8 +209,8 @@ The fences, ecall, ebreak, and the privileged mret, sret and wfi.
 | FENCE.I (Zifencei) | opcode 0001111, funct3 001 | no-op (no instruction cache to flush) |
 | ECALL | 0x00000073 | trap `Ecall_From_M_Mode` (the cause follows the current privilege level) |
 | EBREAK | 0x00100073 | trap `Breakpoint`; with no handler set up, the normal way for test programs to stop |
-| MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`privilege.odin`) |
-| SRET (privileged) | 0x10200073 | return from a supervisor trap: pc = sepc, privilege = SPP, SIE = SPIE, SPIE = 1; illegal in user mode (`privilege.odin`) |
+| MRET (privileged) | 0x30200073 | return from a trap: pc = mepc, privilege = MPP, MIE = MPIE, MPIE = 1 (`trap_return.odin`) |
+| SRET (privileged) | 0x10200073 | return from a supervisor trap: pc = sepc, privilege = SPP, SIE = SPIE, SPIE = 1; illegal in user mode (`trap_return.odin`) |
 | WFI (privileged) | 0x10500073 | no-op: "wait for interrupt" is only a hint, and time here counts steps, so a loop around WFI still reaches its timer interrupt |
 
 ### CSR instructions (Zicsr, zicsr.odin)

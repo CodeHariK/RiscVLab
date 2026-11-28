@@ -3,8 +3,8 @@ package rv_unit_tests
 import "core:testing"
 import rv "../core"
 
-// Unit tests for exception delegation (medeleg; core/privilege.odin
-// trap_target, trap_enter, exec_sret): which mode takes a trap, what a
+// Unit tests for exception delegation (medeleg; core/trap_entry.odin
+// trap_target, trap_enter; core/trap_return.odin exec_sret): which mode takes a trap, what a
 // trap into supervisor mode writes, how SRET returns from one, and undo
 // across both.
 //
